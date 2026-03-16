@@ -1,0 +1,283 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
+import { 
+  Users, DollarSign, Briefcase, Activity, UserPlus, 
+  Calendar, CheckCircle, Layers, ArrowUp, ArrowDown, MoreHorizontal
+} from 'lucide-react';
+import { 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
+import { MOCK_EMPLOYEES } from '../../mock-data';
+import ApiService from '../../services/api';
+import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeModal';
+import { useWfh } from '../../hooks/useWfh';
+import { useNotifications } from '../../context/NotificationContext';
+import { WfhApprovalList } from '../../components/wfh/WfhApprovalList';
+
+const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", delay = 0 }: any) => {
+  const colors: Record<string, string> = {
+    blue: "border-blue-200",
+    green: "border-emerald-200",
+    purple: "border-violet-200",
+    orange: "border-amber-200",
+    rose: "border-rose-200",
+  };
+
+  const iconColors: Record<string, string> = {
+    blue: "bg-blue-100 text-blue-600",
+    green: "bg-emerald-100 text-emerald-600",
+    purple: "bg-violet-100 text-violet-600",
+    orange: "bg-amber-100 text-amber-600",
+    rose: "bg-rose-100 text-rose-600",
+  };
+
+  return (
+    <Card className={`border ${colors[color]} shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 animate-in fade-in slide-in-from-bottom-4`} style={{ animationDelay: `${delay}ms` }} hoverEffect>
+      <CardContent className="p-6 flex items-start justify-between">
+        <div className="flex-1">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">{title}</p>
+            <h3 className="text-3xl font-bold text-slate-900">{value}</h3>
+            
+            <div className="mt-3 flex items-center text-xs font-semibold">
+                {trend === 'up' && (
+                    <span className="text-emerald-600 flex items-center gap-1">
+                        <ArrowUp size={12} strokeWidth={3} /> {subtext}
+                    </span>
+                )}
+                {trend === 'down' && (
+                    <span className="text-rose-600 flex items-center gap-1">
+                        <ArrowDown size={12} strokeWidth={3} /> {subtext}
+                    </span>
+                )}
+                {!trend && <span className="text-slate-400">{subtext}</span>}
+                {trend && <span className="text-slate-400 ml-2 text-xs">vs last month</span>}
+            </div>
+        </div>
+        
+        <div className={`${iconColors[color]} p-3 rounded-lg`}>
+          <Icon size={24} strokeWidth={1.5} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const adminChartData = [
+  { name: 'Jan', revenue: 4000, expense: 2400 },
+  { name: 'Feb', revenue: 3000, expense: 1398 },
+  { name: 'Mar', revenue: 2000, expense: 9800 },
+  { name: 'Apr', revenue: 2780, expense: 3908 },
+  { name: 'May', revenue: 1890, expense: 4800 },
+  { name: 'Jun', revenue: 2390, expense: 3800 },
+];
+
+const AdminDashboard = () => {
+  const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] = useState(false);
+  const navigate = useNavigate();
+  const [recentJoiners, setRecentJoiners] = useState(MOCK_EMPLOYEES.slice(0, 3));
+  const [totalEmployees, setTotalEmployees] = useState<number | null>(null);
+  const [newHiresCount, setNewHiresCount] = useState<number>(0);
+  const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
+  const { addNotification } = useNotifications();
+
+  useEffect(() => {
+    fetchAllWfhRequests();
+  }, [fetchAllWfhRequests]);
+
+  // Fetch dynamic employee counts
+  useEffect(() => {
+    let mounted = true;
+    ApiService.getAllEmployees()
+      .then((data) => {
+        if (!mounted) return;
+        const list = data || [];
+        setTotalEmployees(list.length);
+
+        // compute new hires in last 30 days
+        const now = Date.now();
+        const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
+        const newCount = list.filter((emp: any) => {
+          if (!emp.createdAt) return false;
+          const created = new Date(emp.createdAt).getTime();
+          return now - created <= THIRTY_DAYS;
+        }).length;
+        setNewHiresCount(newCount);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch employees for dashboard', err);
+        setTotalEmployees(null);
+        setNewHiresCount(0);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Show notification when there are pending WFH requests
+  useEffect(() => {
+    const pendingCount = wfhRequests.filter((req) => req.status === 'PENDING').length;
+    if (pendingCount > 0) {
+      addNotification({
+        type: 'wfh_request',
+        title: `${pendingCount} Pending WFH Request${pendingCount > 1 ? 's' : ''}`,
+        message: `You have ${pendingCount} work from home request${pendingCount > 1 ? 's' : ''} awaiting approval.`,
+      });
+    }
+  }, [wfhRequests, addNotification]);
+
+  const handleEmployeeCreated = (employee: any) => {
+    // Optionally refresh the recent joiners list
+    setIsCreateEmployeeOpen(false);
+  };
+
+  return (
+  <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div onClick={() => navigate('/employees')} role="button" tabIndex={0} className="cursor-pointer">
+        <StatCard
+          title="Total Employees"
+          value={totalEmployees !== null ? String(totalEmployees.toLocaleString()) : '—'}
+          icon={Users}
+          trend="up"
+          subtext={`${newHiresCount} new`}
+          color="blue"
+          delay={0}
+        />
+      </div>
+      <StatCard title="Payroll Cost" value="$2.4M" icon={DollarSign} trend="up" subtext="4.3%" color="green" delay={100} />
+      <StatCard title="Active Projects" value="24" icon={Layers} trend="up" subtext="2 new" color="purple" delay={200} />
+      <StatCard title="Attrition Rate" value="2.1%" icon={Activity} trend="down" subtext="0.5%" color="rose" delay={300} />
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <Card className="lg:col-span-2 border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
+            <div>
+                <CardTitle className="text-base">Financial Performance</CardTitle>
+                <p className="text-xs text-slate-500 mt-1">Revenue vs Expenses (YTD)</p>
+            </div>
+
+        </CardHeader>
+        <CardContent className="pt-6">
+          <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={adminChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
+                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} itemStyle={{ fontSize: '12px', fontWeight: 600 }} />
+                <Area type="monotone" dataKey="revenue" stroke="#2563EB" fillOpacity={1} fill="url(#colorRev)" strokeWidth={2.5} />
+                <Area type="monotone" dataKey="expense" stroke="#EF4444" fillOpacity={0} strokeWidth={2.5} strokeDasharray="4 4" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-6">
+        <Card className="h-full border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+            <CardHeader className="pb-4 border-b"><CardTitle className="text-base">Quick Actions</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-2 gap-2 pt-6">
+                <button 
+                  onClick={() => setIsCreateEmployeeOpen(true)}
+                  className="flex flex-col items-center justify-center p-3 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200 text-center">
+                    <UserPlus size={20} className="mb-1" />
+                    <span className="text-xs font-semibold">Add Employee</span>
+                </button>
+                <button className="flex flex-col items-center justify-center p-3 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors border border-purple-200 text-center">
+                    <Briefcase size={20} className="mb-1" />
+                    <span className="text-xs font-semibold">Post Job</span>
+                </button>
+                <button className="flex flex-col items-center justify-center p-3 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200 text-center">
+                    <DollarSign size={20} className="mb-1" />
+                    <span className="text-xs font-semibold">Run Payroll</span>
+                </button>
+                <button className="flex flex-col items-center justify-center p-3 rounded-lg bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors border border-orange-200 text-center">
+                    <Calendar size={20} className="mb-1" />
+                    <span className="text-xs font-semibold">Calendar</span>
+                </button>
+            </CardContent>
+        </Card>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+         <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+            <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
+                <CardTitle className="text-base">Recent Joiners</CardTitle>
+                <Button variant="ghost" size="xs">View All</Button>
+            </CardHeader>
+            <CardContent className="p-0">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Employee</TableHead>
+                            <TableHead>Role</TableHead>
+                            <TableHead>Joined</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <tbody>
+                        {recentJoiners.map(emp => (
+                            <TableRow key={emp.id} className="hover:bg-slate-50 transition-colors">
+                                <TableCell className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <img src={emp.avatar} className="w-7 h-7 rounded-full border border-slate-100" alt=""/>
+                                        <span className="text-sm font-medium text-slate-900">{emp.name}</span>
+                                    </div>
+                                </TableCell>
+                                <TableCell className="py-3 text-sm text-slate-600">{emp.designation}</TableCell>
+                                <TableCell className="py-3 text-xs text-slate-500">2 Days ago</TableCell>
+                            </TableRow>
+                        ))}
+                    </tbody>
+                </Table>
+            </CardContent>
+         </Card>
+
+         <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+            <CardHeader className="pb-4 border-b"><CardTitle className="text-base">System Alerts</CardTitle></CardHeader>
+            <CardContent className="space-y-2 pt-6">
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                    <Activity size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                        <p className="text-xs font-semibold text-amber-900">Server Maintenance</p>
+                        <p className="text-xs text-amber-800">Scheduled for Sunday, 2:00 AM EST.</p>
+                    </div>
+                </div>
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                    <Calendar size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                        <p className="text-xs font-semibold text-blue-900">Public Holiday</p>
+                        <p className="text-xs text-blue-800">Office closed on Monday for Labor Day.</p>
+                    </div>
+                </div>
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                    <CheckCircle size={16} className="text-emerald-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                        <p className="text-xs font-semibold text-emerald-900">Payroll Processed</p>
+                        <p className="text-xs text-emerald-800">October salaries disbursed successfully.</p>
+                    </div>
+                </div>
+            </CardContent>
+         </Card>
+    </div>
+
+    {/* Employee Creation Modal */}
+    <CreateEmployeeModal
+      isOpen={isCreateEmployeeOpen}
+      onClose={() => setIsCreateEmployeeOpen(false)}
+      onSuccess={handleEmployeeCreated}
+    />
+  </div>
+);
+};
+
+export default AdminDashboard;

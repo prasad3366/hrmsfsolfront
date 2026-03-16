@@ -1,0 +1,5 @@
+{
+  "name": "FSOL HRMS Portal",
+  "description": "Enterprise-grade Human Resource Management System for FSOL. Features role-based dashboards, attendance tracking, payroll, and employee management with a clean, light-mode corporate design.",
+  "requestFramePermissions": []
+}
