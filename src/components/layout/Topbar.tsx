@@ -44,7 +44,7 @@ const Topbar = () => {
         <NotificationPanel isOpen={isNotifOpen} onClose={() => setIsNotifOpen(false)} />
         <div className="hidden md:flex flex-col items-end">
              <span className="text-sm font-semibold text-slate-800">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
-             <span className="text-xs text-slate-500">FSOL HQ</span>
+             <span className="text-xs text-slate-500">FooDeeZ</span>
         </div>
       </div>
     </header>

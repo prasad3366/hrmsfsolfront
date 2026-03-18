@@ -20,7 +20,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     // Check if user has valid tokens
     const accessToken = localStorage.getItem('accessToken');
-    const storedUser = localStorage.getItem('fsol_user');
+    const storedUser = localStorage.getItem('foodeez_user');
     const decodeJwt = (token: string | null) => {
       if (!token) return null;
       try {
@@ -50,14 +50,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(userObj);
         if (userObj.role) setRole(userObj.role);
         // persist a lightweight user snapshot
-        try { localStorage.setItem('fsol_user', JSON.stringify(userObj)); } catch {}
+        try { localStorage.setItem('foodeez_user', JSON.stringify(userObj)); } catch {}
       } else if (storedUser) {
         try {
           const parsed = JSON.parse(storedUser);
           setUser(parsed);
           setRole(parsed.role);
         } catch {
-          localStorage.removeItem('fsol_user');
+          localStorage.removeItem('foodeez_user');
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
         }
@@ -107,7 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setUser(userObj);
       setRole((userObj.role || response.role || 'EMPLOYEE') as Role);
-      localStorage.setItem('fsol_user', JSON.stringify(userObj));
+      localStorage.setItem('foodeez_user', JSON.stringify(userObj));
       
       return {
         success: true,
@@ -130,7 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setUser(null);
       setRole(null);
-      localStorage.removeItem('fsol_user');
+      localStorage.removeItem('foodeez_user');
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
     }

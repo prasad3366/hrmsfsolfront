@@ -17,9 +17,10 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  // Brand Colors
-  const BRAND_BLUE = '#2A4B9B';
-  const BRAND_DARK = '#1e3a8a';
+  // Brand Colors - Purple Theme (matching login button)
+  const BRAND_PURPLE = '#5D2B90';
+  const BRAND_DARK_PURPLE = '#4A1F6B';
+  const BRAND_LIGHT_PURPLE = '#7C4CAE';
 
   // Character Images
   const LOGIN_CHAR_IMG = "https://png.pngtree.com/png-clipart/20250126/original/pngtree-professional-3d-businessman-character-design-in-formal-suit-png-image_20341392.png";
@@ -92,13 +93,13 @@ const Login = () => {
       {/* 1. Background Section with Curve */}
       <div className="absolute top-0 left-0 right-0 h-[50vh] z-0 transition-all duration-700 ease-in-out overflow-hidden">
         {/* Background Gradient */}
-        <div 
+        <div
           className="absolute inset-0"
-          style={{ background: `linear-gradient(135deg, ${BRAND_BLUE} 0%, ${BRAND_DARK} 100%)` }}
+          style={{ background: `linear-gradient(135deg, ${BRAND_PURPLE} 0%, ${BRAND_LIGHT_PURPLE} 50%, ${BRAND_DARK_PURPLE} 100%)` }}
         >
           {/* Decorative floating shapes */}
-          <div className="absolute top-10 left-[10%] w-20 h-20 bg-white/5 rounded-full blur-2xl animate-pulse"></div>
-          <div className="absolute bottom-20 right-[10%] w-32 h-32 bg-white/10 rounded-full blur-3xl"></div>
+          <div className="absolute top-10 left-[10%] w-20 h-20 bg-purple-200/20 rounded-full blur-2xl animate-pulse"></div>
+          <div className="absolute bottom-20 right-[10%] w-32 h-32 bg-violet-200/15 rounded-full blur-3xl"></div>
         </div>
 
         {/* Animated Wave Separator */}
@@ -134,15 +135,15 @@ const Login = () => {
                 {/* Header */}
                 <div className="flex flex-col items-center mb-5">
                      <img 
-                        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFIAAABcCAMAAADK+BLZAAAAn1BMVEX///85Tpp+fn51dXU2TJk0S5t7e3uBgHwxSJd/f300SphycnIqQ5UzSpwtRZYkP5QfO5LY2Njy8vLi4uKIiIijqsrn6fG/v7/FxcWCjLn5+vzv8PVEV57U1+ZRYaIPMo/d4OuOl7+qsc6tra3Jzd/Pz8+RkZF1gbNbZI7Bxdtvc4V5eoGcnJyWnsNgb6q1utNqd65GVpZka4tVYJAAKo88sTqDAAADhUlEQVRYha2ZC3qqMBCFGQhvEFoRK0LRWrVWtFbv/td2A76TaYVMzwL+bzKPMwloGlnjyeptM9ptX4EN6LTsfbPLgzgKHMfrxdMxlTcZbMu45zGoxcplSuSNB3kUeHBWkBdEYLGMA3bh8RA3VOA2duBGnkMMcTy6B4KTE7P4JQDBec1IwGwZs78lpnnvHggeoxGLyBOIrEfLYxEJhwYo32nEUiJGtKGeBCIQnC2JmPXEPAILaD6xdaQgoy8ScRNJRO+VRCxiiQjxhIQEqdjgLEnEqVxtKElNnsqJBGdECnInVxuiCYVYlEiQuz8PMiYNN9ZALCcFuUSCDEh+MUaChIg03QOkJz2aBeXy4EC0ohDR4gSkhTNCikMcb8l463qTjLJAxhtK0rmn4uIGsvdi9ab1eYo4BtHO35A+J843ZkI0882QY0uj89x/4ur3n1shsdGB8moZ/ZdK942Lkmr4EIxaxrmF+jPdtyz9Rpbh+7P+78gtMju941V/nvh3OM6zqvnjw2MtFNUrYq4bInAxbzNTE8yFemOtnxj6PdCvHpz3LKwreSpnwpF1I2kJxLeOM1pIIQ7bArUMG/DwUxdCXLRryEYp1pWmSJy1B/JXE+KV7Nu+I/ovXYjojjA/7pD+UycidqnkqXRvT9260kdhV0AwbQJRWz1Kpd+ViKdyfz131zxyvSKeYa4vSH/emThGPIPlV2L7kbnoCxnwawt16/CTsAG/tJBVKRAzpCmBnYK0EgUiunbMwxnZwSmuwm4u53N3b8hGSCYBjkSjm1Wche2IU70tlWJzTbF6N32uVpr6miEX/DTfaqXBLeM43wqTfRQ231AHaSjMYaMfi2MtFInoMELTQKq3dOyN1wSp2OPaD+ZrExKJLp2Ql1vJfo5CMslyW7eUE4l+d6gNo/M+vArpybo2CrvmrDe53PUoKm2Go9AGWruqZlEL+QJYJ1LVLDT0C2C4twk9rr3Lx26I6qWZiF/NT0S1zVArZSKRmZ80YiB2pJnz3WCon7pwBCILD65rWeqVWQl5ZOE3P3Sn98K9slEsAPO97VrqdqYV+e09jZk8Qtft8uoSle5u/hXUvI+1zYG6cl3SZVQPIWPM5ILDfu3WR9aVWydd/ovCMATIvw8f+8+1zePjT/VKdV1rzbcE1zAs13VtTuM9Yxh69UL7L8T1/DScVYskSRbVbNji5f+7/gNdSz5eBAj9TAAAAABJRU5ErkJggg==" 
-                        alt="FSOL Logo" 
-                        className="h-10 w-auto mb-3" 
+                        src="/foodeez-logo.png"
+                        alt="FooDeeZ Logo" 
+                        className="h-20 w-auto mb-15" 
                     />
                     <h2 className="text-2xl font-bold text-slate-800 text-center tracking-tight">
                         Login
                     </h2>
                     <p className="text-slate-400 text-xs mt-1 text-center font-medium">
-                        Please login to admin dashboard
+                      
                     </p>
                 </div>
 

@@ -1,4 +1,4 @@
-# FSOL Attendance Frontend
+# FooDeeZ Attendance Frontend
 
 This project is the frontend UI for a simple HR attendance system. It provides:
 

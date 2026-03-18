@@ -62,8 +62,8 @@ const Sidebar = () => {
       {/* Branding */}
       <div className="h-20 flex items-center px-6 border-b border-slate-100">
         <img 
-            src="https://www.fsol.in/assets/logo-C9bsCG_Y.png" 
-            alt="FSOL Logo" 
+            src="/foodeez-logo.png"
+            alt="FooDeeZ Logo" 
             className="h-10 w-auto" 
         />
       </div>

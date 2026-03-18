@@ -5,7 +5,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   {
     id: '1',
     name: 'Alexandra Admin',
-    email: 'admin@fsol.com',
+    email: 'admin@foodeez.com',
     role: 'ADMIN',
     avatar: 'https://picsum.photos/200/200?random=1',
     department: 'Management',
@@ -18,7 +18,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   {
     id: '2',
     name: 'Hector HR',
-    email: 'hr@fsol.com',
+    email: 'hr@foodeez.com',
     role: 'HR',
     avatar: 'https://picsum.photos/200/200?random=2',
     department: 'Human Resources',
@@ -31,7 +31,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   {
     id: '3',
     name: 'Michael Manager',
-    email: 'manager@fsol.com',
+    email: 'manager@foodeez.com',
     role: 'MANAGER',
     avatar: 'https://picsum.photos/200/200?random=3',
     department: 'Engineering',
@@ -44,7 +44,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   {
     id: '4',
     name: 'Emma Employee',
-    email: 'user@fsol.com',
+    email: 'user@foodeez.com',
     role: 'EMPLOYEE',
     avatar: 'https://picsum.photos/200/200?random=4',
     department: 'Engineering',
@@ -58,7 +58,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   {
     id: '5',
     name: 'Sarah Smith',
-    email: 'sarah@fsol.com',
+    email: 'sarah@foodeez.com',
     role: 'EMPLOYEE',
     avatar: 'https://picsum.photos/200/200?random=5',
     department: 'Marketing',

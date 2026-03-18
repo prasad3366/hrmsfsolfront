@@ -19,7 +19,7 @@ import { Construction } from 'lucide-react';
 const ProtectedRoute = ({ children, allowedRoles }: { children?: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading FSOL Portal...</div>;
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading FooDeeZ...</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <div className="p-8 text-center text-slate-500">Access Denied. You do not have permission to view this page.</div>;
@@ -35,7 +35,7 @@ const PlaceholderModule = ({ title }: { title: string }) => (
             <Construction size={48} />
         </div>
         <h2 className="text-2xl font-bold text-slate-900">{title} Module</h2>
-        <p className="text-slate-500 mt-2 max-w-md">This module is part of the FSOL Enterprise suite but is currently under maintenance or construction.</p>
+        <p className="text-slate-500 mt-2 max-w-md">This module is part of the FooDeeZ suite but is currently under maintenance or construction.</p>
     </div>
 );
 

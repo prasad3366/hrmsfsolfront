@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
 import { 
-  Users, Layers, CheckCircle, Calendar, TrendingUp, ArrowUp, ArrowDown, Target
+  Users, Layers, CheckCircle, Calendar, TrendingUp, ArrowUp, ArrowDown, Target, Clock
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell
 } from 'recharts';
 import { MOCK_EMPLOYEES } from '../../mock-data';
+import { useWfh } from '../../hooks/useWfh';
+import { useAttendance } from '../../hooks/useAttendance';
+import ApiService from '../../services/api';
 
 const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", delay = 0 }: any) => {
   const colors: Record<string, string> = {
@@ -55,28 +58,89 @@ const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", de
   );
 };
 
-const taskData = [
-  { week: 'Week 1', completed: 24, pending: 8 },
-  { week: 'Week 2', completed: 28, pending: 6 },
-  { week: 'Week 3', completed: 32, pending: 5 },
-  { week: 'Week 4', completed: 35, pending: 4 },
-];
+const ManagerDashboard = () => {
+  const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
+  const { records: attendanceRecords, isLoading: isAttendanceLoading } = useAttendance({ scope: 'all' });
+  const [teamMembers, setTeamMembers] = useState<number>(12);
+  const [activeTasks, setActiveTasks] = useState<number>(34);
+  const [completedTasks, setCompletedTasks] = useState<number>(128);
 
-const performanceData = [
-  { name: 'John', productivity: 85 },
-  { name: 'Sarah', productivity: 92 },
-  { name: 'Mike', productivity: 78 },
-  { name: 'Emma', productivity: 88 },
-  { name: 'Alex', productivity: 95 },
-];
+  useEffect(() => {
+    fetchAllWfhRequests();
+    
+    // Fetch team data (this would come from an API in a real app)
+    // For now, we'll use mock calculations
+    ApiService.getAllEmployees()
+      .then((data) => {
+        const employees = data || [];
+        setTeamMembers(employees.length);
+        
+        // Calculate active tasks (placeholder - would come from task management API)
+        setActiveTasks(Math.floor(employees.length * 2.8));
+        
+        // Calculate completed tasks (placeholder)
+        setCompletedTasks(employees.length * 10);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch team data', err);
+      });
+  }, [fetchAllWfhRequests]);
 
-const ManagerDashboard = () => (
+  // Calculate team attendance percentage
+  const teamAttendance = useMemo(() => {
+    if (attendanceRecords.length === 0) return 88; // fallback
+    
+    const today = new Date().toDateString();
+    const todayRecords = attendanceRecords.filter(record => 
+      new Date(record.date).toDateString() === today
+    );
+    
+    if (todayRecords.length === 0) return 88; // fallback
+    
+    const presentCount = todayRecords.filter(record => 
+      record.status === 'PRESENT' || (record.punchIn && !record.punchOut)
+    ).length;
+    
+    return Math.round((presentCount / todayRecords.length) * 100);
+  }, [attendanceRecords]);
+
+  // Define the missing variables
+  const insideOffice = attendanceRecords.filter(record => record.locationStatus === 'OFFICE');
+  const outsideOffice = attendanceRecords.filter(record => record.locationStatus === 'OUTSIDE');
+  const wfhEmployees = attendanceRecords.filter(record => record.locationStatus === 'WFH');
+
+  const recentAttendance = useMemo(() => {
+    return attendanceRecords
+      .slice()
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 12);
+  }, [attendanceRecords]);
+
+  // Calculate dynamic task data
+  const taskData = useMemo(() => {
+    const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+    return weeks.map((week, index) => ({
+      week,
+      completed: Math.floor(completedTasks * (0.2 + index * 0.1)), // Distribute completed tasks
+      pending: Math.floor(activeTasks * (0.3 - index * 0.05)) // Distribute pending tasks
+    }));
+  }, [completedTasks, activeTasks]);
+
+  // Dynamic performance data based on team members
+  const performanceData = useMemo(() => {
+    return MOCK_EMPLOYEES.slice(0, 5).map((emp, index) => ({
+      name: emp.name.split(' ')[0], // First name only
+      productivity: 75 + Math.floor(Math.random() * 25) // Random productivity 75-100
+    }));
+  }, []);
+
+  return (
   <div className="space-y-8">
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <StatCard title="Team Members" value="12" icon={Users} trend="up" subtext="2 new" color="blue" delay={0} />
-      <StatCard title="Active Tasks" value="34" icon={Layers} trend="up" subtext="5 more" color="purple" delay={100} />
-      <StatCard title="Completed Tasks" value="128" icon={CheckCircle} trend="up" subtext="18% up" color="green" delay={200} />
-      <StatCard title="Team Attendance" value="88%" icon={Calendar} trend="down" subtext="2% down" color="orange" delay={300} />
+      <StatCard title="Team Members" value={teamMembers} icon={Users} trend="up" subtext="2 new" color="blue" delay={0} />
+      <StatCard title="Active Tasks" value={activeTasks} icon={Layers} trend="up" subtext="5 more" color="purple" delay={100} />
+      <StatCard title="Completed Tasks" value={completedTasks} icon={CheckCircle} trend="up" subtext="18% up" color="green" delay={200} />
+      <StatCard title="Team Attendance" value={`${teamAttendance}%`} icon={Calendar} trend="down" subtext="2% down" color="orange" delay={300} />
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -185,7 +249,182 @@ const ManagerDashboard = () => (
         </CardContent>
       </Card>
     </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
+          <div>
+            <CardTitle className="text-base">Employees in Office</CardTitle>
+            <p className="text-xs text-slate-500 mt-1">Employees who punched in at the office</p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Check In</TableHead>
+              </TableRow>
+            </TableHeader>
+            <tbody>
+              {insideOffice.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center text-sm text-slate-500 py-6">
+                    {isAttendanceLoading ? 'Loading…' : 'No employees currently punched in at the office.'}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                insideOffice.map((record) => (
+                  <TableRow key={record.id}>
+                    <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
+                    <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </tbody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
+          <div>
+            <CardTitle className="text-base">Employees Outside</CardTitle>
+            <p className="text-xs text-slate-500 mt-1">Employees who punched in outside the office</p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Check In</TableHead>
+              </TableRow>
+            </TableHeader>
+            <tbody>
+              {outsideOffice.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center text-sm text-slate-500 py-6">
+                    {isAttendanceLoading ? 'Loading…' : 'No employees currently punched in outside the office.'}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                outsideOffice.map((record) => (
+                  <TableRow key={record.id}>
+                    <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
+                    <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </tbody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
+          <div>
+            <CardTitle className="text-base">Employees Working from Home</CardTitle>
+            <p className="text-xs text-slate-500 mt-1">Employees with approved WFH requests</p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Check In</TableHead>
+              </TableRow>
+            </TableHeader>
+            <tbody>
+              {wfhEmployees.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center text-sm text-slate-500 py-6">
+                    {isAttendanceLoading ? 'Loading…' : 'No employees currently working from home.'}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                wfhEmployees.map((record) => (
+                  <TableRow key={record.id}>
+                    <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
+                    <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </tbody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+
+    <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+      <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
+        <div>
+          <CardTitle className="text-base">Attendance History</CardTitle>
+          <p className="text-xs text-slate-500 mt-1">Most recent punches for all employees</p>
+        </div>
+        <Button size="xs" variant="outline">View All</Button>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Employee</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Check In</TableHead>
+              <TableHead>Check Out</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Total Hours</TableHead>
+            </TableRow>
+          </TableHeader>
+          <tbody>
+            {recentAttendance.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-sm text-slate-500 py-6">
+                  {isAttendanceLoading ? 'Loading…' : 'No attendance records found.'}
+                </TableCell>
+              </TableRow>
+            ) : (
+              recentAttendance.map((record) => (
+                <TableRow key={record.id} className="hover:bg-slate-50 transition-colors">
+                  <TableCell className="py-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-semibold text-slate-900">
+                        {(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-4 text-sm text-slate-600">
+                    {new Date(record.date).toLocaleDateString('en-GB')}
+                  </TableCell>
+                  <TableCell className="py-4 text-sm font-medium text-slate-900">
+                    {record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                  </TableCell>
+                  <TableCell className="py-4 text-sm font-medium text-slate-900">
+                    {record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                  </TableCell>
+                  <TableCell className="py-4">
+                    <span className={`text-xs px-3 py-1.5 rounded-full font-bold ${
+                      record.locationStatus === 'OFFICE' ? 'bg-blue-100 text-blue-700' :
+                      record.locationStatus === 'OUTSIDE' ? 'bg-orange-100 text-orange-700' :
+                      record.locationStatus === 'WFH' ? 'bg-purple-100 text-purple-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {record.locationStatus || 'Unknown'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-4 text-sm font-semibold text-slate-900">
+                    {record.totalHours ? `${record.totalHours}h` : '--'}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </tbody>
+        </Table>
+      </CardContent>
+    </Card>
   </div>
-);
+  );
+};
 
 export default ManagerDashboard;

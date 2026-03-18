@@ -16,6 +16,7 @@ import { useHolidays } from '../../hooks/useHolidays';
 import { useNotifications } from '../../context/NotificationContext';
 import { WfhApprovalList } from '../../components/wfh/WfhApprovalList';
 import { useAttendance } from '../../hooks/useAttendance';
+import { useLeave } from '../../hooks/useLeave';
 
 const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", delay = 0 }: any) => {
   const colors: Record<string, string> = {
@@ -64,24 +65,6 @@ const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", de
   );
 };
 
-const hiringData = [
-  { month: 'Jan', hired: 8, open: 12 },
-  { month: 'Feb', hired: 10, open: 14 },
-  { month: 'Mar', hired: 15, open: 18 },
-  { month: 'Apr', hired: 12, open: 16 },
-  { month: 'May', hired: 18, open: 20 },
-  { month: 'Jun', hired: 22, open: 18 },
-];
-
-const attendanceData = [
-  { date: 'Mon', present: 95, absent: 5 },
-  { date: 'Tue', present: 98, absent: 2 },
-  { date: 'Wed', present: 92, absent: 8 },
-  { date: 'Thu', present: 96, absent: 4 },
-  { date: 'Fri', present: 89, absent: 11 },
-  { date: 'Sat', present: 45, absent: 55 },
-];
-
 const HRDashboard = () => {
   const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] = useState(false);
   const navigate = useNavigate();
@@ -90,12 +73,60 @@ const HRDashboard = () => {
   const [isCreateHolidayOpen, setIsCreateHolidayOpen] = useState(false);
   const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
   const { holidays, isSubmitting: isHolidaySubmitting, fetchHolidaysByYear, createHoliday, deleteHoliday } = useHolidays();
+  const { pendingLeaves, fetchPendingLeaves, approveLeave } = useLeave();
   const { addNotification } = useNotifications();
   const { records: attendanceRecords, isLoading: isAttendanceLoading } = useAttendance({ scope: 'all' });
 
+  // Calculate dynamic hiring data based on employee data
+  const hiringData = useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+    const currentYear = new Date().getFullYear();
+    
+    return months.map((month, index) => {
+      const monthDate = new Date(currentYear, index, 1);
+      const nextMonth = new Date(currentYear, index + 1, 1);
+      
+      // Count employees hired in this month
+      const hired = MOCK_EMPLOYEES.filter(emp => {
+        if (!emp.createdAt) return false;
+        const hireDate = new Date(emp.createdAt);
+        return hireDate >= monthDate && hireDate < nextMonth;
+      }).length;
+      
+      // Estimate open positions (this would come from a job postings API)
+      const open = Math.max(0, 15 - hired + Math.floor(Math.random() * 5));
+      
+      return { month, hired, open };
+    });
+  }, []);
+
+  // Calculate dynamic attendance data
+  const attendanceData = useMemo(() => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    
+    return days.map((date, index) => {
+      // Calculate attendance based on actual attendance records
+      const dayRecords = attendanceRecords.filter(record => {
+        const recordDate = new Date(record.date);
+        return recordDate.getDay() === (index + 1) % 7; // 0 = Sun, so Mon = 1
+      });
+      
+      const totalRecords = dayRecords.length;
+      const presentRecords = dayRecords.filter(record => record.status === 'PRESENT').length;
+      
+      // For Saturday, reduce attendance
+      const expectedAttendance = index === 5 ? 0.45 : 0.95; // Saturday has lower attendance
+      const present = totalRecords > 0 ? Math.round((presentRecords / totalRecords) * 100) : Math.round(expectedAttendance * 100);
+      const absent = 100 - present;
+      
+      return { date, present, absent };
+    });
+  }, [attendanceRecords]);
+
   useEffect(() => {
     fetchAllWfhRequests();
-  }, [fetchAllWfhRequests]);
+    fetchPendingLeaves();
+  }, [fetchAllWfhRequests, fetchPendingLeaves]);
 
   // Fetch holidays on mount
   useEffect(() => {
@@ -148,6 +179,11 @@ const HRDashboard = () => {
     setIsCreateEmployeeOpen(false);
   };
 
+  const handleApproveAllLeaves = async () => {
+    if (pendingLeaves.length === 0) return;
+    await Promise.all(pendingLeaves.map((leave) => approveLeave(leave.id)));
+  };
+
   const handleHolidayCreated = async (data: any) => {
     try {
       await createHoliday(data);
@@ -190,7 +226,7 @@ const HRDashboard = () => {
         />
       </div>
       <StatCard title="Open Positions" value="18" icon={Briefcase} trend="up" subtext="3 urgent" color="purple" delay={100} />
-      <StatCard title="Pending Leaves" value="32" icon={Clock} trend="down" subtext="5 approved" color="orange" delay={200} />
+      <StatCard title="Pending Leaves" value={pendingLeaves.length} icon={Clock} trend="down" subtext="awaiting review" color="orange" delay={200} />
       <StatCard title="Attendance Today" value="92%" icon={CheckCircle} trend="up" subtext="8% up" color="green" delay={300} />
     </div>
 
@@ -247,7 +283,7 @@ const HRDashboard = () => {
       <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
         <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
             <CardTitle className="text-base">Pending Leave Requests</CardTitle>
-            <Button variant="ghost" size="xs">Approve All</Button>
+            <Button variant="ghost" size="xs" onClick={handleApproveAllLeaves}>Approve All</Button>
         </CardHeader>
         <CardContent className="p-0">
             <Table>
@@ -260,22 +296,42 @@ const HRDashboard = () => {
                     </TableRow>
                 </TableHeader>
                 <tbody>
-                    {MOCK_EMPLOYEES.slice(0, 4).map(emp => (
-                        <TableRow key={emp.id} className="hover:bg-slate-50 transition-colors">
-                            <TableCell className="py-4">
-                                <div className="flex items-center gap-3">
-                                    <img src={emp.avatar} className="w-8 h-8 rounded-full border-2 border-slate-100 shadow-sm" alt=""/>
-                                    <span className="text-sm font-semibold text-slate-900">{emp.name}</span>
-                                </div>
-                            </TableCell>
-                            <TableCell className="py-4"><span className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full font-bold">Casual</span></TableCell>
-                            <TableCell className="py-4 text-sm font-medium text-slate-600">3 days</TableCell>
-                            <TableCell className="py-4">
-                                <button className="text-xs text-emerald-600 font-bold hover:text-emerald-700 hover:underline">Approve</button>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </tbody>
+              {pendingLeaves.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-sm text-slate-500 py-6">
+                    No pending leave requests.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                pendingLeaves.map((leave) => (
+                  <TableRow key={leave.id} className="hover:bg-slate-50 transition-colors">
+                    <TableCell className="py-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-slate-900">
+                          {leave.employee ? `${leave.employee.firstName} ${leave.employee.lastName}` : 'Unknown'}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full font-bold">
+                        {leave.leaveType?.name || 'Leave'}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-4 text-sm font-medium text-slate-600">
+                      {leave.totalDays ?? '--'} days
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <button
+                        onClick={() => approveLeave(leave.id)}
+                        className="text-xs text-emerald-600 font-bold hover:text-emerald-700 hover:underline"
+                      >
+                        Approve
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </tbody>
             </Table>
         </CardContent>
       </Card>

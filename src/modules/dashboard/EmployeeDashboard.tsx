@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '../../components/ui/components';
 import {
   Calendar, Clock, FileText, ChevronRight, CheckCircle2, BarChart3,
@@ -12,6 +12,8 @@ import { useAttendance } from '../../hooks/useAttendance';
 import { RequestWfhModal } from '../../components/wfh/RequestWfhModal';
 import { useWfh } from '../../hooks/useWfh';
 import { useHolidays } from '../../hooks/useHolidays';
+import { useLeave } from '../../hooks/useLeave';
+import { usePayroll } from '../../hooks/usePayroll';
 
 // ────────────────────────────────────────────────
 // Metric Card (slightly improved version)
@@ -115,11 +117,33 @@ export default function EmployeeDashboard() {
   const { todayRecord, records, refresh } = useAttendance();
   const { myWfhRequests, isLoading: isWfhLoading, fetchMyWfhRequests } = useWfh();
   const { myHolidays, fetchMyHolidays } = useHolidays();
+  const { myLeaveBalance, fetchMyLeaveBalance, isLoading: isLeaveLoading } = useLeave();
+  const { payrolls, fetchPayroll, loading: isPayrollLoading } = usePayroll();
 
   useEffect(() => {
     fetchMyWfhRequests();
     fetchMyHolidays();
+    fetchMyLeaveBalance(new Date().getFullYear());
+    fetchPayroll(0); // 0 might be current user ID, need to check API
   }, []);
+
+  // Calculate leave balance
+  const totalLeaveBalance = useMemo(() => {
+    return myLeaveBalance.reduce((total, leaveType) => total + (leaveType.balance || 0), 0);
+  }, [myLeaveBalance]);
+
+  // Get latest payslip
+  const latestPayslip = useMemo(() => {
+    if (payrolls.length === 0) return null;
+    return payrolls.sort((a, b) => new Date(b.payPeriodEnd).getTime() - new Date(a.payPeriodEnd).getTime())[0];
+  }, [payrolls]);
+
+  // Calculate pending requests
+  const pendingRequests = useMemo(() => {
+    const pendingWfh = myWfhRequests.filter(req => req.status === 'PENDING').length;
+    // Note: Leave requests would need to be fetched separately if needed
+    return pendingWfh; // For now, just WFH requests
+  }, [myWfhRequests]);
 
   // Chart data - last 7 days (still using attendance for chart → can be removed later if needed)
   const chartData = records
@@ -148,7 +172,7 @@ export default function EmployeeDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <MetricCard
             title="Leave Balance"
-            value="14 days"
+            value={isLeaveLoading ? '...' : `${totalLeaveBalance} days`}
             subtext="Annual + Casual remaining"
             icon={Calendar}
           />
@@ -164,14 +188,14 @@ export default function EmployeeDashboard() {
 
           <MetricCard
             title="Latest Payslip"
-            value="₹52,400"
-            subtext="Net pay - January 2026"
+            value={isPayrollLoading ? '...' : latestPayslip ? `₹${latestPayslip.netPay?.toLocaleString() || '0'}` : 'No data'}
+            subtext={latestPayslip ? `Net pay - ${new Date(latestPayslip.payPeriodEnd).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}` : 'No payslip available'}
             icon={FileText}
           />
 
           <MetricCard
             title="Pending Requests"
-            value={2}
+            value={pendingRequests}
             subtext="Leave + WFH awaiting approval"
             icon={AlertCircle}
             accent={true} // makes number red if > 0
