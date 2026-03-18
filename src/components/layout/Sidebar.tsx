@@ -62,9 +62,9 @@ const Sidebar = () => {
       {/* Branding */}
       <div className="h-20 flex items-center px-6 border-b border-slate-100">
         <img 
-            src="/foodeez-logo.png"
-            alt="FooDeeZ Logo" 
-            className="h-10 w-auto" 
+            src="/logo.png"
+            alt="FooDeeZ" 
+            className="h-20 w-auto" 
         />
       </div>
 

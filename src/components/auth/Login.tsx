@@ -135,8 +135,8 @@ const Login = () => {
                 {/* Header */}
                 <div className="flex flex-col items-center mb-5">
                      <img 
-                        src="/foodeez-logo.png"
-                        alt="FooDeeZ Logo" 
+                        src="/logo.png"
+                        alt="FooDeeZ" 
                         className="h-20 w-auto mb-15" 
                     />
                     <h2 className="text-2xl font-bold text-slate-800 text-center tracking-tight">
