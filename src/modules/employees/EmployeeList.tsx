@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ApiService from '../../services/api';
+import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeModal';
 import { 
   Table, TableHeader, TableRow, TableHead, TableCell, 
   Button, Input, Badge, Card, CardHeader, CardTitle, CardContent 
@@ -12,14 +13,14 @@ const EmployeeList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
-  
-  // Check if user can manage employees (create, edit, etc)
+
   const canManageEmployees = user?.role === 'ADMIN' || user?.role === 'HR';
   const canViewEmployees = user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER';
-  
-  useEffect(() => {
+
+  const fetchEmployees = () => {
     let mounted = true;
     setIsLoading(true);
     ApiService.getAllEmployees()
@@ -35,12 +36,21 @@ const EmployeeList = () => {
     return () => {
       mounted = false;
     };
+  };
+
+  useEffect(() => {
+    const cleanup = fetchEmployees();
+    return cleanup;
   }, []);
 
+  const handleEmployeeCreated = (_newEmployee: any) => {
+    setIsCreateEmployeeOpen(false);
+    fetchEmployees();
+  };
+
   const filteredEmployees = useMemo(() => {
-    // Map API employee shape to display-friendly fields
     const mapped = employees.map((emp) => ({
-      id: emp.id, // Use employee PK for route/updates (not user id)
+      id: emp.id,
       name: `${emp.firstName ?? ''} ${emp.lastName ?? ''}`.trim() || emp.empCode || 'Unknown',
       email: emp.user?.email ?? emp.email ?? '',
       designation: emp.designation ?? '',
@@ -51,7 +61,7 @@ const EmployeeList = () => {
       avatar: emp.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent((emp.firstName ?? '') + ' ' + (emp.lastName ?? ''))}`,
     }));
 
-    return mapped.filter(emp => 
+    return mapped.filter((emp) =>
       emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.department.toLowerCase().includes(searchTerm.toLowerCase())
@@ -69,10 +79,14 @@ const EmployeeList = () => {
         </div>
         {canManageEmployees && (
           <div className="flex gap-3">
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" type="button" onClick={() => fetchEmployees()}>
               <Download size={16} /> Export
             </Button>
-            <Button className="gap-2">
+            <Button
+              type="button"
+              className="gap-2"
+              onClick={() => setIsCreateEmployeeOpen(true)}
+            >
               <Plus size={16} /> Add Employee
             </Button>
           </div>
@@ -84,14 +98,14 @@ const EmployeeList = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-between">
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-              <Input 
-                placeholder="Search by name, email..." 
+              <Input
+                placeholder="Search by name, email..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" type="button">
               <Filter size={16} /> Filter
             </Button>
           </div>
@@ -114,14 +128,18 @@ const EmployeeList = () => {
             </TableHeader>
             <tbody>
               {filteredEmployees.map((emp) => (
-                <TableRow 
-                    key={emp.id} 
-                    className="cursor-pointer" 
-                    onClick={() => navigate(`/employees/${emp.id}`)}
+                <TableRow
+                  key={emp.id}
+                  className="cursor-pointer"
+                  onClick={() => navigate(`/employees/${emp.id}`)}
                 >
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <img src={emp.avatar} alt={emp.name} className="w-10 h-10 rounded-full object-cover border border-slate-200" />
+                      <img
+                        src={emp.avatar}
+                        alt={emp.name}
+                        className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                      />
                       <div>
                         <div className="font-medium text-slate-900">{emp.name}</div>
                         <div className="text-xs text-slate-500">{emp.email}</div>
@@ -136,9 +154,7 @@ const EmployeeList = () => {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge 
-                      variant={emp.status === 'Active' ? 'success' : 'danger'}
-                    >
+                    <Badge variant={emp.status === 'Active' ? 'success' : 'danger'}>
                       {emp.status}
                     </Badge>
                   </TableCell>
@@ -147,11 +163,12 @@ const EmployeeList = () => {
                     <Button
                       variant="ghost"
                       size="icon"
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         navigate(`/employees/${emp.id}`);
                       }}
-                      title={canManageEmployees ? "View / edit employee" : "View employee"}
+                      title={canManageEmployees ? 'View / edit employee' : 'View employee'}
                     >
                       <MoreHorizontal size={18} />
                     </Button>
@@ -162,6 +179,12 @@ const EmployeeList = () => {
           </Table>
         </CardContent>
       </Card>
+
+      <CreateEmployeeModal
+        isOpen={isCreateEmployeeOpen}
+        onClose={() => setIsCreateEmployeeOpen(false)}
+        onSuccess={handleEmployeeCreated}
+      />
     </div>
   );
 };

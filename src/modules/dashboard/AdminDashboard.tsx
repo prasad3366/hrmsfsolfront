@@ -222,7 +222,8 @@ const AdminDashboard = () => {
             <CardHeader className="pb-4 border-b"><CardTitle className="text-base">Quick Actions</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-2 pt-6">
                 <button 
-                  onClick={() => setIsCreateEmployeeOpen(true)}
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setIsCreateEmployeeOpen(true); }}
                   className="flex flex-col items-center justify-center p-3 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200 text-center">
                     <UserPlus size={20} className="mb-1" />
                     <span className="text-xs font-semibold">Add Employee</span>

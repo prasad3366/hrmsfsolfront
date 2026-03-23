@@ -21,11 +21,13 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [localPunchedIn, setLocalPunchedIn] = useState<boolean | undefined>(undefined);
+  const [localPunchedOut, setLocalPunchedOut] = useState<boolean | undefined>(undefined);
   const { requestLocation, isLoading: isGeoLoading, error: geoError } = useGeolocation();
   const { addNotification } = useNotifications();
 
-  const hasPunchedIn = todayRecord?.punchIn;
-  const hasPunchedOut = todayRecord?.punchOut;
+  const hasPunchedIn = localPunchedIn ?? todayRecord?.punchIn;
+  const hasPunchedOut = localPunchedOut ?? todayRecord?.punchOut;
 
   const handlePunchIn = async () => {
     try {
@@ -51,6 +53,9 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
           title: 'Punch In Recorded',
           message: `You punched in at ${punchInTime}`,
         });
+        
+        // Update local state immediately for UI
+        setLocalPunchedIn(true);
         
         // refresh parent immediately so UI updates
         try {
@@ -109,6 +114,9 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
           message: `You punched out at ${punchOutTime}. Total hours: ${totalHours}h`,
         });
         
+        // Update local state immediately for UI
+        setLocalPunchedOut(true);
+        
         // refresh parent immediately so UI updates
         try {
           await onSuccess();
@@ -129,7 +137,14 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    // Reset local states when modal closes
+    if (localPunchedIn !== undefined || localPunchedOut !== undefined) {
+      setLocalPunchedIn(undefined);
+      setLocalPunchedOut(undefined);
+    }
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

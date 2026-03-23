@@ -15,7 +15,7 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
 }) => {
   const { runPayroll, loading, error } = usePayroll();
   const [formData, setFormData] = useState({
-    employeeId: '',
+    employeeIdentifier: '',
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
   });
@@ -24,26 +24,38 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === 'employeeId' ? value : parseInt(value, 10),
+      [name]: name === 'month' || name === 'year' ? parseInt(value, 10) : value,
     }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const idValue = parseInt(formData.employeeIdentifier, 10);
+    const isNumericId = !Number.isNaN(idValue);
+
+    const payload = {
+      employeeId: isNumericId ? idValue : undefined,
+      empCode: isNumericId ? undefined : formData.employeeIdentifier.trim(),
+      month: formData.month,
+      year: formData.year,
+    };
+
+    if (!payload.employeeId && !payload.empCode) {
+      alert('Please enter a valid employee ID or employee code.');
+      return;
+    }
+
     try {
-      await runPayroll({
-        employeeId: parseInt(formData.employeeId, 10),
-        month: formData.month,
-        year: formData.year,
-      });
-      
+      await runPayroll(payload);
+
       // Reset form
       setFormData({
-        employeeId: '',
+        employeeIdentifier: '',
         month: new Date().getMonth() + 1,
         year: new Date().getFullYear(),
       });
-      
+
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -65,17 +77,17 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="employeeId" className="block text-sm font-medium text-slate-700 mb-1">
-              Employee ID
+            <Label htmlFor="employeeIdentifier" className="block text-sm font-medium text-slate-700 mb-1">
+              Employee ID or Code
             </Label>
             <Input
-              id="employeeId"
-              name="employeeId"
-              type="number"
-              value={formData.employeeId}
+              id="employeeIdentifier"
+              name="employeeIdentifier"
+              type="text"
+              value={formData.employeeIdentifier}
               onChange={handleChange}
               required
-              placeholder="Enter employee ID"
+              placeholder="Enter employee ID or code"
             />
           </div>
 
