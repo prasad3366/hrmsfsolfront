@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+const foodeezLogo = new URL('../../assets/foodeez.png', import.meta.url).href;
 import { 
   LayoutDashboard, Users, CalendarCheck, FileText, 
   DollarSign, Briefcase, TrendingUp, Monitor, 
@@ -48,7 +49,17 @@ const Sidebar = () => {
       ];
     }
     
-    // Manager & Employee view
+    // Manager view - includes Employees
+    if (user.role === 'MANAGER') {
+      return [
+        ...common.slice(0, 1), // Dashboard
+        { name: 'Employees', path: '/employees', icon: Users },
+        ...common.slice(1),
+        { name: 'Performance', path: '/performance', icon: TrendingUp },
+      ];
+    }
+    
+    // Employee view
     return [
         ...common,
         { name: 'Performance', path: '/performance', icon: TrendingUp },
@@ -62,7 +73,7 @@ const Sidebar = () => {
       {/* Branding */}
       <div className="h-20 flex items-center px-6 border-b border-slate-100">
         <img 
-            src="/logo.png"
+            src={foodeezLogo}
             alt="FooDeeZ" 
             className="h-20 w-auto" 
         />
@@ -98,13 +109,23 @@ const Sidebar = () => {
 
       {/* User Footer */}
       <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-        <div className="flex items-center mb-4">
-            <img src={user.avatar} alt="User" className="w-9 h-9 rounded-full mr-3 border-2 border-white shadow-sm" />
-            <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-800 truncate">{user.name}</p>
+        <button
+            onClick={() => {
+              if (!user.employeeId) {
+                alert('Employee ID not found. Please refresh the page.');
+                return;
+              }
+              navigate(`/employees/${user.employeeId}`);
+            }}
+            className="w-full flex items-center mb-4 p-2 rounded-lg hover:bg-slate-100 transition-colors group"
+            title="View your profile"
+        >
+            <img src={user.avatar} alt="User" className="w-9 h-9 rounded-full mr-3 border-2 border-white shadow-sm group-hover:border-blue-300" />
+            <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-bold text-slate-800 truncate group-hover:text-blue-600">{user.name}</p>
                 <p className="text-xs text-slate-500 truncate capitalize">{user.role.toLowerCase()}</p>
             </div>
-        </div>
+        </button>
         <button 
             onClick={handleLogout}
             className="w-full flex items-center justify-center px-4 py-2 text-xs font-semibold text-red-600 bg-white border border-red-100 rounded-lg hover:bg-red-50 transition-colors shadow-sm"

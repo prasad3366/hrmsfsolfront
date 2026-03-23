@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { RunPayrollModal } from '../../components/payroll/RunPayrollModal';
 import { AssignSalaryModal } from '../../components/payroll/AssignSalaryModal';
 import { AddPayrollAdjustmentModal } from '../../components/payroll/AddPayrollAdjustmentModal';
-import { Payroll as PayrollType } from '../../services/api';
+import { Payroll as PayrollType, EmployeeSalary } from '../../services/api';
 import ApiService from '../../services/api';
 
 const Payroll = () => {
@@ -16,13 +16,39 @@ const Payroll = () => {
   const [isAssignSalaryOpen, setIsAssignSalaryOpen] = useState(false);
   const [isAddAdjustmentOpen, setIsAddAdjustmentOpen] = useState(false);
   const [selectedPayroll, setSelectedPayroll] = useState<PayrollType | null>(null);
+  const [employeeDetails, setEmployeeDetails] = useState<any>(null);
+  const [employeeSalaries, setEmployeeSalaries] = useState<EmployeeSalary[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  const refreshEmployeeDetails = async () => {
+    if (!user?.employeeId) return;
+
+    setLoadingDetails(true);
+    try {
+      // Primary source: /employees/me includes salaries and payrolls for current user
+      const meDetails = await ApiService.getMyEmployeeDetails();
+      setEmployeeDetails(meDetails);
+
+      // Use salary data from /employees/me for all users (most reliable source)
+      setEmployeeSalaries(meDetails?.salaries || []);
+    } catch (err) {
+      console.error('Failed to fetch employee details:', err);
+      setEmployeeDetails(null);
+      setEmployeeSalaries([]);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
 
   useEffect(() => {
     // Fetch payroll data for current user or all employees (depending on role)
-    if (user?.id) {
-      fetchPayroll(parseInt(user.id)).catch(err => console.error('Failed to fetch payroll:', err));
+    if (user?.employeeId) {
+      fetchPayroll(user.employeeId).catch(err => console.error('Failed to fetch payroll:', err));
+      refreshEmployeeDetails();
     }
-  }, [user?.id]);
+  }, [user?.employeeId, fetchPayroll]);
+
+  const currentPayroll = payrolls.length > 0 ? payrolls[0] : null;
 
   const handleAddAdjustment = (payroll: PayrollType) => {
     setSelectedPayroll(payroll);
@@ -37,8 +63,6 @@ const Payroll = () => {
     }
   };
 
-  const currentPayroll = payrolls.length > 0 ? payrolls[0] : null;
-
   if (error) {
     return (
       <div className="p-6 md:p-8 max-w-7xl mx-auto">
@@ -50,6 +74,8 @@ const Payroll = () => {
     );
   }
 
+  const salaryInfo = employeeSalaries.length > 0 ? employeeSalaries[0] : employeeDetails?.salaries?.[0];
+
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
@@ -58,12 +84,16 @@ const Payroll = () => {
           <p className="text-slate-500 text-sm">Salary details and payslips</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => setIsRunPayrollOpen(true)}>
-            <Plus size={16} /> Run Payroll
-          </Button>
-          <Button variant="outline" className="gap-2" onClick={() => setIsAssignSalaryOpen(true)}>
-            <Plus size={16} /> Assign Salary
-          </Button>
+          {(user?.role?.toUpperCase() === 'HR' || user?.role?.toUpperCase() === 'ADMIN') && (
+            <>
+              <Button variant="outline" className="gap-2" onClick={() => setIsRunPayrollOpen(true)}>
+                <Plus size={16} /> Run Payroll
+              </Button>
+              <Button variant="outline" className="gap-2" onClick={() => setIsAssignSalaryOpen(true)}>
+                <Plus size={16} /> Assign Salary
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -77,28 +107,50 @@ const Payroll = () => {
                 
                 <div className="flex justify-between items-start relative z-10">
                     <div>
-                        <p className="text-slate-400 text-xs uppercase tracking-widest">Net Salary</p>
+                        <p className="text-slate-400 text-xs uppercase tracking-widest">
+                          {currentPayroll ? 'Net Salary' : 'Annual CTC'}
+                        </p>
                         <h2 className="text-3xl font-bold mt-1">
-                          ${currentPayroll?.netSalary?.toLocaleString() || '0.00'}
+                          {currentPayroll 
+                            ? `$${currentPayroll.netSalary?.toLocaleString() || '0.00'}`
+                            : loadingDetails 
+                              ? 'Loading...'
+                              : salaryInfo?.annualCTC 
+                                ? `₹${salaryInfo.annualCTC.toLocaleString()}`
+                                : 'Not Assigned'
+                          }
                         </h2>
                     </div>
                     <CreditCard className="text-slate-400" />
                 </div>
 
                 <div className="relative z-10">
-                    {loading ? (
+                    {loading || loadingDetails ? (
                       <p className="text-slate-400 text-sm">Loading...</p>
-                    ) : (
+                    ) : currentPayroll ? (
                       <>
                         <div className="flex justify-between text-sm mb-1 text-slate-300">
                             <span>Month</span>
-                            <span>{currentPayroll?.month}/{currentPayroll?.year || 'N/A'}</span>
+                            <span>{currentPayroll.month}/{currentPayroll.year}</span>
                         </div>
                         <div className="flex justify-between text-sm text-slate-300">
                             <span>Present Days</span>
-                            <span>{currentPayroll?.presentDays || '0'} / {currentPayroll?.workingDays || '22'}</span>
+                            <span>{currentPayroll.presentDays} / {currentPayroll.workingDays}</span>
                         </div>
                       </>
+                    ) : salaryInfo ? (
+                      <>
+                        <div className="flex justify-between text-sm mb-1 text-slate-300">
+                            <span>Monthly CTC</span>
+                            <span>₹{salaryInfo.monthlyCTC?.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-slate-300">
+                            <span>Effective From</span>
+                            <span>{new Date(salaryInfo.effectiveFrom).toLocaleDateString()}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-slate-400 text-sm">Salary not assigned yet</p>
                     )}
                 </div>
             </div>
@@ -112,7 +164,13 @@ const Payroll = () => {
                         <DollarSign size={20} />
                     </div>
                     <p className="text-xs text-slate-500">Basic Pay</p>
-                    <p className="text-lg font-bold text-slate-900">${currentPayroll?.basic?.toLocaleString() || '0'}</p>
+                    <p className="text-lg font-bold text-slate-900">
+                        {payrolls.length === 0 && salaryInfo ? (
+                            `₹${(salaryInfo.monthlyCTC / 12)?.toLocaleString()}`
+                        ) : (
+                            `$${currentPayroll?.basic?.toLocaleString() || '0'}`
+                        )}
+                    </p>
                 </CardContent>
             </Card>
             <Card hoverEffect className="flex flex-col justify-center">
@@ -121,7 +179,13 @@ const Payroll = () => {
                         <TrendingUp size={20} />
                     </div>
                     <p className="text-xs text-slate-500">Gross Salary</p>
-                    <p className="text-lg font-bold text-slate-900">${currentPayroll?.grossSalary?.toLocaleString() || '0'}</p>
+                    <p className="text-lg font-bold text-slate-900">
+                        {payrolls.length === 0 && salaryInfo ? (
+                            `₹${salaryInfo.monthlyCTC?.toLocaleString()}`
+                        ) : (
+                            `$${currentPayroll?.grossSalary?.toLocaleString() || '0'}`
+                        )}
+                    </p>
                 </CardContent>
             </Card>
             <Card hoverEffect className="flex flex-col justify-center">
@@ -130,7 +194,13 @@ const Payroll = () => {
                         <Calendar size={20} />
                     </div>
                     <p className="text-xs text-slate-500">Deductions</p>
-                    <p className="text-lg font-bold text-slate-900">-${currentPayroll?.deductions?.toLocaleString() || '0'}</p>
+                    <p className="text-lg font-bold text-slate-900">
+                        {payrolls.length === 0 ? (
+                            '₹0'
+                        ) : (
+                            `-$${currentPayroll?.deductions?.toLocaleString() || '0'}`
+                        )}
+                    </p>
                 </CardContent>
             </Card>
         </div>
@@ -258,8 +328,8 @@ const Payroll = () => {
         isOpen={isRunPayrollOpen}
         onClose={() => setIsRunPayrollOpen(false)}
         onSuccess={() => {
-          if (user?.id) {
-            fetchPayroll(parseInt(user.id));
+          if (user?.employeeId) {
+            fetchPayroll(user.employeeId);
           }
         }}
       />
@@ -267,6 +337,13 @@ const Payroll = () => {
       <AssignSalaryModal
         isOpen={isAssignSalaryOpen}
         onClose={() => setIsAssignSalaryOpen(false)}
+        onSuccess={() => {
+          // Refresh payroll + salary details after successful assignment
+          if (user?.employeeId) {
+            fetchPayroll(user.employeeId);
+            refreshEmployeeDetails();
+          }
+        }}
       />
 
       {selectedPayroll && (
@@ -275,8 +352,8 @@ const Payroll = () => {
           onClose={() => setIsAddAdjustmentOpen(false)}
           payrollId={selectedPayroll.id}
           onSuccess={() => {
-            if (user?.id) {
-              fetchPayroll(parseInt(user.id));
+            if (user?.employeeId) {
+              fetchPayroll(user.employeeId);
             }
           }}
         />

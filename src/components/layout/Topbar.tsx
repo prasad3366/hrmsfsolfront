@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Bell, Search, Menu } from 'lucide-react';
 import { NotificationPanel } from './NotificationPanel';
@@ -6,6 +7,7 @@ import { useNotifications } from '../../context/NotificationContext';
 
 const Topbar = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { unreadCount } = useNotifications();
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
@@ -42,6 +44,26 @@ const Topbar = () => {
           )}
         </button>
         <NotificationPanel isOpen={isNotifOpen} onClose={() => setIsNotifOpen(false)} />
+        
+        {/* Profile - Click to navigate to employee details */}
+        <button
+          onClick={() => {
+            if (!user?.employeeId) {
+              alert('Employee ID not found. Please refresh the page.');
+              return;
+            }
+            navigate(`/employees/${user.employeeId}`);
+          }}
+          className="flex items-center space-x-2 p-2 rounded-lg hover:bg-slate-50 transition-colors"
+          title="View your profile"
+        >
+          <img src={user?.avatar} alt={user?.name} className="w-8 h-8 rounded-full border-2 border-slate-200 hover:border-blue-400" />
+          <div className="hidden sm:flex flex-col items-end">
+            <span className="text-xs font-semibold text-slate-500 uppercase">My Profile</span>
+            <span className="text-sm font-semibold text-slate-800">{user?.name}</span>
+          </div>
+        </button>
+        
         <div className="hidden md:flex flex-col items-end">
              <span className="text-sm font-semibold text-slate-800">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
              <span className="text-xs text-slate-500">FooDeeZ</span>

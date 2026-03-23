@@ -31,6 +31,39 @@ export const useSalary = () => {
     }
   }, []);
 
+  const fetchEmployeeSalaries = useCallback(async (employeeId: number) => {
+    try {
+      const result = await ApiService.getEmployeeSalaries(employeeId);
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch employee salaries';
+      setError(errorMessage);
+      throw err;
+    }
+  }, []);
+
+  const fetchEmployeeSalariesByCode = useCallback(async (empCode: string) => {
+    try {
+      const result = await ApiService.getEmployeeSalariesByCode(empCode);
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch employee salaries by code';
+      setError(errorMessage);
+      throw err;
+    }
+  }, []);
+
+  const fetchAllSalaries = useCallback(async () => {
+    try {
+      const result = await ApiService.getAllSalaries();
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch all salaries';
+      setError(errorMessage);
+      throw err;
+    }
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -40,6 +73,9 @@ export const useSalary = () => {
     loading,
     error,
     assignSalary,
+    fetchEmployeeSalaries,
+    fetchEmployeeSalariesByCode,
+    fetchAllSalaries,
     clearError,
     setSalary,
   };

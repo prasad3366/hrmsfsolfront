@@ -5,6 +5,8 @@ import { Input, Button } from '../ui/components';
 import { Eye, EyeOff } from 'lucide-react';
 import ForgotPasswordModal from './ForgotPasswordModal';
 
+const foodeezLogo = new URL('../../assets/foodeez.png', import.meta.url).href;
+
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -135,7 +137,7 @@ const Login = () => {
                 {/* Header */}
                 <div className="flex flex-col items-center mb-5">
                      <img 
-                        src="/logo.png"
+                        src={foodeezLogo}
                         alt="FooDeeZ" 
                         className="h-20 w-auto mb-15" 
                     />

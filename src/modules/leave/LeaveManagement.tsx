@@ -7,7 +7,7 @@ import ApplyLeaveModal from '../../components/leave/ApplyLeaveModal';
 import ApproveRejectLeaveModal from '../../components/leave/ApproveRejectLeaveModal';
 import { CreateLeaveDto } from '../../services/api';
 
-const LeaveBalanceCard = ({ type, total, used, color }: { type: string, total: number, used: number, color: string }) => {
+const LeaveBalanceCard = ({ type, total, used, color, ...props }: { type: string, total: number, used: number, color: string, [key: string]: any }) => {
     const percentage = (used / total) * 100;
     const colors: Record<string, string> = {
         blue: "bg-blue-500",

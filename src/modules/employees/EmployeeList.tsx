@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import ApiService from '../../services/api';
 import { 
   Table, TableHeader, TableRow, TableHead, TableCell, 
@@ -12,6 +13,11 @@ const EmployeeList = () => {
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  
+  // Check if user can manage employees (create, edit, etc)
+  const canManageEmployees = user?.role === 'ADMIN' || user?.role === 'HR';
+  const canViewEmployees = user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER';
   
   useEffect(() => {
     let mounted = true;
@@ -34,7 +40,7 @@ const EmployeeList = () => {
   const filteredEmployees = useMemo(() => {
     // Map API employee shape to display-friendly fields
     const mapped = employees.map((emp) => ({
-      id: emp.user?.id ?? emp.id,
+      id: emp.id, // Use employee PK for route/updates (not user id)
       name: `${emp.firstName ?? ''} ${emp.lastName ?? ''}`.trim() || emp.empCode || 'Unknown',
       email: emp.user?.email ?? emp.email ?? '',
       designation: emp.designation ?? '',
@@ -57,16 +63,20 @@ const EmployeeList = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Employees</h1>
-          <p className="text-slate-500">Manage your workforce</p>
+          <p className="text-slate-500">
+            {canManageEmployees ? 'Manage your workforce' : 'View team members'}
+          </p>
         </div>
-        <div className="flex gap-3">
-          <Button variant="outline" className="gap-2">
-            <Download size={16} /> Export
-          </Button>
-          <Button className="gap-2">
-            <Plus size={16} /> Add Employee
-          </Button>
-        </div>
+        {canManageEmployees && (
+          <div className="flex gap-3">
+            <Button variant="outline" className="gap-2">
+              <Download size={16} /> Export
+            </Button>
+            <Button className="gap-2">
+              <Plus size={16} /> Add Employee
+            </Button>
+          </div>
+        )}
       </div>
 
       <Card>
@@ -134,7 +144,15 @@ const EmployeeList = () => {
                   </TableCell>
                   <TableCell>{emp.joinDate}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/employees/${emp.id}`);
+                      }}
+                      title={canManageEmployees ? "View / edit employee" : "View employee"}
+                    >
                       <MoreHorizontal size={18} />
                     </Button>
                   </TableCell>

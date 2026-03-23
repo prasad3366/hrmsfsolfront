@@ -1,25 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import ApiService from '../../services/api';
+import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeModal';
 import { 
   Card, CardContent, CardHeader, CardTitle, 
-  Button, Badge, Table, TableHeader, TableRow, TableHead, TableCell 
+  Button, Badge
 } from '../../components/ui/components';
 import { 
-  ArrowLeft, Mail, Phone, Calendar, DollarSign, 
-  Briefcase, Download, Edit 
+  Edit, Briefcase
 } from 'lucide-react';
 
 const EmployeeProfile = () => {
     const { id } = useParams();
-    const navigate = useNavigate();
+    const { user } = useAuth();
 
     const [employee, setEmployee] = useState<any | null>(null);
-    const [attendance, setAttendance] = useState<any[]>([]);
-    const [leaves, setLeaves] = useState<any[]>([]);
-    const [payroll, setPayroll] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isEditOpen, setIsEditOpen] = useState(false);
+
+    // Check if user can edit employees
+    const canEditEmployees = user?.role === 'ADMIN' || user?.role === 'HR';
 
     useEffect(() => {
         let mounted = true;
@@ -27,22 +29,17 @@ const EmployeeProfile = () => {
         setLoading(true);
         setError(null);
 
+        console.log('Loading employee profile:', empId, 'Current user:', user?.id, user?.employeeId, user?.role);
+
         ApiService.getEmployeeById(empId as string)
             .then((data) => {
                 if (!mounted) return;
+                console.log('Employee data loaded:', data);
                 setEmployee(data);
-
-                // attendance endpoint expects employee id (employee id or user id)
-                const lookupId = data?.id ?? data?.user?.id ?? empId;
-                return ApiService.getEmployeeAttendance(Number(lookupId));
-            })
-            .then((att) => {
-                if (!mounted) return;
-                setAttendance(att || []);
             })
             .catch((err) => {
                 if (!mounted) return;
-                console.error(err);
+                console.error('Error loading employee profile:', err);
                 setError(err instanceof Error ? err.message : String(err));
             })
             .finally(() => {
@@ -53,7 +50,49 @@ const EmployeeProfile = () => {
         return () => {
             mounted = false;
         };
-    }, [id]);
+    }, [id, user]);
+
+    const handleEmployeeUpdated = (updated: any) => {
+        setEmployee((prev) => ({ ...prev, ...updated }));
+        setIsEditOpen(false);
+    };
+
+    const profileInitialData = employee
+      ? {
+          email: employee.user?.email ?? employee.email,
+          firstName: employee.firstName ?? '',
+          lastName: employee.lastName ?? '',
+          empCode: employee.empCode ?? '',
+          department: employee.department ?? '',
+          designation: employee.designation ?? '',
+          role: employee.user?.role ?? employee.role ?? 'EMPLOYEE',
+          employmentType: employee.employmentType,
+          status: employee.status,
+          sourceOfHire: employee.sourceOfHire,
+          dateOfJoining: employee.dateOfJoining ? new Date(employee.dateOfJoining).toISOString().split('T')[0] : '',
+          currentExperience: employee.currentExperience,
+          reportingManager: employee.reportingManager,
+          dateOfBirth: employee.dateOfBirth ? new Date(employee.dateOfBirth).toISOString().split('T')[0] : '',
+          age: employee.age,
+          gender: employee.gender,
+          currentAddress: employee.currentAddress,
+          permanentAddress: employee.permanentAddress,
+          pincode: employee.pincode,
+          city: employee.city,
+          maritalStatus: employee.maritalStatus,
+          phone: employee.phone,
+          personalMobile: employee.personalMobile,
+          panNumber: employee.panNumber,
+          aadharNumber: employee.aadharNumber,
+          pfNumber: employee.pfNumber,
+          uanNumber: employee.uanNumber,
+          bankAccountNumber: employee.bankAccountNumber,
+          bankName: employee.bankName,
+          ifscCode: employee.ifscCode,
+          dateOfExit: employee.dateOfExit ? new Date(employee.dateOfExit).toISOString().split('T')[0] : '',
+          isExperienced: employee.isExperienced,
+        }
+      : undefined;
 
     if (loading) {
         return (
@@ -65,227 +104,190 @@ const EmployeeProfile = () => {
 
     if (error || !employee) {
         return (
-            <div className="p-8 flex flex-col items-center justify-center text-center">
-                 <h2 className="text-xl font-semibold text-slate-800">Employee Not Found</h2>
-                 <p className="text-slate-500 mb-4">{error ?? 'The employee you are looking for does not exist or has been removed.'}</p>
-                 <Button onClick={() => navigate('/employees')} variant="outline">
-                        <ArrowLeft size={16} className="mr-2"/> Back to List
-                 </Button>
+            <div className="p-8 flex flex-col items-center justify-center text-center min-h-[60vh]">
+                 <h2 className="text-xl font-semibold text-slate-800">Unable to Load Employee Profile</h2>
+                 <p className="text-slate-500 mb-2">{error ? `Error: ${error}` : 'The employee you are looking for does not exist or has been removed.'}</p>
+                 <p className="text-xs text-slate-400 mb-4">Route ID: {id} | User Role: {user?.role} | User employeeId: {user?.employeeId}</p>
             </div>
         );
     }
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4">
-        <Button variant="ghost" onClick={() => navigate('/employees')} className="w-fit pl-0 hover:bg-transparent hover:text-blue-600 text-slate-500">
-          <ArrowLeft className="mr-2" size={16} /> Back to Employees
-        </Button>
-        
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
              <div className="flex items-center gap-6">
                 <img 
-                  src={employee.avatar} 
-                  alt={employee.name} 
+                  src={employee.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent((employee.firstName ?? '') + ' ' + (employee.lastName ?? ''))}&background=random`}
+                  alt={employee.firstName || 'Employee'} 
                   className="w-24 h-24 rounded-full object-cover border-4 border-slate-50 shadow-sm" 
                 />
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">{employee.firstName ? `${employee.firstName} ${employee.lastName || ''}`.trim() : employee.name}</h1>
+                    <h1 className="text-2xl font-bold text-slate-900">{employee.firstName ? `${employee.firstName} ${employee.lastName || ''}`.trim() : 'Employee'}</h1>
                     <div className="flex flex-wrap items-center gap-2 text-slate-500 mt-2 text-sm">
-                        <span className="flex items-center gap-1"><Briefcase size={14} /> {employee.designation ?? employee.jobTitle}</span>
+                        <span className="flex items-center gap-1"><Briefcase size={14} /> {employee.designation || employee.jobTitle || '-'}</span>
                         <span className="hidden sm:inline mx-1">•</span>
-                        <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">{employee.department}</span>
+                        <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">{employee.department || '-'}</span>
                     </div>
                 </div>
              </div>
              <div className="flex gap-3 w-full md:w-auto">
-                 <Button variant="outline" className="flex-1 md:flex-none">
-                    <Download size={16} className="mr-2" /> Resume
-                 </Button>
-                 <Button className="flex-1 md:flex-none">
-                    <Edit size={16} className="mr-2" /> Edit
-                 </Button>
+                 {canEditEmployees && (
+                   <Button className="flex-1 md:flex-none" onClick={() => setIsEditOpen(true)}>
+                      <Edit size={16} className="mr-2" /> Edit
+                   </Button>
+                 )}
              </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column: Personal Info */}
-          <div className="space-y-6">
-              <Card>
-                  <CardHeader><CardTitle>Personal Information</CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                      <div className="flex items-center gap-4 p-3 rounded-lg hover:bg-slate-50 transition-colors">
-                          <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0"><Mail size={18}/></div>
-                          <div className="overflow-hidden">
-                              <p className="text-xs text-slate-500">Email Address</p>
-                              <p className="text-sm font-medium truncate" title={employee.user?.email ?? employee.email}>{employee.user?.email ?? employee.email}</p>
-                          </div>
-                      </div>
-                      <div className="flex items-center gap-4 p-3 rounded-lg hover:bg-slate-50 transition-colors">
-                          <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center text-green-600 shrink-0"><Phone size={18}/></div>
-                          <div>
-                              <p className="text-xs text-slate-500">Phone</p>
-                              <p className="text-sm font-medium">{employee.phone ?? employee.contactNumber ?? '-'}</p>
-                          </div>
-                      </div>
-                      <div className="flex items-center gap-4 p-3 rounded-lg hover:bg-slate-50 transition-colors">
-                          <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600 shrink-0"><Calendar size={18}/></div>
-                          <div>
-                              <p className="text-xs text-slate-500">Joining Date</p>
-                              <p className="text-sm font-medium">{employee.joinDate ?? (employee.createdAt ? new Date(employee.createdAt).toLocaleDateString() : '-')}</p>
-                          </div>
-                      </div>
-                      <div className="flex items-center gap-4 p-3 rounded-lg hover:bg-slate-50 transition-colors">
-                          <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600 shrink-0"><DollarSign size={18}/></div>
-                          <div>
-                              <p className="text-xs text-slate-500">Salary</p>
-                              <p className="text-sm font-medium">{employee.salary ? `$${employee.salary.toLocaleString()}/yr` : '-'}</p>
-                          </div>
-                      </div>
-                      <div className="pt-4 mt-2 border-t border-slate-100 flex justify-between items-center">
-                          <span className="text-sm text-slate-500">Employment Status</span>
-                          <Badge variant={employee.user?.isActive ? 'success' : 'danger'}>
-                              {employee.user?.isActive ? 'Active' : 'Inactive'}
-                          </Badge>
-                      </div>
-                  </CardContent>
-              </Card>
+      {/* Employee Details */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Personal Information */}
+        <Card>
+          <CardHeader><CardTitle>Personal Information</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-xs text-slate-500 font-medium">First Name</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.firstName || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Last Name</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.lastName || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Email Address</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{(employee.user?.email ?? employee.email) || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Phone</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.phone || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Date of Birth</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.dateOfBirth ? new Date(employee.dateOfBirth).toLocaleDateString() : '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Gender</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.gender || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Marital Status</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.maritalStatus || '-'}</p>
+            </div>
+          </CardContent>
+        </Card>
 
-              {/* Leave Stats Summary */}
-              <Card>
-                  <CardHeader><CardTitle>Leave Balance</CardTitle></CardHeader>
-                  <CardContent>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="p-4 bg-blue-50/50 rounded-xl text-center border border-blue-100">
-                                <p className="text-2xl font-bold text-blue-700">12</p>
-                                <p className="text-xs font-medium text-blue-600 mt-1">Total Allocated</p>
-                            </div>
-                            <div className="p-4 bg-green-50/50 rounded-xl text-center border border-green-100">
-                                <p className="text-2xl font-bold text-green-700">8.5</p>
-                                <p className="text-xs font-medium text-green-600 mt-1">Available</p>
-                            </div>
-                        </div>
-                  </CardContent>
-              </Card>
-          </div>
+        {/* Employment Information */}
+        <Card>
+          <CardHeader><CardTitle>Employment Information</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Employee Code</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.empCode || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Department</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.department || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Designation</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.designation || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Role</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{(employee.user?.role ?? employee.role) || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Employment Type</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.employmentType || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Status</p>
+              <Badge variant={employee.status === 'ACTIVE' ? 'success' : 'danger'} className="mt-1">
+                {employee.status || '-'}
+              </Badge>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Date of Joining</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.dateOfJoining ? new Date(employee.dateOfJoining).toLocaleDateString() : '-'}</p>
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* Right Column: Records */}
-          <div className="lg:col-span-2 space-y-6">
-              
-              {/* Recent Attendance */}
-              <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-4">
-                      <CardTitle>Recent Attendance</CardTitle>
-                      <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">View History</Button>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                      <Table>
-                          <TableHeader>
-                              <TableRow>
-                                  <TableHead>Date</TableHead>
-                                  <TableHead>Check In</TableHead>
-                                  <TableHead>Check Out</TableHead>
-                                  <TableHead>Hours</TableHead>
-                                  <TableHead>Status</TableHead>
-                              </TableRow>
-                          </TableHeader>
-                          <tbody>
-                              {attendance.length > 0 ? attendance.slice(0, 5).map(a => (
-                                  <TableRow key={a.id}>
-                                      <TableCell className="font-medium">{a.date}</TableCell>
-                                      <TableCell>{a.checkIn || '-'}</TableCell>
-                                      <TableCell>{a.checkOut || '-'}</TableCell>
-                                      <TableCell>{a.totalHours > 0 ? `${a.totalHours}h` : '-'}</TableCell>
-                                      <TableCell>
-                                          <Badge variant={a.status === 'Present' ? 'success' : a.status === 'Absent' ? 'danger' : 'default'}>
-                                              {a.status}
-                                          </Badge>
-                                      </TableCell>
-                                  </TableRow>
-                              )) : (
-                                  <TableRow><TableCell colSpan={5} className="text-center text-slate-500 py-8">No attendance records found.</TableCell></TableRow>
-                              )}
-                          </tbody>
-                      </Table>
-                  </CardContent>
-              </Card>
+        {/* Contact Information */}
+        <Card>
+          <CardHeader><CardTitle>Contact Information</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Current Address</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.currentAddress || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Permanent Address</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.permanentAddress || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">City</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.city || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Pincode</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.pincode || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Personal Mobile</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.personalMobile || '-'}</p>
+            </div>
+          </CardContent>
+        </Card>
 
-              {/* Leave History */}
-              <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-4">
-                      <CardTitle>Leave History</CardTitle>
-                      <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">Apply Leave</Button>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                      <Table>
-                          <TableHeader>
-                              <TableRow>
-                                  <TableHead>Type</TableHead>
-                                  <TableHead>Dates</TableHead>
-                                  <TableHead>Reason</TableHead>
-                                  <TableHead>Status</TableHead>
-                              </TableRow>
-                          </TableHeader>
-                          <tbody>
-                              {leaves.length > 0 ? leaves.map(l => (
-                                  <TableRow key={l.id}>
-                                      <TableCell>{l.type}</TableCell>
-                                      <TableCell className="text-xs">{l.startDate} - {l.endDate}</TableCell>
-                                      <TableCell className="max-w-xs truncate text-slate-500">{l.reason}</TableCell>
-                                      <TableCell>
-                                          <Badge variant={l.status === 'Approved' ? 'success' : l.status === 'Pending' ? 'warning' : 'danger'}>
-                                              {l.status}
-                                          </Badge>
-                                      </TableCell>
-                                  </TableRow>
-                              )) : (
-                                  <TableRow><TableCell colSpan={4} className="text-center text-slate-500 py-8">No leave history found.</TableCell></TableRow>
-                              )}
-                          </tbody>
-                      </Table>
-                  </CardContent>
-              </Card>
-
-              {/* Payroll */}
-              <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-4">
-                      <CardTitle>Payroll History</CardTitle>
-                      <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">View All Slips</Button>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                      <Table>
-                          <TableHeader>
-                              <TableRow>
-                                  <TableHead>Month</TableHead>
-                                  <TableHead>Basic</TableHead>
-                                  <TableHead>Allowances</TableHead>
-                                  <TableHead>Net Pay</TableHead>
-                                  <TableHead>Status</TableHead>
-                              </TableRow>
-                          </TableHeader>
-                          <tbody>
-                              {payroll.length > 0 ? payroll.map(p => (
-                                  <TableRow key={p.id}>
-                                      <TableCell className="font-medium">{p.month} {p.year}</TableCell>
-                                      <TableCell>${p.basic.toLocaleString()}</TableCell>
-                                      <TableCell>${p.allowances.toLocaleString()}</TableCell>
-                                      <TableCell className="font-bold text-slate-900">${p.netPay.toLocaleString()}</TableCell>
-                                      <TableCell>
-                                          <Badge variant={p.status === 'Processed' ? 'success' : 'warning'}>{p.status}</Badge>
-                                      </TableCell>
-                                  </TableRow>
-                              )) : (
-                                  <TableRow><TableCell colSpan={5} className="text-center text-slate-500 py-8">No payroll records available.</TableCell></TableRow>
-                              )}
-                          </tbody>
-                      </Table>
-                  </CardContent>
-              </Card>
-
-          </div>
+        {/* Banking & Identification */}
+        <Card>
+          <CardHeader><CardTitle>Banking & Identification</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-xs text-slate-500 font-medium">PAN Number</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.panNumber || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Aadhar Number</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.aadharNumber || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">PF Number</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.pfNumber || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">UAN Number</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.uanNumber || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Bank Account Number</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.bankAccountNumber || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Bank Name</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.bankName || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">IFSC Code</p>
+              <p className="text-sm font-medium text-slate-900 mt-1">{employee.ifscCode || '-'}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      <CreateEmployeeModal
+        isOpen={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+        onSuccess={handleEmployeeUpdated}
+        mode="edit"
+        employeeId={employee?.id}
+        initialData={profileInitialData}
+      />
+
     </div>
   );
 };

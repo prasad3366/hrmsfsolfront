@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input } from '../../components/ui/components';
 import { X, Loader, AlertCircle, CheckCircle } from 'lucide-react';
 import ApiService, { CreateEmployeeDto, CreateEmployeeResponse } from '../../services/api';
@@ -6,53 +6,69 @@ import ApiService, { CreateEmployeeDto, CreateEmployeeResponse } from '../../ser
 interface CreateEmployeeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (employee: CreateEmployeeResponse) => void;
+  onSuccess: (employee: any) => void;
+  mode?: 'create' | 'edit';
+  initialData?: Partial<CreateEmployeeDto>;
+  employeeId?: number;
 }
 
 export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  mode = 'create',
+  initialData,
+  employeeId,
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const [formData, setFormData] = useState<CreateEmployeeDto>({
-    email: '',
-    firstName: '',
-    lastName: '',
-    empCode: '',
-    department: '',
-    designation: '',
-    role: 'EMPLOYEE',
-    employmentType: 'FULL_TIME',
-    status: 'ACTIVE',
-    sourceOfHire: '',
-    dateOfJoining: '',
-    currentExperience: undefined,
-    reportingManager: '',
-    dateOfBirth: '',
-    age: undefined,
-    gender: 'MALE',
-    currentAddress: '',
-    permanentAddress: '',
-    pincode: '',
-    city: '',
-    maritalStatus: 'SINGLE',
-    phone: '',
-    personalMobile: '',
-    panNumber: '',
-    aadharNumber: '',
-    pfNumber: '',
-    uanNumber: '',
-    bankAccountNumber: '',
-    bankName: '',
-    ifscCode: '',
-    dateOfExit: '',
-    isExperienced: false,
+  const normalizeDto = (data?: Partial<CreateEmployeeDto>): CreateEmployeeDto => ({
+    email: data?.email ?? '',
+    firstName: data?.firstName ?? '',
+    lastName: data?.lastName ?? '',
+    empCode: data?.empCode ?? '',
+    department: data?.department ?? '',
+    designation: data?.designation ?? '',
+    role: data?.role ?? 'EMPLOYEE',
+    employmentType: data?.employmentType ?? 'FULL_TIME',
+    status: data?.status ?? 'ACTIVE',
+    sourceOfHire: data?.sourceOfHire ?? '',
+    dateOfJoining: data?.dateOfJoining ?? '',
+    currentExperience: data?.currentExperience ?? undefined,
+    reportingManager: data?.reportingManager ?? '',
+    dateOfBirth: data?.dateOfBirth ?? '',
+    age: data?.age ?? undefined,
+    gender: data?.gender ?? 'MALE',
+    currentAddress: data?.currentAddress ?? '',
+    permanentAddress: data?.permanentAddress ?? '',
+    pincode: data?.pincode ?? '',
+    city: data?.city ?? '',
+    maritalStatus: data?.maritalStatus ?? 'UNMARRIED',
+    phone: data?.phone ?? '',
+    personalMobile: data?.personalMobile ?? '',
+    panNumber: data?.panNumber ?? '',
+    aadharNumber: data?.aadharNumber ?? '',
+    pfNumber: data?.pfNumber ?? '',
+    uanNumber: data?.uanNumber ?? '',
+    bankAccountNumber: data?.bankAccountNumber ?? '',
+    bankName: data?.bankName ?? '',
+    ifscCode: data?.ifscCode ?? '',
+    dateOfExit: data?.dateOfExit ?? '',
+    isExperienced: data?.isExperienced ?? false,
   });
+
+  const [formData, setFormData] = useState<CreateEmployeeDto>(normalizeDto());
+
+  useEffect(() => {
+    if (mode === 'edit' && initialData) {
+      setFormData(normalizeDto(initialData));
+    } else if (mode === 'create') {
+      setFormData(normalizeDto());
+    }
+  }, [mode, initialData]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -83,56 +99,68 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
 
     try {
       setIsSubmitting(true);
-      const response = await ApiService.createEmployee(formData);
-      
-      setSuccessMessage(`✓ Employee created successfully! Password: ${response.password}`);
-      setShowPassword(true);
-      
+
+      let response: any;
+      if (mode === 'edit') {
+        if (!employeeId) {
+          throw new Error('Employee ID is required for update');
+        }
+        response = await ApiService.updateEmployee(employeeId, formData);
+        setSuccessMessage('✓ Employee updated successfully');
+        setShowPassword(false);
+      } else {
+        response = await ApiService.createEmployee(formData);
+        setSuccessMessage(`✓ Employee created successfully! Password: ${response.password}`);
+        setShowPassword(true);
+      }
+
       onSuccess(response);
 
-      // Reset form
-      setFormData({
-        email: '',
-        firstName: '',
-        lastName: '',
-        empCode: '',
-        department: '',
-        designation: '',
-        role: 'EMPLOYEE',
-        isExperienced: false,
-        employmentType: 'FULL_TIME',
-        status: 'ACTIVE',
-        sourceOfHire: '',
-        dateOfJoining: '',
-        currentExperience: undefined,
-        reportingManager: '',
-        dateOfBirth: '',
-        age: undefined,
-        gender: 'MALE',
-        currentAddress: '',
-        permanentAddress: '',
-        pincode: '',
-        city: '',
-        maritalStatus: 'SINGLE',
-        phone: '',
-        personalMobile: '',
-        panNumber: '',
-        aadharNumber: '',
-        pfNumber: '',
-        uanNumber: '',
-        bankAccountNumber: '',
-        bankName: '',
-        ifscCode: '',
-        dateOfExit: '',
-      });
+      if (mode === 'create') {
+        // Reset for create mode only
+        setFormData({
+          email: '',
+          firstName: '',
+          lastName: '',
+          empCode: '',
+          department: '',
+          designation: '',
+          role: 'EMPLOYEE',
+          isExperienced: false,
+          employmentType: 'FULL_TIME',
+          status: 'ACTIVE',
+          sourceOfHire: '',
+          dateOfJoining: '',
+          currentExperience: undefined,
+          reportingManager: '',
+          dateOfBirth: '',
+          age: undefined,
+          gender: 'MALE',
+          currentAddress: '',
+          permanentAddress: '',
+          pincode: '',
+          city: '',
+          maritalStatus: 'UNMARRIED',
+          phone: '',
+          personalMobile: '',
+          panNumber: '',
+          aadharNumber: '',
+          pfNumber: '',
+          uanNumber: '',
+          bankAccountNumber: '',
+          bankName: '',
+          ifscCode: '',
+          dateOfExit: '',
+        });
+      }
 
       setTimeout(() => {
         onClose();
         setSuccessMessage('');
         setShowPassword(false);
-      }, 3000);
+      }, 2000);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to create employee');
+      setErrorMessage(err instanceof Error ? err.message : `Failed to ${mode === 'edit' ? 'update' : 'create'} employee`);
     } finally {
       setIsSubmitting(false);
     }
@@ -144,7 +172,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-2xl border-0 shadow-2xl max-h-[90vh] overflow-y-auto">
         <CardHeader className="flex flex-row items-center justify-between sticky top-0 bg-white border-b">
-          <CardTitle>Create New Employee</CardTitle>
+          <CardTitle>{mode === 'edit' ? 'Edit Employee' : 'Create New Employee'}</CardTitle>
           <button
             onClick={onClose}
             className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
@@ -160,9 +188,9 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
             <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
               <CheckCircle size={20} className="text-emerald-600 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-emerald-700">Employee Created Successfully</p>
+                <p className="text-sm font-semibold text-emerald-700">{mode === 'edit' ? 'Employee Updated Successfully' : 'Employee Created Successfully'}</p>
                 <p className="text-sm text-emerald-600 mt-1">{successMessage}</p>
-                {showPassword && (
+                {showPassword && mode === 'create' && (
                   <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
                     <p className="text-xs text-yellow-700">
                       ⚠️ Make sure to share the password with the employee. It will only be shown once.
@@ -486,7 +514,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                       disabled={isSubmitting}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     >
-                      <option value="SINGLE">Unmarried</option>
+                      <option value="UNMARRIED">Unmarried</option>
                       <option value="MARRIED">Married</option>
                     </select>
                   </div>
@@ -731,10 +759,10 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                 {isSubmitting ? (
                   <>
                     <Loader size={18} className="animate-spin mr-2" />
-                    Creating...
+                    {mode === 'edit' ? 'Updating...' : 'Creating...'}
                   </>
                 ) : (
-                  'Create Employee'
+                  mode === 'edit' ? 'Update Employee' : 'Create Employee'
                 )}
               </Button>
               <Button
@@ -751,7 +779,9 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
             {/* Info Box */}
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-xs text-blue-700">
-                ℹ️ A temporary password will be generated and sent to the employee's email address.
+                {mode === 'edit'
+                  ? 'ℹ️ Editing employee details will update the existing profile. Email changes will also update login username.'
+                  : 'ℹ️ A temporary password will be generated and sent to the employee email address when creating a new employee.'}
               </p>
             </div>
           </form>

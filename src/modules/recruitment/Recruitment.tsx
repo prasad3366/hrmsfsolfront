@@ -26,7 +26,7 @@ const KANBAN_DATA: Record<string, Candidate[]> = {
     "Hired": []
 };
 
-const CandidateCard = ({ candidate }: { candidate: Candidate }) => (
+const CandidateCard = ({ candidate, ...props }: { candidate: Candidate, [key: string]: any }) => (
     <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing mb-3 group">
         <div className="flex justify-between items-start mb-2">
             <h4 className="font-bold text-slate-800 text-sm">{candidate.name}</h4>

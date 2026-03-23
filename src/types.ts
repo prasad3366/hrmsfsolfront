@@ -8,6 +8,7 @@ export interface User {
   avatar: string;
   department: string;
   designation: string;
+  employeeId?: number; // Backend employee record ID
 }
 
 export interface Employee extends User {
@@ -16,6 +17,7 @@ export interface Employee extends User {
   status: 'Active' | 'On Leave' | 'Terminated';
   managerId?: string;
   salary: number;
+  createdAt?: string;
 }
 
 export interface AttendanceRecord {

@@ -45,17 +45,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           avatar: jwt.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(jwt.name || jwt.email || 'User')}&background=random`,
           department: jwt.department || 'General',
           designation: jwt.designation || 'User',
+          employeeId: jwt.employeeId ? Number(jwt.employeeId) : undefined,
         };
 
         setUser(userObj);
         if (userObj.role) setRole(userObj.role);
         // persist a lightweight user snapshot
         try { localStorage.setItem('foodeez_user', JSON.stringify(userObj)); } catch {}
+        
+        // Fetch employeeId if not in JWT
+        if (!userObj.employeeId) {
+          api.getEmployeeIdByUserId().then((data) => {
+            const updatedUser = { ...userObj, employeeId: data.employeeId };
+            setUser(updatedUser);
+            try { localStorage.setItem('foodeez_user', JSON.stringify(updatedUser)); } catch {}
+          }).catch((err) => {
+            console.warn('Could not fetch employee ID on init:', err);
+          });
+        }
       } else if (storedUser) {
         try {
           const parsed = JSON.parse(storedUser);
           setUser(parsed);
           setRole(parsed.role);
+          
+          // Fetch employeeId if not in stored user
+          if (!parsed.employeeId) {
+            api.getEmployeeIdByUserId().then((data) => {
+              const updatedUser = { ...parsed, employeeId: data.employeeId };
+              setUser(updatedUser);
+              try { localStorage.setItem('foodeez_user', JSON.stringify(updatedUser)); } catch {}
+            }).catch((err) => {
+              console.warn('Could not fetch employee ID on init:', err);
+            });
+          }
         } catch {
           localStorage.removeItem('foodeez_user');
           localStorage.removeItem('accessToken');
@@ -94,6 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             avatar: jwt.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(jwt.name || email.split('@')[0])}&background=random`,
             department: jwt.department || 'General',
             designation: jwt.designation || 'User',
+            employeeId: jwt.employeeId ? Number(jwt.employeeId) : undefined,
           }
         : {
             id: String(Math.random()),
@@ -103,11 +127,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(email.split('@')[0])}&background=random`,
             department: 'General',
             designation: 'User',
+            employeeId: undefined, // Will be set below
           };
 
       setUser(userObj);
       setRole((userObj.role || response.role || 'EMPLOYEE') as Role);
       localStorage.setItem('foodeez_user', JSON.stringify(userObj));
+      
+      // Fetch and store employeeId
+      try {
+        const empIdData = await api.getEmployeeIdByUserId();
+        const updatedUser = { ...userObj, employeeId: empIdData.employeeId };
+        setUser(updatedUser);
+        localStorage.setItem('foodeez_user', JSON.stringify(updatedUser));
+      } catch (err) {
+        console.warn('Could not fetch employee ID:', err);
+        // Continue even if employeeId fetch fails
+      }
       
       return {
         success: true,

@@ -240,8 +240,8 @@ const HRDashboard = () => {
             <Button size="xs" variant="outline">View Details</Button>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="h-[280px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[280px] w-full min-h-[280px]" style={{ minHeight: '280px' }}>
+            <ResponsiveContainer width="100%" height={280} debounce={100}>
               <BarChart data={hiringData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                 <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
@@ -264,8 +264,8 @@ const HRDashboard = () => {
 
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="h-[280px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[280px] w-full min-h-[280px]" style={{ minHeight: '280px' }}>
+            <ResponsiveContainer width="100%" height={280} debounce={100}>
               <LineChart data={attendanceData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />

@@ -73,7 +73,7 @@ export interface CreateEmployeeDto {
   permanentAddress?: string;
   pincode?: string;
   city?: string;
-  maritalStatus?: 'SINGLE' | 'MARRIED' | 'DIVORCED' | 'WIDOWED';
+  maritalStatus?: 'UNMARRIED' | 'SINGLE' | 'MARRIED' | 'DIVORCED' | 'WIDOWED';
   phone?: string;
   personalMobile?: string;
   panNumber?: string;
@@ -279,7 +279,8 @@ export interface Payroll {
 // =========== SALARY TYPES ===========
 
 export interface AssignSalaryDto {
-  employeeId: number;
+  employeeId?: number;
+  empCode?: string;
   annualCTC: number;
   structureId: number;
 }
@@ -924,8 +925,7 @@ class ApiService {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create employee');
+        throw new Error('Failed to create employee');
       }
 
       return await response.json();
@@ -936,23 +936,11 @@ class ApiService {
 
   async getAllEmployees(): Promise<any[]> {
     try {
-      const url = `${API_BASE_URL}/employees`;
-      const token = localStorage.getItem('accessToken');
       const headers = this.getAuthHeaders();
-      console.log('getAllEmployees request to:', url, 'hasToken:', !!token);
-
-      const response = await fetch(url, { method: 'GET', headers });
+      const response = await fetch(`${API_BASE_URL}/employees`, { method: 'GET', headers });
 
       if (!response.ok) {
-        const body = await response.text().catch(() => '');
-        let msg = `Failed to fetch employees (${response.status})`;
-        try {
-          const parsed = JSON.parse(body || '{}');
-          msg = parsed.message || msg;
-        } catch (e) {
-          if (body) msg = `${msg}: ${body}`;
-        }
-        throw new Error(msg);
+        throw new Error('Failed to fetch employees from API endpoint');
       }
 
       return await response.json();
@@ -970,7 +958,6 @@ class ApiService {
       if (response.status === 404 && API_BASE_URL.includes('/api')) {
         const altBase = API_BASE_URL.replace(/\/api\/?$/, '');
         const altUrl = `${altBase}/hrms/required/${employeeId}`;
-        console.warn('getRequiredDocuments received 404; retrying without /api at:', altUrl);
         response = await fetch(altUrl, { method: 'GET', headers: this.getAuthHeaders() });
       }
 
@@ -1014,7 +1001,6 @@ class ApiService {
       if (response.status === 404 && API_BASE_URL.includes('/api')) {
         const altBase = API_BASE_URL.replace(/\/api\/?$/, '');
         const altUrl = `${altBase}/hrms/upload-multiple`;
-        console.warn('uploadDocuments received 404; retrying without /api at:', altUrl);
         response = await fetch(altUrl, {
           method: 'POST',
           headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -1055,7 +1041,6 @@ class ApiService {
       if (response.status === 404 && API_BASE_URL.includes('/api')) {
         const altBase = API_BASE_URL.replace(/\/api\/?$/, '');
         const altUrl = `${altBase}/hrms/documents${q}`;
-        console.warn('getDocuments received 404; retrying without /api at:', altUrl);
         response = await fetch(altUrl, {
           method: 'GET',
           headers: this.getAuthHeaders(),
@@ -1176,26 +1161,145 @@ class ApiService {
     }
   }
 
-  async getEmployeeById(id: number | string): Promise<any> {
+  async getMyEmployeeDetails(): Promise<any> {
     try {
-      const response = await fetch(`${API_BASE_URL}/employees/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/employees/me`, { method: 'GET', headers: this.getAuthHeaders() });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: Failed to fetch current user details`);
+      }
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch current user details');
+    }
+  }
+
+  async getEmployeeById(id: number | string): Promise<any> {
+    // First, try current user endpoint to ensure full _salaries_ and _payrolls_ fields for self queries
+    try {
+      const meResponse = await fetch(`${API_BASE_URL}/employees/me`, { method: 'GET', headers: this.getAuthHeaders() });
+      if (meResponse.ok) {
+        const meEmployee = await meResponse.json();
+        if (String(meEmployee.id) === String(id) || String(meEmployee.employeeId) === String(id) || String(meEmployee.userId) === String(id) || String(meEmployee.user?.id) === String(id)) {
+          return meEmployee;
+        }
+      }
+    } catch {
+      // continue to next lookup
+    }
+
+    // Then try direct employee by id
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees/${id}`, { method: 'GET', headers: this.getAuthHeaders() });
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch {
+      // continue
+    }
+
+    // Third fallback: self endpoint if direct id path didn't succeed but we may be cross-user
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees/me`, { method: 'GET', headers: this.getAuthHeaders() });
+      if (response.ok) {
+        const meEmployee = await response.json();
+        if (String(meEmployee.id) === String(id) || String(meEmployee.employeeId) === String(id) || String(meEmployee.userId) === String(id) || String(meEmployee.user?.id) === String(id)) {
+          return meEmployee;
+        }
+      }
+    } catch {
+      // continue
+    }
+
+    // Fallback: Use getAllEmployees if user has permission (requires ADMIN/HR/MANAGER)
+    try {
+      const list = await this.getAllEmployees();
+      const found = list.find((e: any) => String(e.id) === String(id) || String(e.userId) === String(id) || String(e.user?.id) === String(id));
+      if (found) return found;
+    } catch (err) {
+      // If getAllEmployees fails (403 Forbidden or other error), continue to error
+    }
+
+    throw new Error(`Employee with ID ${id} not found`);
+  }
+
+  async updateEmployee(employeeId: number, employee: Partial<CreateEmployeeDto>): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees/${employeeId}`, {
+        method: 'PATCH',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(employee),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update employee');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to update employee');
+    }
+  }
+
+  async findByEmpCode(empCode: string): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees/find/${empCode}`, {
         method: 'GET',
         headers: this.getAuthHeaders(),
       });
 
-      if (response.ok) {
-        return await response.json();
+      if (!response.ok) {
+        throw new Error('Failed to find employee by code');
       }
 
-      // Fallback: fetch all and find by id or user id
-      const list = await this.getAllEmployees();
-      const found = list.find((e: any) => String(e.id) === String(id) || String(e.user?.id) === String(id));
-      if (found) return found;
-
-      throw new Error('Employee not found');
+      return await response.json();
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to fetch employee');
+      throw new Error(error instanceof Error ? error.message : 'Failed to find employee by code');
     }
+  }
+
+  async getEmployeeIdByUserId(): Promise<{ employeeId: number }> {
+    // Primary approach: Try dedicated endpoints first (no role restrictions)
+    const tryUrls = [
+      `${API_BASE_URL}/employees/me`,
+      `${API_BASE_URL}/employees/info/id`,
+    ];
+
+    for (const url of tryUrls) {
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: this.getAuthHeaders(),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // Handle both response formats
+          if ('employeeId' in data) {
+            return { employeeId: data.employeeId };
+          }
+          if ('id' in data) {
+            return { employeeId: data.id };
+          }
+        }
+      } catch (err) {
+        // try next
+      }
+    }
+
+    // Fallback: Use getAllEmployees and search for current user (requires ADMIN/HR/MANAGER role)
+    try {
+      const list = await this.getAllEmployees();
+      if (list && list.length > 0) {
+        const employee = list[0];
+        if (employee.id) {
+          return { employeeId: employee.id };
+        }
+      }
+    } catch (err) {
+      // continue - getAllEmployees may return 403 for non-admin users
+    }
+
+    throw new Error('Failed to get employee ID');
   }
 
   // =========== ASSETS ENDPOINTS ===========
@@ -1319,6 +1423,10 @@ class ApiService {
   }
 
   async getPayroll(employeeId: number): Promise<Payroll[]> {
+    if (!employeeId || employeeId <= 0) {
+      return [];
+    }
+    
     try {
       const response = await fetch(`${API_BASE_URL}/payroll?employeeId=${employeeId}`, {
         method: 'GET',
@@ -1326,12 +1434,19 @@ class ApiService {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch payroll');
+        // Log the error but return empty array for 404 or server errors
+        if (response.status === 404 || response.status === 500 || response.status === 400) {
+          console.warn(`Payroll endpoint returned ${response.status} for employee ${employeeId}`);
+          return [];
+        }
+        throw new Error(`HTTP ${response.status}: Failed to fetch payroll`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to fetch payroll');
+      console.warn(`Error fetching payroll for employee ${employeeId}:`, error);
+      return [];
     }
   }
 
@@ -1360,6 +1475,83 @@ class ApiService {
       return await response.json();
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to assign salary');
+    }
+  }
+
+  async getEmployeeSalaries(employeeId: number): Promise<EmployeeSalary[]> {
+    if (!employeeId || employeeId <= 0) {
+      return [];
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/salary/employee/${employeeId}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        if ([400, 403, 404, 500].includes(response.status)) {
+          console.warn(`Salary endpoint returned ${response.status} for employee ${employeeId} (likely insufficient permissions)`);
+          return [];
+        }
+        throw new Error(`HTTP ${response.status}: Failed to fetch employee salaries`);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.warn(`Error fetching employee salaries for ${employeeId}:`, error);
+      return [];
+    }
+  }
+
+  async getEmployeeSalariesByCode(empCode: string): Promise<EmployeeSalary[]> {
+    if (!empCode || !empCode.trim()) {
+      return [];
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/salary/employee/code/${encodeURIComponent(empCode)}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        if ([400, 403, 404, 500].includes(response.status)) {
+          console.warn(`Salary endpoint returned ${response.status} for empCode ${empCode} (likely insufficient permissions)`);
+          return [];
+        }
+        throw new Error(`HTTP ${response.status}: Failed to fetch salaries by empCode`);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.warn(`Error fetching employee salaries by code ${empCode}:`, error);
+      return [];
+    }
+  }
+
+  async getAllSalaries(): Promise<EmployeeSalary[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/salary/all`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        if ([400, 403, 404, 500].includes(response.status)) {
+          console.warn(`Salary endpoint returned ${response.status} for all salaries (likely insufficient permissions)`);
+          return [];
+        }
+        throw new Error(`HTTP ${response.status}: Failed to fetch all salaries`);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.warn('Error fetching all salaries:', error);
+      return [];
     }
   }
 }

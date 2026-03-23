@@ -13,6 +13,7 @@ import { RequestWfhModal } from '../../components/wfh/RequestWfhModal';
 import { useWfh } from '../../hooks/useWfh';
 import { useHolidays } from '../../hooks/useHolidays';
 import { useLeave } from '../../hooks/useLeave';
+import { useAuth } from '../../context/AuthContext';
 import { usePayroll } from '../../hooks/usePayroll';
 
 // ────────────────────────────────────────────────
@@ -114,6 +115,7 @@ export default function EmployeeDashboard() {
   const [isPunchModalOpen, setIsPunchModalOpen] = useState(false);
   const [isRequestWfhOpen, setIsRequestWfhOpen] = useState(false);
 
+  const { user } = useAuth();
   const { todayRecord, records, refresh } = useAttendance();
   const { myWfhRequests, isLoading: isWfhLoading, fetchMyWfhRequests } = useWfh();
   const { myHolidays, fetchMyHolidays } = useHolidays();
@@ -124,8 +126,10 @@ export default function EmployeeDashboard() {
     fetchMyWfhRequests();
     fetchMyHolidays();
     fetchMyLeaveBalance(new Date().getFullYear());
-    fetchPayroll(0); // 0 might be current user ID, need to check API
-  }, []);
+    if (user?.employeeId) {
+      fetchPayroll(user.employeeId);
+    }
+  }, [user?.employeeId]);
 
   // Calculate leave balance
   const totalLeaveBalance = useMemo(() => {

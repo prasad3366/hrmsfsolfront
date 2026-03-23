@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
 import { 
   Users, Layers, CheckCircle, Calendar, TrendingUp, ArrowUp, ArrowDown, Target, Clock
@@ -59,8 +60,10 @@ const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", de
 };
 
 const ManagerDashboard = () => {
+  const navigate = useNavigate();
   const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
   const { records: attendanceRecords, isLoading: isAttendanceLoading } = useAttendance({ scope: 'all' });
+  const [employees, setEmployees] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<number>(12);
   const [activeTasks, setActiveTasks] = useState<number>(34);
   const [completedTasks, setCompletedTasks] = useState<number>(128);
@@ -68,21 +71,26 @@ const ManagerDashboard = () => {
   useEffect(() => {
     fetchAllWfhRequests();
     
-    // Fetch team data (this would come from an API in a real app)
-    // For now, we'll use mock calculations
+    // Fetch team data from API
     ApiService.getAllEmployees()
       .then((data) => {
-        const employees = data || [];
-        setTeamMembers(employees.length);
+        const employeeList = data || [];
+        setEmployees(employeeList);
+        setTeamMembers(employeeList.length);
         
         // Calculate active tasks (placeholder - would come from task management API)
-        setActiveTasks(Math.floor(employees.length * 2.8));
+        setActiveTasks(Math.floor(employeeList.length * 2.8));
         
         // Calculate completed tasks (placeholder)
-        setCompletedTasks(employees.length * 10);
+        setCompletedTasks(employeeList.length * 10);
       })
       .catch((err) => {
         console.error('Failed to fetch team data', err);
+        // Fallback to mock data if API fails
+        setEmployees(MOCK_EMPLOYEES);
+        setTeamMembers(MOCK_EMPLOYEES.length);
+        setActiveTasks(Math.floor(MOCK_EMPLOYEES.length * 2.8));
+        setCompletedTasks(MOCK_EMPLOYEES.length * 10);
       });
   }, [fetchAllWfhRequests]);
 
@@ -128,11 +136,12 @@ const ManagerDashboard = () => {
 
   // Dynamic performance data based on team members
   const performanceData = useMemo(() => {
-    return MOCK_EMPLOYEES.slice(0, 5).map((emp, index) => ({
-      name: emp.name.split(' ')[0], // First name only
+    const dataSource = employees.length > 0 ? employees : MOCK_EMPLOYEES;
+    return dataSource.slice(0, 5).map((emp, index) => ({
+      name: (emp.firstName || emp.name || 'Employee').split(' ')[0], // First name only
       productivity: 75 + Math.floor(Math.random() * 25) // Random productivity 75-100
     }));
-  }, []);
+  }, [employees]);
 
   return (
   <div className="space-y-8">
@@ -196,7 +205,7 @@ const ManagerDashboard = () => {
       <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
         <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
             <CardTitle className="text-base">Team Members</CardTitle>
-            <Button variant="ghost" size="xs">View All</Button>
+            <Button variant="ghost" size="xs" onClick={() => navigate('/employees')}>View All</Button>
         </CardHeader>
         <CardContent className="p-0">
             <Table>
@@ -209,12 +218,12 @@ const ManagerDashboard = () => {
                     </TableRow>
                 </TableHeader>
                 <tbody>
-                    {MOCK_EMPLOYEES.slice(0, 4).map(emp => (
+                    {(employees.length > 0 ? employees : MOCK_EMPLOYEES).slice(0, 4).map(emp => (
                         <TableRow key={emp.id} className="hover:bg-slate-50 transition-colors">
                             <TableCell className="py-4">
                                 <div className="flex items-center gap-3">
-                                    <img src={emp.avatar} className="w-8 h-8 rounded-full border-2 border-slate-100 shadow-sm" alt=""/>
-                                    <span className="text-sm font-semibold text-slate-900">{emp.name}</span>
+                                    <img src={emp.avatar || emp.profilePic || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border-2 border-slate-100 shadow-sm" alt=""/>
+                                    <span className="text-sm font-semibold text-slate-900">{emp.firstName && emp.lastName ? `${emp.firstName} ${emp.lastName}` : emp.name}</span>
                                 </div>
                             </TableCell>
                             <TableCell className="py-4 text-sm font-medium text-slate-600">{emp.designation}</TableCell>
