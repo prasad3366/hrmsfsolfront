@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
 import { 
-  Users, Briefcase, Calendar, CheckCircle, UserPlus, Clock, ArrowUp, ArrowDown, Trash2
+  Users, Briefcase, Calendar, CheckCircle, UserPlus, Clock, ArrowUp, ArrowDown, Trash2, DollarSign
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line
@@ -71,6 +71,7 @@ const HRDashboard = () => {
   const [totalEmployees, setTotalEmployees] = useState<number | null>(null);
   const [newHiresCount, setNewHiresCount] = useState<number>(0);
   const [isCreateHolidayOpen, setIsCreateHolidayOpen] = useState(false);
+  const [attendanceTab, setAttendanceTab] = useState<'inside' | 'outside' | 'wfh'>('inside');
   const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
   const { holidays, isSubmitting: isHolidaySubmitting, fetchHolidaysByYear, createHoliday, deleteHoliday } = useHolidays();
   const { pendingLeaves, fetchPendingLeaves, approveLeave } = useLeave();
@@ -346,9 +347,12 @@ const HRDashboard = () => {
                 <UserPlus size={20} className="mb-2" strokeWidth={1.5} />
                 <span className="text-xs font-semibold text-center">Add Employee</span>
             </button>
-            <button className="flex flex-col items-center justify-center p-4 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 transition-colors border border-purple-200">
-                <Briefcase size={20} className="mb-2" strokeWidth={1.5} />
-                <span className="text-xs font-semibold text-center">Post Job</span>
+            <button 
+              type="button"
+              onClick={() => navigate('/payroll')}
+              className="flex flex-col items-center justify-center p-4 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 transition-colors border border-purple-200">
+                <DollarSign size={20} className="mb-2" strokeWidth={1.5} />
+                <span className="text-xs font-semibold text-center">Run Payroll</span>
             </button>
             <button 
               onClick={() => setIsCreateHolidayOpen(true)}
@@ -440,113 +444,149 @@ const HRDashboard = () => {
       isSubmitting={isHolidaySubmitting}
     />
 
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
-        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
-          <div>
-            <CardTitle className="text-base">Employees in Office</CardTitle>
-            <p className="text-xs text-slate-500 mt-1">Employees who punched in at the office</p>
+    <div className="lg:col-span-full">
+      <Card className="border shadow-sm hover:shadow-md transition-shadow h-full" hoverEffect>
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-6 rounded-t-lg">
+          <h2 className="text-xl font-bold mb-4">Today's Attendance</h2>
+          <div className="flex gap-6">
+            <button
+              onClick={() => setAttendanceTab('inside')}
+              className={`pb-3 border-b-2 transition-all ${
+                attendanceTab === 'inside'
+                  ? 'border-white text-white font-semibold'
+                  : 'border-transparent text-blue-100 hover:text-white'
+              }`}
+            >
+              <Clock size={18} className="inline mr-2" />
+              Inside Office
+            </button>
+            <button
+              onClick={() => setAttendanceTab('outside')}
+              className={`pb-3 border-b-2 transition-all ${
+                attendanceTab === 'outside'
+                  ? 'border-white text-white font-semibold'
+                  : 'border-transparent text-blue-100 hover:text-white'
+              }`}
+            >
+              📍 Outside
+            </button>
+            <button
+              onClick={() => setAttendanceTab('wfh')}
+              className={`pb-3 border-b-2 transition-all ${
+                attendanceTab === 'wfh'
+                  ? 'border-white text-white font-semibold'
+                  : 'border-transparent text-blue-100 hover:text-white'
+              }`}
+            >
+              💻 Work from Home
+            </button>
           </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Check In</TableHead>
-              </TableRow>
-            </TableHeader>
-            <tbody>
-              {insideOffice.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={2} className="text-center text-sm text-slate-500 py-6">
-                    {isAttendanceLoading ? 'Loading…' : 'No employees currently punched in at the office.'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                insideOffice.map((record) => (
-                  <TableRow key={record.id}>
-                    <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
-                    <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </tbody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
-        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
-          <div>
-            <CardTitle className="text-base">Employees Outside</CardTitle>
-            <p className="text-xs text-slate-500 mt-1">Employees who punched in outside the office</p>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Check In</TableHead>
-              </TableRow>
-            </TableHeader>
-            <tbody>
-              {outsideOffice.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={2} className="text-center text-sm text-slate-500 py-6">
-                    {isAttendanceLoading ? 'Loading…' : 'No employees currently punched in outside the office.'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                outsideOffice.map((record) => (
-                  <TableRow key={record.id}>
-                    <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
-                    <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </tbody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
-        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
-          <div>
-            <CardTitle className="text-base">Employees Working from Home</CardTitle>
-            <p className="text-xs text-slate-500 mt-1">Employees with approved WFH requests</p>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Check In</TableHead>
-              </TableRow>
-            </TableHeader>
-            <tbody>
-              {wfhEmployees.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={2} className="text-center text-sm text-slate-500 py-6">
-                    {isAttendanceLoading ? 'Loading…' : 'No employees currently working from home.'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                wfhEmployees.map((record) => (
-                  <TableRow key={record.id}>
-                    <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
-                    <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </tbody>
-          </Table>
+        </div>
+        <CardContent className="pt-6">
+          {attendanceTab === 'inside' && (
+            <div>
+              <h3 className="font-semibold text-slate-900 mb-4">Employees in Office</h3>
+              <div className="max-h-[400px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Check In</TableHead>
+                      <TableHead>Check Out</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <tbody>
+                    {insideOffice.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-sm text-slate-500 py-6">
+                          {isAttendanceLoading ? 'Loading…' : 'No employees currently punched in at the office.'}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      insideOffice.map((record) => (
+                        <TableRow key={record.id}>
+                          <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
+                          <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
+                          <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </tbody>
+                </Table>
+              </div>
+            </div>
+          )}
+          {attendanceTab === 'outside' && (
+            <div>
+              <h3 className="font-semibold text-slate-900 mb-4">Employees Outside Office</h3>
+              <div className="max-h-[400px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Check In</TableHead>
+                      <TableHead>Check Out</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <tbody>
+                    {outsideOffice.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-sm text-slate-500 py-6">
+                          {isAttendanceLoading ? 'Loading…' : 'No employees currently punched in outside the office.'}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      outsideOffice.map((record) => (
+                        <TableRow key={record.id}>
+                          <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
+                          <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
+                          <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </tbody>
+                </Table>
+              </div>
+            </div>
+          )}
+          {attendanceTab === 'wfh' && (
+            <div>
+              <h3 className="font-semibold text-slate-900 mb-4">Employees Working from Home</h3>
+              <div className="max-h-[400px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Check In</TableHead>
+                      <TableHead>Check Out</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <tbody>
+                    {wfhEmployees.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-sm text-slate-500 py-6">
+                          {isAttendanceLoading ? 'Loading…' : 'No employees currently working from home.'}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      wfhEmployees.map((record) => (
+                        <TableRow key={record.id}>
+                          <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
+                          <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
+                          <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </tbody>
+                </Table>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
 
+    {/* Attendance History Card */}
     <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
       <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
         <div>

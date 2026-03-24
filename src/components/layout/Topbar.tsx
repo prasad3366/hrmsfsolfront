@@ -1,15 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Bell, Search, Menu } from 'lucide-react';
-import { NotificationPanel } from './NotificationPanel';
-import { useNotifications } from '../../context/NotificationContext';
+import { Search, Menu } from 'lucide-react';
 
 const Topbar = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { unreadCount } = useNotifications();
-  const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-10 px-6 flex items-center justify-between md:ml-64">
@@ -32,19 +28,6 @@ const Topbar = () => {
 
       {/* Right Actions */}
       <div className="flex items-center space-x-4">
-        <button
-          onClick={() => setIsNotifOpen(!isNotifOpen)}
-          className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-colors"
-        >
-          <Bell size={20} />
-          {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 flex items-center justify-center w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full border-2 border-white">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </button>
-        <NotificationPanel isOpen={isNotifOpen} onClose={() => setIsNotifOpen(false)} />
-        
         {/* Profile - Click to navigate to employee details */}
         <button
           onClick={() => {

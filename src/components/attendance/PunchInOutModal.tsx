@@ -31,12 +31,12 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
   const hasPunchedIn =
     localPunchedIn !== undefined
       ? localPunchedIn
-      : (todayRecord?.hasPunchedIn ?? !!todayRecord?.punchIn);
+      : (todayRecord?.hasPunchedIn ?? !!todayRecord?.punchInTime);
 
   const hasPunchedOut =
     localPunchedOut !== undefined
       ? localPunchedOut
-      : (todayRecord?.hasPunchedOut ?? !!todayRecord?.punchOut);
+      : (todayRecord?.hasPunchedOut ?? !!todayRecord?.punchOutTime);
 
   // ✅ Reset + refresh on open
   useEffect(() => {
@@ -155,9 +155,9 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
             <div className="flex justify-between">
               <span>Punch In:</span>
               <span>
-                {todayRecord?.punchInTime || todayRecord?.punchIn
+                {todayRecord?.punchInTime
                   ? new Date(
-                      todayRecord.punchInTime || todayRecord.punchIn
+                      todayRecord.punchInTime
                     ).toLocaleTimeString()
                   : 'Not yet'}
               </span>
@@ -167,10 +167,8 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
               <div className="flex justify-between">
                 <span>Punch Out:</span>
                 <span>
-                  {todayRecord?.punchOutTime || todayRecord?.punchOut
-                    ? new Date(
-                        todayRecord.punchOutTime || todayRecord.punchOut
-                      ).toLocaleTimeString()
+                  {todayRecord?.punchOutTime
+                    ? new Date(todayRecord.punchOutTime).toLocaleTimeString()
                     : 'Not yet'}
                 </span>
               </div>

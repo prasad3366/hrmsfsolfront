@@ -81,14 +81,14 @@ const Attendance = () => {
                     className="h-32 w-32 rounded-full bg-blue-600 text-white font-bold text-lg shadow-lg hover:bg-blue-700 transition-all transform hover:scale-105 flex flex-col items-center justify-center"
                   >
                     <Clock size={32} className="mb-2" />
-                    {!todayRecord?.hasPunchedIn && !todayRecord?.punchIn ? 'Check In' : !todayRecord?.hasPunchedOut && !todayRecord?.punchOut ? 'Check Out' : 'View'}
+                    {!todayRecord?.hasPunchedIn && !todayRecord?.punchInTime ? 'Check In' : !todayRecord?.hasPunchedOut && !todayRecord?.punchOutTime ? 'Check Out' : 'View'}
                   </Button>
                 </div>
                 <div className="mt-6 flex flex-col items-center text-sm text-slate-500 gap-2">
                     <MapPin size={16} />
                     <span>Remote - IP 192.168.1.1</span>
-                    {(todayRecord?.hasPunchedIn || todayRecord?.punchIn) && (
-                      <span>Check-In Time: {new Date(todayRecord.punchInTime || todayRecord.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    {(todayRecord?.hasPunchedIn || todayRecord?.punchInTime) && (
+                      <span>Check-In Time: {new Date(todayRecord.punchInTime!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     )}
                 </div>
             </div>
