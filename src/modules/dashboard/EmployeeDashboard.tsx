@@ -159,14 +159,14 @@ export default function EmployeeDashboard() {
     }));
 
   const currentHours = todayRecord?.totalHours || 0;
-  const punchInTime = todayRecord?.punchIn
-    ? new Date(todayRecord.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const punchInTime = todayRecord?.punchInTime
+    ? new Date(todayRecord.punchInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '--:--';
-  const punchOutTime = todayRecord?.punchOut
-    ? new Date(todayRecord.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const punchOutTime = todayRecord?.punchOutTime
+    ? new Date(todayRecord.punchOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null;
 
-  const isPunchedIn = todayRecord?.punchIn && !todayRecord?.punchOut;
+  const isPunchedIn = todayRecord?.hasPunchedIn && !todayRecord?.hasPunchedOut;
 
   return (
     <div className="min-h-screen bg-gray-50/40 pb-12">
@@ -289,15 +289,15 @@ export default function EmployeeDashboard() {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Status</span>
                     <span className="font-medium">
-                      {!todayRecord?.punchIn
+                      {!todayRecord?.hasPunchedIn
                         ? 'Not Started'
-                        : todayRecord?.punchOut
+                        : todayRecord?.hasPunchedOut
                         ? 'Completed'
                         : 'Active'}
                     </span>
                   </div>
 
-                  {todayRecord?.punchIn && (
+                  {todayRecord?.hasPunchedIn && (
                     <>
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Punch In</span>
@@ -320,11 +320,11 @@ export default function EmployeeDashboard() {
                 <Button
                   onClick={() => setIsPunchModalOpen(true)}
                   className="w-full"
-                  variant={isPunchedIn ? 'default' : todayRecord?.punchOut ? 'secondary' : 'default'}
+                  variant={isPunchedIn ? 'default' : todayRecord?.hasPunchedOut ? 'secondary' : 'default'}
                 >
-                  {!todayRecord?.punchIn
+                  {!todayRecord?.hasPunchedIn
                     ? 'Punch In'
-                    : !todayRecord?.punchOut
+                    : !todayRecord?.hasPunchedOut
                     ? 'Punch Out'
                     : 'View Details'}
                 </Button>

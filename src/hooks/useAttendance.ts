@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import ApiService, { AttendanceRecord } from '../services/api';
+import ApiService, { AttendanceRecord, TodayAttendanceStatus } from '../services/api';
 
 export interface UseAttendanceOptions {
   /**
@@ -17,7 +17,7 @@ export interface UseAttendanceReturn {
   isLoading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  todayRecord: AttendanceRecord | undefined;
+  todayRecord: TodayAttendanceStatus | undefined;
   punchIn: (latitude?: number, longitude?: number) => Promise<void>;
   punchOut: (latitude?: number, longitude?: number) => Promise<void>;
 }
@@ -29,6 +29,7 @@ export const useAttendance = (options: UseAttendanceOptions = {}): UseAttendance
   const { scope = 'me', employeeId } = options;
 
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [todayRecord, setTodayRecord] = useState<TodayAttendanceStatus | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +48,15 @@ export const useAttendance = (options: UseAttendanceOptions = {}): UseAttendance
       }
 
       setRecords(data);
+
+      // Also refresh today record if available
+      try {
+        const today = await ApiService.getTodayStatus();
+        setTodayRecord(today ?? undefined);
+      } catch (err) {
+        // If not available, just keep previous state
+        console.warn('Failed to fetch today attendance status:', err);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch attendance');
     } finally {
@@ -60,6 +70,8 @@ export const useAttendance = (options: UseAttendanceOptions = {}): UseAttendance
     try {
       await ApiService.punchIn(latitude, longitude);
       await fetchAttendance();
+      const today = await ApiService.getTodayStatus();
+      setTodayRecord(today ?? undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Punch in failed');
     } finally {
@@ -73,6 +85,8 @@ export const useAttendance = (options: UseAttendanceOptions = {}): UseAttendance
     try {
       await ApiService.punchOut(latitude, longitude);
       await fetchAttendance();
+      const today = await ApiService.getTodayStatus();
+      setTodayRecord(today ?? undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Punch out failed');
     } finally {
@@ -83,28 +97,6 @@ export const useAttendance = (options: UseAttendanceOptions = {}): UseAttendance
   useEffect(() => {
     fetchAttendance();
   }, [scope, employeeId]);
-
-  const todayRecord = useMemo(() => {
-    const isToday = (dateString: string) => {
-      try {
-        const d = new Date(dateString);
-        const now = new Date();
-        return (
-          d.getFullYear() === now.getFullYear() &&
-          d.getMonth() === now.getMonth() &&
-          d.getDate() === now.getDate()
-        );
-      } catch {
-        return false;
-      }
-    };
-
-    const todays = records.filter((r) => isToday(r.date));
-    if (!todays.length) return undefined;
-
-    const currentUser = todays.find((r) => r.isCurrentUser);
-    return currentUser ?? todays[0];
-  }, [records]);
 
   return {
     records,

@@ -45,6 +45,16 @@ export interface AttendanceRecord {
   isCurrentUser?: boolean; // Indicates if the record belongs to the current user
 }
 
+export interface TodayAttendanceStatus {
+  hasPunchedIn: boolean;
+  hasPunchedOut: boolean;
+  punchInTime: string | null;
+  punchOutTime: string | null;
+  locationStatus: string | null;
+  totalHours: number;
+  status: 'PRESENT' | 'ABSENT' | 'HALF_DAY' | null;
+}
+
 export interface OfficeLocationDto {
   latitude: number;
   longitude: number;
@@ -533,6 +543,26 @@ class ApiService {
       return await response.json();
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch employee attendance');
+    }
+  }
+
+  async getTodayStatus(): Promise<TodayAttendanceStatus | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/attendance/today-status`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          return null;
+        }
+        throw new Error('Failed to fetch today attendance status');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch today attendance status');
     }
   }
 
