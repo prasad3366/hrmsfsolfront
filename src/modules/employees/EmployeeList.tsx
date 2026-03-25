@@ -20,6 +20,15 @@ const EmployeeList = () => {
   const canManageEmployees = user?.role === 'ADMIN' || user?.role === 'HR';
   const canViewEmployees = user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER';
 
+  const isEmployeeActive = (emp: any) => {
+    const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
+    if (status === 'ACTIVE') return true;
+    if (status === 'INACTIVE' || status === 'TERMINATED') return false;
+    if (typeof emp.user?.isActive === 'boolean') return emp.user.isActive;
+    if (typeof emp.isActive === 'boolean') return emp.isActive;
+    return true;
+  };
+
   const fetchEmployees = () => {
     let mounted = true;
     setIsLoading(true);
@@ -56,7 +65,7 @@ const EmployeeList = () => {
       designation: emp.designation ?? '',
       role: emp.role ?? emp.user?.role ?? 'EMPLOYEE',
       department: emp.department ?? '',
-      status: emp.user?.isActive ? 'Active' : 'Inactive',
+      status: isEmployeeActive(emp) ? 'Active' : 'Inactive',
       joinDate: emp.createdAt ? new Date(emp.createdAt).toLocaleDateString() : '-',
       avatar: emp.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent((emp.firstName ?? '') + ' ' + (emp.lastName ?? ''))}`,
     }));

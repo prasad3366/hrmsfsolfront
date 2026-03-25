@@ -73,6 +73,16 @@ const AdminDashboard = () => {
   const [totalEmployees, setTotalEmployees] = useState<number | null>(null);
   const [newHiresCount, setNewHiresCount] = useState<number>(0);
   const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
+
+  const isEmployeeActive = (emp: any) => {
+    const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
+    if (status === 'ACTIVE') return true;
+    if (status === 'INACTIVE' || status === 'TERMINATED') return false;
+    if (typeof emp.user?.isActive === 'boolean') return emp.user.isActive;
+    if (typeof emp.isActive === 'boolean') return emp.isActive;
+    return true;
+  };
+
   const { addNotification } = useNotifications();
   const { payrolls: allPayrolls, fetchPayroll, loading: isPayrollLoading } = usePayroll();
 
@@ -87,12 +97,13 @@ const AdminDashboard = () => {
       .then((data) => {
         if (!mounted) return;
         const list = data || [];
-        setTotalEmployees(list.length);
+        const activeEmployees = list.filter(isEmployeeActive);
+        setTotalEmployees(activeEmployees.length);
 
         // compute new hires in last 30 days
         const now = Date.now();
         const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
-        const newCount = list.filter((emp: any) => {
+        const newCount = activeEmployees.filter((emp: any) => {
           if (!emp.createdAt) return false;
           const created = new Date(emp.createdAt).getTime();
           return now - created <= THIRTY_DAYS;
@@ -100,7 +111,7 @@ const AdminDashboard = () => {
         setNewHiresCount(newCount);
 
         // Get recent joiners (last 30 days, up to 3 employees)
-        const recentEmpList = list
+        const recentEmpList = activeEmployees
           .filter((emp: any) => {
             if (!emp.createdAt) return false;
             const created = new Date(emp.createdAt).getTime();

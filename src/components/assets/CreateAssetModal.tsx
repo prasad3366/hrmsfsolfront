@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Button, Input, Card, CardContent, CardHeader, CardTitle } from '../../components/ui/components';
-import { MOCK_EMPLOYEES } from '../../mock-data';
+import ApiService from '../../services/api';
 
 interface CreateAssetModalProps {
   isOpen: boolean;
@@ -13,18 +13,35 @@ interface CreateAssetModalProps {
 export const CreateAssetModal = ({ isOpen, isLoading, onClose, onSubmit }: CreateAssetModalProps) => {
   const [formData, setFormData] = useState({
     name: '',
-    assetTag: '',
-    type: '',
-    brand: '',
-    model: '',
-    purchaseDate: '',
+    description: '',
     assignedTo: '',
   });
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen && employees.length === 0) {
+      setLoadingEmployees(true);
+      ApiService.getAllEmployees()
+        .then((data) => {
+          // Filter to show only ACTIVE employees
+          const activeEmployees = (data || []).filter(
+            (emp) => emp.status?.toUpperCase() === 'ACTIVE'
+          );
+          setEmployees(activeEmployees);
+        })
+        .catch((err) => {
+          console.error('Failed to load employees:', err);
+          setError('Failed to load employees');
+        })
+        .finally(() => setLoadingEmployees(false));
+    }
+  }, [isOpen, employees.length]);
 
   if (!isOpen) return null;
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -36,20 +53,24 @@ export const CreateAssetModal = ({ isOpen, isLoading, onClose, onSubmit }: Creat
     e.preventDefault();
     setError(null);
 
-    if (!formData.name || !formData.assetTag || !formData.type) {
-      setError('Please fill in all required fields');
+    if (!formData.name.trim()) {
+      setError('Asset name is required');
       return;
     }
 
     try {
-      const payload = { ...formData } as any;
-      // If purchaseDate is empty, remove it to avoid sending empty string
-      if (!payload.purchaseDate) {
-        delete payload.purchaseDate;
+      const payload: any = {
+        name: formData.name.trim(),
+        ...(formData.description.trim() && { description: formData.description.trim() }),
+      };
+
+      // Add assignedTo if selected
+      if (formData.assignedTo) {
+        payload.assignedTo = Number(formData.assignedTo);
       }
 
       await onSubmit(payload);
-      setFormData({ name: '', assetTag: '', type: '', brand: '', model: '', purchaseDate: '' });
+      setFormData({ name: '', description: '', assignedTo: '' });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create asset');
@@ -86,70 +107,36 @@ export const CreateAssetModal = ({ isOpen, isLoading, onClose, onSubmit }: Creat
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Asset Tag *</label>
-              <Input
-                type="text"
-                name="assetTag"
-                value={formData.assetTag}
+              <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+              <textarea
+                name="description"
+                value={formData.description}
                 onChange={handleChange}
-                placeholder="e.g., AST-001"
-                className="w-full"
+                placeholder="Add a description for this asset..."
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Type *</label>
-              <select
-                name="type"
-                value={formData.type}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select Type</option>
-                <option value="LAPTOP">Laptop</option>
-                <option value="DESKTOP">Desktop</option>
-                <option value="MONITOR">Monitor</option>
-                <option value="KEYBOARD">Keyboard</option>
-                <option value="MOUSE">Mouse</option>
-                <option value="PHONE">Phone</option>
-                <option value="TABLET">Tablet</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Brand</label>
-              <Input
-                type="text"
-                name="brand"
-                value={formData.brand}
-                onChange={handleChange}
-                placeholder="e.g., Dell"
-                className="w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Model</label>
-              <Input
-                type="text"
-                name="model"
-                value={formData.model}
-                onChange={handleChange}
-                placeholder="e.g., XPS 13"
-                className="w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Purchase Date</label>
-              <Input
-                type="date"
-                name="purchaseDate"
-                value={formData.purchaseDate}
-                onChange={handleChange}
-                className="w-full"
-              />
+              <label className="block text-sm font-medium text-slate-700 mb-1">Assign To Employee (Optional)</label>
+              {loadingEmployees ? (
+                <div className="p-3 text-sm text-slate-500">Loading employees...</div>
+              ) : (
+                <select
+                  name="assignedTo"
+                  value={formData.assignedTo}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Select Employee --</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.firstName ? `${emp.firstName} ${emp.lastName}` : emp.name} ({emp.email})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className="flex gap-3 pt-4">
@@ -162,7 +149,7 @@ export const CreateAssetModal = ({ isOpen, isLoading, onClose, onSubmit }: Creat
               >
                 Cancel
               </Button>
-              <Button type="submit" className="flex-1" disabled={isLoading}>
+              <Button type="submit" className="flex-1" disabled={isLoading || loadingEmployees}>
                 {isLoading ? 'Creating...' : 'Create Asset'}
               </Button>
             </div>

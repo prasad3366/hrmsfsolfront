@@ -41,6 +41,8 @@ export interface AttendanceRecord {
     firstName: string;
     lastName: string;
     email: string;
+    department?: string;
+    designation?: string;
   };
   isCurrentUser?: boolean; // Indicates if the record belongs to the current user
 }
@@ -107,11 +109,8 @@ export interface CreateEmployeeResponse {
 // Asset Types
 export interface CreateAssetDto {
   name: string;
-  assetTag: string;
-  type: string;
-  brand?: string;
-  model?: string;
-  purchaseDate?: string | Date;
+  description?: string;
+  assignedTo?: number;
 }
 
 export interface AssignAssetDto {
@@ -130,15 +129,25 @@ export interface AssetAssignment {
 export interface Asset {
   id: number;
   name: string;
-  assetTag: string;
-  type: string;
-  brand?: string;
-  model?: string;
-  purchaseDate?: string;
-  status: 'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE' | 'RETIRED';
+  description?: string;
+  assignedTo?: number;
+  assignedAt?: string | null;
+  status: 'ASSIGNED' | 'RETURNED' | string;
+  returnedAt?: string | null;
   createdAt: string;
-  updatedAt: string;
-  assignments?: AssetAssignment[];
+  user?: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    email: string;
+    employee?: {
+      id: number;
+      empCode: string;
+      department?: string;
+      designation?: string;
+      [key: string]: any;
+    };
+  };
 }
 
 // WFH (Work From Home) Types
@@ -1367,6 +1376,44 @@ class ApiService {
       return await response.json();
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch assets');
+    }
+  }
+
+  async getMyAssets(): Promise<Asset[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/assets/my-assets`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch my assets');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch my assets');
+    }
+  }
+
+  async getMyAssetsByUserId(userId: number): Promise<Asset[]> {
+    try {
+      // Get all assets and filter by assignedTo userId on the frontend
+      // since the backend doesn't have a specific endpoint for this
+      const response = await fetch(`${API_BASE_URL}/assets`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch assets');
+      }
+
+      const allAssets = await response.json();
+      // Filter assets assigned to the specific user
+      return allAssets.filter((asset: Asset) => asset.assignedTo === userId);
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch assets for user');
     }
   }
 

@@ -21,6 +21,21 @@ export const useAssets = () => {
     }
   }, []);
 
+  const fetchMyAssets = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const data = await ApiService.getMyAssets();
+      setAssets(data || []);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch my assets';
+      setError(message);
+      console.error('Fetch my assets error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const createAsset = useCallback(async (assetData: any) => {
     try {
       setIsLoading(true);
@@ -79,6 +94,7 @@ export const useAssets = () => {
     isLoading,
     error,
     fetchAssets,
+    fetchMyAssets,
     createAsset,
     assignAsset,
     returnAsset,

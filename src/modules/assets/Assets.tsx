@@ -36,18 +36,25 @@ const Assets = () => {
 
   const filteredAssets = (assets || []).filter((asset) =>
     asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    asset.assetTag.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (asset.type?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
+    (asset.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
   );
 
   const handleCreateAsset = async (data: any) => {
     try {
-      await createAsset(data);
+      const newAsset = await createAsset(data);
       addNotification({
         type: 'success',
         title: 'Asset Created',
         message: `Asset "${data.name}" has been created successfully.`,
       });
+      
+      // Close modal and navigate to employee profile if asset was assigned
+      setIsCreateModalOpen(false);
+      if (data.assignedTo) {
+        setTimeout(() => {
+          navigate(`/employees/${data.assignedTo}`);
+        }, 500);
+      }
     } catch (err) {
       addNotification({
         type: 'error',
@@ -66,6 +73,13 @@ const Assets = () => {
         title: 'Asset Assigned',
         message: 'Asset has been assigned successfully.',
       });
+      
+      // Close modal and navigate to employee profile
+      setIsAssignModalOpen(false);
+      setSelectedAssetId(null);
+      setTimeout(() => {
+        navigate(`/employees/${data.employeeId}`);
+      }, 500);
     } catch (err) {
       addNotification({
         type: 'error',
@@ -93,21 +107,6 @@ const Assets = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'AVAILABLE':
-        return 'success';
-      case 'ASSIGNED':
-        return 'default';
-      case 'MAINTENANCE':
-        return 'warning';
-      case 'RETIRED':
-        return 'danger';
-      default:
-        return 'default';
-    }
-  };
-
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
@@ -131,7 +130,7 @@ const Assets = () => {
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
               <Input
-                placeholder="Search by name, tag..."
+                placeholder="Search by name, description..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -154,11 +153,11 @@ const Assets = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Asset Name</TableHead>
-                  <TableHead>Tag</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Brand/Model</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Assigned To</TableHead>
+                  <TableHead>Assigned Date</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Purchase Date</TableHead>
+                  <TableHead>Created Date</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -166,20 +165,41 @@ const Assets = () => {
                 {filteredAssets.map((asset) => (
                   <TableRow key={asset.id} className="hover:bg-slate-50">
                     <TableCell className="font-medium">{asset.name}</TableCell>
-                    <TableCell className="text-sm text-slate-600">{asset.assetTag}</TableCell>
-                    <TableCell className="text-sm">{asset.type}</TableCell>
-                    <TableCell className="text-sm text-slate-600">
-                      {asset.brand && asset.model ? `${asset.brand} ${asset.model}` : asset.brand || asset.model || '-'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusColor(asset.status)}>{asset.status}</Badge>
+                    <TableCell className="text-sm text-slate-600">{asset.description || '-'}</TableCell>
+                    <TableCell className="text-sm">
+                      {asset.user?.firstName && asset.user?.lastName
+                        ? `${asset.user.firstName} ${asset.user.lastName}`
+                        : asset.user?.email
+                        ? asset.user.email
+                        : asset.assignedTo
+                        ? `User #${asset.assignedTo}`
+                        : '-'}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {asset.purchaseDate ? new Date(asset.purchaseDate).toLocaleDateString() : '-'}
+                      {asset.assignedAt ? new Date(asset.assignedAt).toLocaleDateString() : '-'}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {asset.status === 'RETURNED' ? (
+                        <Badge variant="default" className="bg-gray-200 text-gray-800 border-none">
+                          Returned
+                        </Badge>
+                      ) : asset.status === 'ASSIGNED' ? (
+                        <Badge variant="default" className="bg-emerald-100 text-emerald-800 border-none">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5" />
+                          Assigned
+                        </Badge>
+                      ) : (
+                        <Badge variant="default" className="bg-amber-100 text-amber-800 border-none">
+                          Unassigned
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {new Date(asset.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-2 justify-end">
-                        {asset.status === 'AVAILABLE' && (
+                        {asset.status !== 'RETURNED' && !asset.assignedTo && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -191,7 +211,7 @@ const Assets = () => {
                             Assign
                           </Button>
                         )}
-                        {asset.status === 'ASSIGNED' && (
+                        {asset.status !== 'RETURNED' && asset.assignedTo && (
                           <Button
                             size="sm"
                             variant="outline"

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Input, Button } from '../ui/components';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import ForgotPasswordModal from './ForgotPasswordModal';
 
 const foodeezLogo = new URL('../../assets/foodeez.png', import.meta.url).href;
@@ -188,8 +188,15 @@ const Login = () => {
                     </div>
 
                     {error && (
-                        <div className="p-2 rounded-lg bg-red-50 border border-red-100 text-red-600 text-xs font-medium text-center animate-in fade-in">
-                            {error}
+                        <div className={`p-3 rounded-lg flex items-start gap-2 text-xs font-medium animate-in fade-in ${
+                          error.toLowerCase().includes('deactivated')
+                            ? 'bg-orange-50 border border-orange-200 text-orange-700'
+                            : 'bg-red-50 border border-red-100 text-red-600'
+                        }`}>
+                          {error.toLowerCase().includes('deactivated') && (
+                            <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+                          )}
+                          <div>{error}</div>
                         </div>
                     )}
 

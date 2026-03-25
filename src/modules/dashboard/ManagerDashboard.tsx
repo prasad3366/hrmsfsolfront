@@ -67,6 +67,15 @@ const ManagerDashboard = () => {
   const [teamMembers, setTeamMembers] = useState<number>(12);
   const [activeTasks, setActiveTasks] = useState<number>(34);
   const [completedTasks, setCompletedTasks] = useState<number>(128);
+
+  const isEmployeeActive = (emp: any) => {
+    const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
+    if (status === 'ACTIVE') return true;
+    if (status === 'INACTIVE' || status === 'TERMINATED') return false;
+    if (typeof emp.user?.isActive === 'boolean') return emp.user.isActive;
+    if (typeof emp.isActive === 'boolean') return emp.isActive;
+    return true;
+  };
   const [attendanceTab, setAttendanceTab] = useState<'inside' | 'outside' | 'wfh'>('inside');
 
   useEffect(() => {
@@ -77,21 +86,23 @@ const ManagerDashboard = () => {
       .then((data) => {
         const employeeList = data || [];
         setEmployees(employeeList);
-        setTeamMembers(employeeList.length);
+        const activeEmployeeCount = employeeList.filter(isEmployeeActive).length;
+        setTeamMembers(activeEmployeeCount);
         
         // Calculate active tasks (placeholder - would come from task management API)
-        setActiveTasks(Math.floor(employeeList.length * 2.8));
+        setActiveTasks(Math.floor(activeEmployeeCount * 2.8));
         
         // Calculate completed tasks (placeholder)
-        setCompletedTasks(employeeList.length * 10);
+        setCompletedTasks(activeEmployeeCount * 10);
       })
       .catch((err) => {
         console.error('Failed to fetch team data', err);
         // Fallback to mock data if API fails
         setEmployees(MOCK_EMPLOYEES);
-        setTeamMembers(MOCK_EMPLOYEES.length);
-        setActiveTasks(Math.floor(MOCK_EMPLOYEES.length * 2.8));
-        setCompletedTasks(MOCK_EMPLOYEES.length * 10);
+        const activeEmployeeCount = MOCK_EMPLOYEES.filter(isEmployeeActive).length;
+        setTeamMembers(activeEmployeeCount);
+        setActiveTasks(Math.floor(activeEmployeeCount * 2.8));
+        setCompletedTasks(activeEmployeeCount * 10);
       });
   }, [fetchAllWfhRequests]);
 
@@ -229,7 +240,13 @@ const ManagerDashboard = () => {
                             </TableCell>
                             <TableCell className="py-4 text-sm font-medium text-slate-600">{emp.designation}</TableCell>
                             <TableCell className="py-4 text-sm font-semibold text-slate-900">7/10</TableCell>
-                            <TableCell className="py-4"><span className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full font-bold">Active</span></TableCell>
+                            <TableCell className="py-4">
+                        {isEmployeeActive(emp) ? (
+                          <span className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full font-bold">Active</span>
+                        ) : (
+                          <span className="text-xs bg-rose-100 text-rose-700 px-3 py-1.5 rounded-full font-bold">Inactive</span>
+                        )}
+                    </TableCell>
                         </TableRow>
                     ))}
                 </tbody>

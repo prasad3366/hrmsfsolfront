@@ -21,7 +21,13 @@ export const AssignAssetModal = ({ isOpen, assetId, isLoading, onClose, onSubmit
     if (isOpen && employees.length === 0) {
       setLoadingEmployees(true);
       ApiService.getAllEmployees()
-        .then((data) => setEmployees(data || []))
+        .then((data) => {
+          // Filter to show only ACTIVE employees
+          const activeEmployees = (data || []).filter(
+            (emp) => emp.status?.toUpperCase() === 'ACTIVE'
+          );
+          setEmployees(activeEmployees);
+        })
         .catch((err) => console.error('Failed to load employees:', err))
         .finally(() => setLoadingEmployees(false));
     }

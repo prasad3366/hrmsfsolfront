@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '../../components/ui/components';
 import {
   Calendar, Clock, FileText, ChevronRight, CheckCircle2, BarChart3,
-  Home, Award, Activity, Target, AlertCircle, IndianRupee // ← added if you have it, else use FileText
+  Home, Award, Activity, Target, AlertCircle, IndianRupee, Package // ← added Package for assets
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -13,6 +13,7 @@ import { RequestWfhModal } from '../../components/wfh/RequestWfhModal';
 import { useWfh } from '../../hooks/useWfh';
 import { useHolidays } from '../../hooks/useHolidays';
 import { useLeave } from '../../hooks/useLeave';
+import { useAssets } from '../../hooks/useAssets';
 import { useAuth } from '../../context/AuthContext';
 import { usePayroll } from '../../hooks/usePayroll';
 
@@ -121,11 +122,13 @@ export default function EmployeeDashboard() {
   const { myHolidays, fetchMyHolidays } = useHolidays();
   const { myLeaveBalance, fetchMyLeaveBalance, isLoading: isLeaveLoading } = useLeave();
   const { payrolls, fetchPayroll, loading: isPayrollLoading } = usePayroll();
+  const { assets: myAssets, isLoading: isAssetsLoading, fetchMyAssets } = useAssets();
 
   useEffect(() => {
     fetchMyWfhRequests();
     fetchMyHolidays();
     fetchMyLeaveBalance(new Date().getFullYear());
+    fetchMyAssets();
     if (user?.employeeId) {
       fetchPayroll(user.employeeId);
     }
@@ -350,8 +353,8 @@ export default function EmployeeDashboard() {
           </div>
         </div>
 
-        {/* Bottom section - WFH & Holidays */}
-        <div className="grid md:grid-cols-2 gap-8">
+        {/* Bottom section - WFH & Holidays & Assets */}
+        <div className="grid md:grid-cols-3 gap-8">
           {/* WFH Requests */}
           <Card className="border-gray-200">
             <CardHeader className="bg-gray-50/70 border-b">
@@ -431,6 +434,64 @@ export default function EmployeeDashboard() {
                         </div>
                       </div>
                     ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Assigned Assets */}
+          <Card className="border-gray-200">
+            <CardHeader className="bg-gray-50/70 border-b">
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-gray-600" />
+                My Assets
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              {isAssetsLoading ? (
+                <div className="py-12 text-center text-gray-500">Loading...</div>
+              ) : myAssets.length === 0 ? (
+                <div className="py-12 text-center text-gray-500">No assets assigned yet</div>
+              ) : (
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {myAssets.map((asset) => (
+                    <div
+                      key={asset.id}
+                      className="p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors"
+                    >
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{asset.name}</p>
+                          {asset.description && (
+                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">{asset.description}</p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-2">
+                            {asset.status === 'RETURNED' && asset.returnedAt 
+                              ? `Returned: ${new Date(asset.returnedAt).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}`
+                              : `Assigned: ${asset.assignedAt ? new Date(asset.assignedAt).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                }) : 'N/A'}`}
+                          </p>
+                        </div>
+                        {asset.status === 'RETURNED' ? (
+                          <Badge variant="default" className="bg-gray-200 text-gray-800 border-none whitespace-nowrap">
+                            Returned
+                          </Badge>
+                        ) : (
+                          <Badge variant="default" className="bg-emerald-100 text-emerald-800 border-none whitespace-nowrap">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5" />
+                            Assigned
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>

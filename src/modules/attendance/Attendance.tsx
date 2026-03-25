@@ -88,7 +88,7 @@ const Attendance = () => {
                     <MapPin size={16} />
                     <span>Remote - IP 192.168.1.1</span>
                     {(todayRecord?.hasPunchedIn || todayRecord?.punchInTime) && (
-                      <span>Check-In Time: {new Date(todayRecord.punchInTime!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span>Check-In Time: {new Date(todayRecord.punchInTime || todayRecord.punchInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     )}
                 </div>
             </div>

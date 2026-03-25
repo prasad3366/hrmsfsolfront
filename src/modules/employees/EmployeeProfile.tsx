@@ -8,15 +8,26 @@ import {
   Button, Badge
 } from '../../components/ui/components';
 import { 
-  Edit, Briefcase
+  Edit, Briefcase, Package
 } from 'lucide-react';
+
+const isEmployeeActive = (emp: any) => {
+  const status = (emp?.status || emp?.user?.status || '').toString().toUpperCase();
+  if (status === 'ACTIVE') return true;
+  if (status === 'INACTIVE' || status === 'TERMINATED') return false;
+  if (typeof emp?.user?.isActive === 'boolean') return emp.user.isActive;
+  if (typeof emp?.isActive === 'boolean') return emp.isActive;
+  return true;
+};
 
 const EmployeeProfile = () => {
     const { id } = useParams();
     const { user } = useAuth();
 
     const [employee, setEmployee] = useState<any | null>(null);
+    const [assets, setAssets] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [assetsLoading, setAssetsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isEditOpen, setIsEditOpen] = useState(false);
 
@@ -51,6 +62,33 @@ const EmployeeProfile = () => {
             mounted = false;
         };
     }, [id, user]);
+
+    // Fetch assets for the employee
+    useEffect(() => {
+        if (!employee?.id) return;
+        
+        let mounted = true;
+        setAssetsLoading(true);
+
+        ApiService.getMyAssetsByUserId(employee.id)
+            .then((data) => {
+                if (!mounted) return;
+                setAssets(data || []);
+            })
+            .catch((err) => {
+                if (!mounted) return;
+                console.error('Failed to load assets for employee:', err);
+                setAssets([]);
+            })
+            .finally(() => {
+                if (!mounted) return;
+                setAssetsLoading(false);
+            });
+
+        return () => {
+            mounted = false;
+        };
+    }, [employee?.id]);
 
     const handleEmployeeUpdated = (updated: any) => {
         setEmployee((prev) => ({ ...prev, ...updated }));
@@ -205,8 +243,8 @@ const EmployeeProfile = () => {
             </div>
             <div>
               <p className="text-xs text-slate-500 font-medium">Status</p>
-              <Badge variant={employee.status === 'ACTIVE' ? 'success' : 'danger'} className="mt-1">
-                {employee.status || '-'}
+              <Badge variant={isEmployeeActive(employee) ? 'success' : 'danger'} className="mt-1">
+                {isEmployeeActive(employee) ? 'Active' : 'Inactive'}
               </Badge>
             </div>
             <div>
@@ -278,6 +316,66 @@ const EmployeeProfile = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Assets Assigned */}
+      <Card>
+        <CardHeader className="bg-slate-50/70 border-b">
+          <CardTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5 text-slate-600" />
+            Assets Assigned
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          {assetsLoading ? (
+            <div className="py-12 text-center text-slate-500">Loading assets...</div>
+          ) : assets.length === 0 ? (
+            <div className="py-12 text-center text-slate-500">No assets assigned yet</div>
+          ) : (
+            <div className="space-y-4">
+              {assets.map((asset) => (
+                <div
+                  key={asset.id}
+                  className="p-4 bg-slate-50 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors"
+                >
+                  <div className="flex justify-between items-start gap-4">
+                    <div className="flex-1">
+                      <p className="font-medium text-slate-900">{asset.name}</p>
+                      {asset.description && (
+                        <p className="text-sm text-slate-600 mt-1">{asset.description}</p>
+                      )}
+                      <p className="text-xs text-slate-500 mt-2">
+                        {asset.status === 'RETURNED' && asset.returnedAt 
+                          ? `Returned: ${new Date(asset.returnedAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}`
+                          : `Assigned: ${asset.assignedAt 
+                              ? new Date(asset.assignedAt).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })
+                              : 'N/A'}`}
+                      </p>
+                    </div>
+                    {asset.status === 'RETURNED' ? (
+                      <Badge variant="default" className="bg-gray-200 text-gray-800 border-none whitespace-nowrap">
+                        Returned
+                      </Badge>
+                    ) : (
+                      <Badge variant="default" className="bg-emerald-100 text-emerald-800 border-none whitespace-nowrap">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5" />
+                        Assigned
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <CreateEmployeeModal
         isOpen={isEditOpen}

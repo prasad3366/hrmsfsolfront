@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input } from '../../components/ui/components';
-import { X, Loader, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, Loader, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
 import ApiService, { CreateEmployeeDto, CreateEmployeeResponse } from '../../services/api';
 
 interface CreateEmployeeModalProps {
@@ -24,6 +24,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [originalData, setOriginalData] = useState<CreateEmployeeDto | null>(null);
 
   const normalizeDto = (data?: Partial<CreateEmployeeDto>): CreateEmployeeDto => ({
     email: data?.email ?? '',
@@ -64,9 +65,12 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
 
   useEffect(() => {
     if (mode === 'edit' && initialData) {
-      setFormData(normalizeDto(initialData));
+      const normalized = normalizeDto(initialData);
+      setFormData(normalized);
+      setOriginalData(normalized);
     } else if (mode === 'create') {
       setFormData(normalizeDto());
+      setOriginalData(null);
     }
   }, [mode, initialData]);
 
@@ -78,6 +82,39 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
       [name]: isCheckbox ? (e.target as HTMLInputElement).checked : value,
     }));
   };
+
+  // Check if credentials will be deactivated based on status or dateOfExit changes
+  const credentialsWillBeDeactivated = useMemo(() => {
+    if (mode !== 'edit') return false;
+
+    // Check if status is being changed to INACTIVE
+    if (formData.status === 'INACTIVE' && originalData?.status !== 'INACTIVE') {
+      return true;
+    }
+
+    // Check if dateOfExit is being set to today or in the past
+    if (formData.dateOfExit) {
+      const exitDate = new Date(formData.dateOfExit);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      exitDate.setHours(0, 0, 0, 0);
+
+      if (exitDate <= today && !originalData?.dateOfExit) {
+        return true;
+      }
+
+      // Also check if dateOfExit is being changed to today or earlier
+      if (originalData?.dateOfExit) {
+        const originalExitDate = new Date(originalData.dateOfExit);
+        originalExitDate.setHours(0, 0, 0, 0);
+        if (exitDate <= today && originalExitDate > today) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }, [formData.status, formData.dateOfExit, originalData, mode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,9 +142,30 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
         if (!employeeId) {
           throw new Error('Employee ID is required for update');
         }
+        
+        // Log changes for debugging
+        console.log('Updating employee with data:', {
+          status: formData.status,
+          email: formData.email,
+          statusChanged: originalData?.status !== formData.status,
+          isBeingDeactivated: formData.status === 'INACTIVE' && originalData?.status !== 'INACTIVE'
+        });
+
         response = await ApiService.updateEmployee(employeeId, formData);
-        setSuccessMessage('✓ Employee updated successfully');
+        
+        // Use backend response flag for accurate credential deactivation status
+        let successMsg = '✓ ' + (response.message || 'Employee updated successfully');
+        if (response.credentialsDeactivated) {
+          successMsg += ' | 🔒 User credentials have been deactivated.';
+        }
+        setSuccessMessage(successMsg);
         setShowPassword(false);
+        
+        console.log('Update response:', {
+          message: response.message,
+          credentialsDeactivated: response.credentialsDeactivated,
+          employeeStatus: response.employee?.status
+        });
       } else {
         response = await ApiService.createEmployee(formData);
         setSuccessMessage(`✓ Employee created successfully! Password: ${response.password}`);
@@ -183,13 +241,49 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
         </CardHeader>
 
         <CardContent className="space-y-6 pt-6">
+          {/* Credential Deactivation Warning */}
+          {credentialsWillBeDeactivated && (
+            <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg flex items-start gap-3">
+              <AlertTriangle size={20} className="text-orange-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-orange-700">⚠️ Employee Credentials Will Be Deactivated</p>
+                <p className="text-sm text-orange-600 mt-1">
+                  {formData.status === 'INACTIVE' && originalData?.status !== 'INACTIVE'
+                    ? 'Changing the status to INACTIVE will deactivate the employee\'s login credentials immediately.'
+                    : 'Setting the Date of Exit to today or earlier will deactivate the employee\'s login credentials.'
+                  }
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Success Message */}
           {successMessage && (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
-              <CheckCircle size={20} className="text-emerald-600 mt-0.5 flex-shrink-0" />
+            <div className={`p-4 rounded-lg flex items-start gap-3 ${
+              successMessage.includes('deactivated')
+                ? 'bg-blue-50 border border-blue-200'
+                : 'bg-emerald-50 border border-emerald-200'
+            }`}>
+              <CheckCircle size={20} className={`mt-0.5 flex-shrink-0 ${
+                successMessage.includes('deactivated')
+                  ? 'text-blue-600'
+                  : 'text-emerald-600'
+              }`} />
               <div>
-                <p className="text-sm font-semibold text-emerald-700">{mode === 'edit' ? 'Employee Updated Successfully' : 'Employee Created Successfully'}</p>
-                <p className="text-sm text-emerald-600 mt-1">{successMessage}</p>
+                <p className={`text-sm font-semibold ${
+                  successMessage.includes('deactivated')
+                    ? 'text-blue-700'
+                    : 'text-emerald-700'
+                }`}>
+                  {mode === 'edit' ? 'Employee Updated Successfully' : 'Employee Created Successfully'}
+                </p>
+                <p className={`text-sm mt-1 ${
+                  successMessage.includes('deactivated')
+                    ? 'text-blue-600'
+                    : 'text-emerald-600'
+                }`}>
+                  {successMessage}
+                </p>
                 {showPassword && mode === 'create' && (
                   <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
                     <p className="text-xs text-yellow-700">
@@ -388,6 +482,29 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     </select>
                   </div>
                 </div>
+
+                {/* Status Change Details Box (Edit Mode) */}
+                {mode === 'edit' && originalData && originalData.status !== formData.status && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs font-semibold text-blue-700 mb-2">Status Change:</p>
+                    <div className="flex items-center gap-2 text-xs text-blue-600">
+                      <span className="px-2 py-1 bg-white border border-blue-200 rounded">{originalData.status}</span>
+                      <span className="text-blue-700">→</span>
+                      <span className={`px-2 py-1 rounded font-semibold ${
+                        formData.status === 'INACTIVE' 
+                          ? 'bg-red-100 text-red-700 border border-red-300' 
+                          : formData.status === 'ACTIVE'
+                          ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                          : 'bg-blue-100 text-blue-700 border border-blue-300'
+                      }`}>
+                        {formData.status}
+                      </span>
+                    </div>
+                    {formData.status === 'INACTIVE' && (
+                      <p className="text-xs text-red-600 mt-2">⚠️ This will deactivate the employee's credentials and they will be unable to login.</p>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -780,7 +897,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-xs text-blue-700">
                 {mode === 'edit'
-                  ? 'ℹ️ Editing employee details will update the existing profile. Email changes will also update login username.'
+                  ? 'ℹ️ Editing employee details will update the existing profile. Email changes will also update login username. Setting status to INACTIVE or Date of Exit to today or earlier will deactivate the employee\'s credentials.'
                   : 'ℹ️ A temporary password will be generated and sent to the employee email address when creating a new employee.'}
               </p>
             </div>

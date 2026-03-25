@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
 import { 
-  Users, Briefcase, Calendar, CheckCircle, UserPlus, Clock, ArrowUp, ArrowDown, Trash2, DollarSign
+  Users, Briefcase, Calendar, CheckCircle, UserPlus, Clock, ArrowUp, ArrowDown, Trash2, DollarSign, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend
 } from 'recharts';
 import { MOCK_EMPLOYEES } from '../../mock-data';
 import ApiService from '../../services/api';
@@ -71,58 +72,103 @@ const HRDashboard = () => {
   const [totalEmployees, setTotalEmployees] = useState<number | null>(null);
   const [newHiresCount, setNewHiresCount] = useState<number>(0);
   const [isCreateHolidayOpen, setIsCreateHolidayOpen] = useState(false);
+
+  const isEmployeeActive = (emp: any) => {
+    const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
+    if (status === 'ACTIVE') return true;
+    if (status === 'INACTIVE' || status === 'TERMINATED') return false;
+    if (typeof emp.user?.isActive === 'boolean') return emp.user.isActive;
+    if (typeof emp.isActive === 'boolean') return emp.isActive;
+    return true;
+  };
   const [attendanceTab, setAttendanceTab] = useState<'inside' | 'outside' | 'wfh'>('inside');
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
+    const today = new Date();
+    const day = today.getDay();
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is Sunday
+    return new Date(today.setDate(diff));
+  });
   const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
   const { holidays, isSubmitting: isHolidaySubmitting, fetchHolidaysByYear, createHoliday, deleteHoliday } = useHolidays();
   const { pendingLeaves, fetchPendingLeaves, approveLeave } = useLeave();
   const { addNotification } = useNotifications();
+  const { user } = useAuth();
   const { records: attendanceRecords, isLoading: isAttendanceLoading } = useAttendance({ scope: 'all' });
 
-  // Calculate dynamic hiring data based on employee data
-  const hiringData = useMemo(() => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-    const currentYear = new Date().getFullYear();
-    
-    return months.map((month, index) => {
-      const monthDate = new Date(currentYear, index, 1);
-      const nextMonth = new Date(currentYear, index + 1, 1);
-      
-      // Count employees hired in this month
-      const hired = MOCK_EMPLOYEES.filter(emp => {
-        if (!emp.createdAt) return false;
-        const hireDate = new Date(emp.createdAt);
-        return hireDate >= monthDate && hireDate < nextMonth;
-      }).length;
-      
-      // Estimate open positions (this would come from a job postings API)
-      const open = Math.max(0, 15 - hired + Math.floor(Math.random() * 5));
-      
-      return { month, hired, open };
-    });
-  }, []);
+  // Track employees for name resolution
+  const [employeeMap, setEmployeeMap] = useState<Record<number, string>>({});
 
-  // Calculate dynamic attendance data
-  const attendanceData = useMemo(() => {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const getEmployeeDisplayName = (record: any) => {
+    if (record.employeeName) return record.employeeName;
+    if (record.employee?.firstName || record.employee?.lastName) {
+      const first = record.employee?.firstName || '';
+      const last = record.employee?.lastName || '';
+      return `${first} ${last}`.trim();
+    }
+    if (record.employeeId && employeeMap[record.employeeId]) {
+      return employeeMap[record.employeeId];
+    }
+    return 'Unknown';
+  };
+
+  // Calculate dynamic work duration data
+  const workDurationData = useMemo(() => {
+    const days = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
-    return days.map((date, index) => {
-      // Calculate attendance based on actual attendance records
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(currentWeekStart);
+      date.setDate(date.getDate() + i);
+      
+      // Get all attendance records for this specific day
       const dayRecords = attendanceRecords.filter(record => {
         const recordDate = new Date(record.date);
-        return recordDate.getDay() === (index + 1) % 7; // 0 = Sun, so Mon = 1
+        return recordDate.toDateString() === date.toDateString();
       });
       
-      const totalRecords = dayRecords.length;
-      const presentRecords = dayRecords.filter(record => record.status === 'PRESENT').length;
+      // Calculate total work hours for the day
+      let totalDuration = 0;
       
-      // For Saturday, reduce attendance
-      const expectedAttendance = index === 5 ? 0.45 : 0.95; // Saturday has lower attendance
-      const present = totalRecords > 0 ? Math.round((presentRecords / totalRecords) * 100) : Math.round(expectedAttendance * 100);
-      const absent = 100 - present;
+      if (dayRecords.length > 0) {
+        dayRecords.forEach(record => {
+          // Only count PRESENT records
+          if (record.status === 'PRESENT' && record.punchIn && record.punchOut) {
+            const checkIn = new Date(record.punchIn);
+            const checkOut = new Date(record.punchOut);
+            const hoursWorked = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60);
+            totalDuration += hoursWorked;
+          } else if (record.status === 'PRESENT') {
+            // If no timeIn/timeOut but marked present, assume full day
+            totalDuration += 8;
+          }
+        });
+      }
       
-      return { date, present, absent };
-    });
-  }, [attendanceRecords]);
+      const dateStr = `${date.getDate()}-${monthNames[date.getMonth()]}`;
+      days.push({ 
+        date: dateStr, 
+        duration: parseFloat(totalDuration.toFixed(1)),
+        count: dayRecords.length 
+      });
+    }
+    
+    return days;
+  }, [currentWeekStart, attendanceRecords]);
+
+  const handlePreviousWeek = () => {
+    setCurrentWeekStart(new Date(currentWeekStart.getTime() - 7 * 24 * 60 * 60 * 1000));
+  };
+
+  const handleNextWeek = () => {
+    setCurrentWeekStart(new Date(currentWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000));
+  };
+
+  const handleRestoreCurrentWeek = () => {
+    const today = new Date();
+    const day = today.getDay();
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+    setCurrentWeekStart(new Date(today.setDate(diff)));
+  };
 
   useEffect(() => {
     fetchAllWfhRequests();
@@ -141,12 +187,21 @@ const HRDashboard = () => {
       .then((data) => {
         if (!mounted) return;
         const list = data || [];
-        setTotalEmployees(list.length);
+        const activeEmployees = list.filter(isEmployeeActive);
+        setTotalEmployees(activeEmployees.length);
+
+        // Build employee name map for attendance display
+        const map: Record<number, string> = {};
+        list.forEach((emp: any) => {
+          const name = `${emp.firstName || emp.name || ''} ${emp.lastName || ''}`.trim();
+          map[emp.id] = name || emp.email || 'Unknown';
+        });
+        setEmployeeMap(map);
 
         // compute new hires in last 30 days if createdAt available
         const now = Date.now();
         const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
-        const newCount = list.filter((emp: any) => {
+        const newCount = activeEmployees.filter((emp: any) => {
           if (!emp.createdAt) return false;
           const created = new Date(emp.createdAt).getTime();
           return now - created <= THIRTY_DAYS;
@@ -231,51 +286,146 @@ const HRDashboard = () => {
       <StatCard title="Attendance Today" value="92%" icon={CheckCircle} trend="up" subtext="8% up" color="green" delay={300} />
     </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+    <div>
+      {/* Total Work Duration Chart */}
+      <Card className="border shadow-sm hover:shadow-md transition-shadow mb-6" hoverEffect>
         <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
             <div>
-                <CardTitle className="text-base">Hiring Trend</CardTitle>
-                <p className="text-xs text-slate-500 mt-1">Hired vs Open Positions</p>
+                <CardTitle className="text-base">Total Work Duration</CardTitle>
+                <p className="text-xs text-slate-500 mt-1">Hours worked per day</p>
             </div>
-            <Button size="xs" variant="outline">View Details</Button>
+            <Button size="sm" variant="outline" onClick={handleRestoreCurrentWeek}>Restore</Button>
         </CardHeader>
-        <CardContent className="pt-6">
-          <div className="h-[280px] w-full min-h-[280px]" style={{ minHeight: '280px' }}>
-            <ResponsiveContainer width="100%" height={280} debounce={100}>
-              <BarChart data={hiringData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
-                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
-                <Bar dataKey="hired" fill="#10B981" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="open" fill="#F59E0B" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        <CardContent className="pt-6 relative">
+          <div className="flex items-center gap-4">
+            <button onClick={handlePreviousWeek} className="flex-shrink-0 p-2 hover:bg-slate-100 rounded-full transition-colors">
+              <ChevronLeft size={20} className="text-slate-600" />
+            </button>
+            
+            <div className="h-[320px] w-full min-h-[320px] flex-1" style={{ minHeight: '320px' }}>
+              <ResponsiveContainer width="100%" height={320} debounce={100}>
+                <LineChart data={workDurationData} margin={{ top: 20, right: 20, left: -10, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                  <XAxis 
+                    dataKey="date" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#94A3B8', fontSize: 12}} 
+                  />
+                  <YAxis 
+                    type="number"
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#94A3B8', fontSize: 12}}
+                    label={{ value: 'Hours', angle: -90, position: 'insideLeft' }}
+                    domain={[0, 10]}
+                    ticks={[0, 2, 4, 6, 8, 10]}
+                  />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', backgroundColor: '#fff' }}
+                    labelStyle={{ color: '#000' }}
+                    formatter={(value: any, name: string, props: any) => {
+                      if (name === 'duration') {
+                        return [`${value}h total`, 'Work Duration'];
+                      }
+                      return [value, name];
+                    }}
+                    content={(props: any) => {
+                      const { active, payload, label } = props;
+                      if (!active || !payload || !payload.length) return null;
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-white p-3 rounded-lg text-sm border border-slate-200 shadow-lg" style={{ minWidth: '200px' }}>
+                          <p className="text-slate-900 font-semibold">{data.date}</p>
+                          <p className="text-slate-700 mt-1">Total Hours: <span className="text-blue-600">{data.duration}h</span></p>
+                          <p className="text-slate-700">Employees: <span className="text-blue-600">{data.count || 0}</span></p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Legend 
+                    verticalAlign="top" 
+                    height={36}
+                    iconType="square"
+                    wrapperStyle={{ paddingBottom: '20px' }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="duration" 
+                    name="Total Work Duration"
+                    stroke="#60A5FA" 
+                    strokeWidth={3} 
+                    dot={{ fill: '#93C5FD', r: 5, strokeWidth: 2, stroke: '#60A5FA' }}
+                    activeDot={{ r: 7 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            <button onClick={handleNextWeek} className="flex-shrink-0 p-2 hover:bg-slate-100 rounded-full transition-colors">
+              <ChevronRight size={20} className="text-slate-600" />
+            </button>
           </div>
         </CardContent>
       </Card>
 
+      {/* Attendance Log */}
       <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
-        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
-            <div>
-                <CardTitle className="text-base">Weekly Attendance</CardTitle>
-                <p className="text-xs text-slate-500 mt-1">Attendance Overview</p>
-            </div>
-
+        <CardHeader className="pb-4 border-b">
+            <CardTitle className="text-base">HR Attendance Log</CardTitle>
+            <p className="text-xs text-slate-500 mt-1">Recent HR employee attendance records</p>
         </CardHeader>
-        <CardContent className="pt-6">
-          <div className="h-[280px] w-full min-h-[280px]" style={{ minHeight: '280px' }}>
-            <ResponsiveContainer width="100%" height={280} debounce={100}>
-              <LineChart data={attendanceData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
-                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
-                <Line type="monotone" dataKey="present" stroke="#2563EB" strokeWidth={2.5} dot={{ fill: '#2563EB', r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+        <CardContent className="p-0">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Time In</TableHead>
+                        <TableHead>Time Out</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <tbody>
+                  {recentAttendance.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-sm text-slate-500 py-6">
+                        No attendance records found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    recentAttendance.map((record: any, idx: number) => (
+                      <TableRow key={idx} className="hover:bg-slate-50 transition-colors">
+                        <TableCell className="py-4">
+                          <span className="text-sm font-semibold text-slate-900">
+                            {getEmployeeDisplayName(record)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-4 text-sm text-slate-600">
+                          {new Date(record.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </TableCell>
+                        <TableCell className="py-4">
+                          <span className={`text-xs px-3 py-1.5 rounded-full font-bold ${
+                            record.status === 'PRESENT' 
+                              ? 'bg-emerald-100 text-emerald-700' 
+                              : record.status === 'ABSENT'
+                              ? 'bg-rose-100 text-rose-700'
+                              : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {record.status || 'N/A'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-4 text-sm text-slate-600">
+                          {record.timeIn ? new Date(record.timeIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--'}
+                        </TableCell>
+                        <TableCell className="py-4 text-sm text-slate-600">
+                          {record.timeOut ? new Date(record.timeOut).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--'}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </tbody>
+            </Table>
         </CardContent>
       </Card>
     </div>
@@ -505,7 +655,7 @@ const HRDashboard = () => {
                     ) : (
                       insideOffice.map((record) => (
                         <TableRow key={record.id}>
-                          <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
+                          <TableCell>{getEmployeeDisplayName(record)}</TableCell>
                           <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                           <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                         </TableRow>
@@ -538,7 +688,7 @@ const HRDashboard = () => {
                     ) : (
                       outsideOffice.map((record) => (
                         <TableRow key={record.id}>
-                          <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
+                          <TableCell>{getEmployeeDisplayName(record)}</TableCell>
                           <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                           <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                         </TableRow>
@@ -571,7 +721,7 @@ const HRDashboard = () => {
                     ) : (
                       wfhEmployees.map((record) => (
                         <TableRow key={record.id}>
-                          <TableCell>{(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}</TableCell>
+                          <TableCell>{getEmployeeDisplayName(record)}</TableCell>
                           <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                           <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                         </TableRow>
@@ -618,7 +768,7 @@ const HRDashboard = () => {
                 <TableRow key={`${record.id}-${record.date}`} className="hover:bg-slate-50 transition-colors">
                   <TableCell className="py-3 text-sm">{new Date(record.date).toLocaleDateString()}</TableCell>
                   <TableCell className="py-3 text-sm">
-                    {(record.employee?.firstName || 'Unknown') + ' ' + (record.employee?.lastName || '')}
+                    {getEmployeeDisplayName(record)}
                   </TableCell>
                   <TableCell className="py-3 text-sm">
                     {record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
