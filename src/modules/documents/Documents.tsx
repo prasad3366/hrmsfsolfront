@@ -9,6 +9,8 @@ const Documents = () => {
     const n = Number(user?.id);
     return Number.isInteger(n) ? n : undefined;
   });
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | undefined>(undefined);
+  const [employeeList, setEmployeeList] = useState<any[]>([]);
   const [resolved, setResolved] = useState<boolean>(false);
   const [required, setRequired] = useState<any[]>([]);
   const [docs, setDocs] = useState<any[]>([]);
@@ -19,6 +21,18 @@ const Documents = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchEmployeeList = async () => {
+    try {
+      const list = await api.getAllEmployees();
+      setEmployeeList(list || []);
+      if (!selectedEmployeeId && list?.length > 0) {
+        setSelectedEmployeeId(list[0].id);
+      }
+    } catch (e: any) {
+      console.error('Failed to fetch employee list', e);
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       // try to resolve employee id from JWT-derived user info
@@ -27,21 +41,65 @@ const Documents = () => {
         if (Number.isInteger(maybeId)) setEmployeeId(maybeId);
       }
 
+      if (role === 'HR' || role === 'ADMIN') {
+        await fetchEmployeeList();
+      }
+
       // fetch lists
-      if (employeeId) await fetchRequired();
+      const loadForId = (role === 'HR' || role === 'ADMIN') ? selectedEmployeeId : employeeId;
+      if (loadForId) {
+        setSelectedEmployeeId(loadForId);
+        await fetchRequired();
+      }
       await fetchDocuments();
       setResolved(true);
     };
 
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employeeId, role, user]);
+  }, [employeeId, selectedEmployeeId, role, user]);
+
+  const getCurrentEmployeeId = () => {
+    if (role === 'HR' || role === 'ADMIN') {
+      return selectedEmployeeId || employeeId;
+    }
+    return employeeId;
+  };
 
   const fetchRequired = async () => {
     try {
       setError(null);
-      const res = await api.getRequiredDocuments(employeeId!);
-      setRequired(res || []);
+      const targetId = getCurrentEmployeeId();
+      if (!targetId) {
+        setRequired([]);
+        return;
+      }
+
+      const [employeeInfo, res] = await Promise.all([
+        api.getEmployeeById(targetId),
+        api.getRequiredDocuments(targetId),
+      ]);
+
+      let requiredDocs = res || [];
+
+      // If employee is experienced, ensure Relieving Letter is shown even if backend does not include it
+      if (
+        employeeInfo?.isExperienced === true &&
+        !requiredDocs.some((doc: any) =>
+          String(doc.name).toLowerCase().includes('relieving'),
+        )
+      ) {
+        requiredDocs = [
+          ...requiredDocs,
+          {
+            id: -1,
+            name: 'Relieving Letter',
+            virtual: true,
+          },
+        ];
+      }
+
+      setRequired(requiredDocs);
     } catch (e: any) {
       setError(e.message || 'Failed to load required documents');
     }
@@ -50,7 +108,8 @@ const Documents = () => {
   const fetchDocuments = async () => {
     try {
       setError(null);
-      const res = await api.getDocuments(employeeId ? Math.floor(employeeId) : undefined, role || undefined);
+      const targetId = getCurrentEmployeeId();
+      const res = await api.getDocuments(targetId ? Math.floor(targetId) : undefined, role || undefined);
       setDocs(res || []);
     } catch (e: any) {
       setError(e.message || 'Failed to load documents');
@@ -72,7 +131,7 @@ const Documents = () => {
     }
   };
 
-  const onFileChange = (docTypeId: number, f?: File) => setFiles((s) => ({ ...s, [docTypeId]: f || null }));
+  const onFileChange = (docTypeId: number | string, f?: File) => setFiles((s) => ({ ...s, [docTypeId]: f || null }));
 
   const handleApprove = async (documentId: number) => {
     try {
@@ -114,10 +173,12 @@ const Documents = () => {
   };
 
   const handleUpload = async () => {
-    if (!employeeId) return alert('Employee id not detected. Contact HR.');
+    const targetId = getCurrentEmployeeId();
+    if (!targetId) return alert('Employee id not detected. Contact HR.');
     const docIds: number[] = [];
     const uploadFiles: File[] = [];
     for (const r of required) {
+      if ((r as any).virtual) continue; // skip synthetic fallback docs because id is not known
       const f = files[r.id];
       if (f) {
         docIds.push(r.id);
@@ -127,7 +188,7 @@ const Documents = () => {
     if (uploadFiles.length === 0) return alert('Please choose files to upload');
     try {
       setLoading(true);
-      await api.uploadDocuments(employeeId, docIds, uploadFiles);
+      await api.uploadDocuments(targetId, docIds, uploadFiles);
       alert('Uploaded');
       setFiles({});
       fetchDocuments();
@@ -155,6 +216,28 @@ const Documents = () => {
             )}
           </div>
 
+          {(role === 'HR' || role === 'ADMIN') && (
+            <div className="mb-4">
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Select Employee</label>
+              <select
+                value={selectedEmployeeId || ''}
+                onChange={(e) => {
+                  const selectedId = Number(e.target.value);
+                  if (!Number.isInteger(selectedId)) return;
+                  setSelectedEmployeeId(selectedId);
+                }}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">Select an employee</option>
+                {employeeList.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.firstName} {emp.lastName} ({emp.empCode || emp.email || emp.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {error && (
             <div className="mb-3 text-red-600">
               {error}
@@ -170,9 +253,23 @@ const Documents = () => {
             <div className="text-sm text-slate-500">No required documents found.</div>
           ) : (
             required.map((r) => (
-              <div key={r.id} className="flex items-center gap-3 mb-2">
-                <div className="flex-1">{r.name}</div>
-                <input type="file" onChange={(e) => onFileChange(r.id, e.target.files?.[0])} />
+              <div key={`${r.id}-${r.name}`} className="flex items-center gap-3 mb-2">
+                <div className="flex-1">
+                  {r.name}
+                  {r.virtual && (
+                    <span className="ml-2 text-xs text-rose-600">
+                      (added as experienced-only fallback)
+                    </span>
+                  )}
+                </div>
+
+                <input
+                  type="file"
+                  onChange={(e) => {
+                    const fileKey = r.virtual ? 'virtual-relieving' : r.id;
+                    onFileChange(fileKey as any, e.target.files?.[0]);
+                  }}
+                />
               </div>
             ))
           )}

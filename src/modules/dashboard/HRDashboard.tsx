@@ -369,65 +369,6 @@ const HRDashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Attendance Log */}
-      <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
-        <CardHeader className="pb-4 border-b">
-            <CardTitle className="text-base">HR Attendance Log</CardTitle>
-            <p className="text-xs text-slate-500 mt-1">Recent HR employee attendance records</p>
-        </CardHeader>
-        <CardContent className="p-0">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Employee</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Time In</TableHead>
-                        <TableHead>Time Out</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <tbody>
-                  {recentAttendance.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-sm text-slate-500 py-6">
-                        No attendance records found.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    recentAttendance.map((record: any, idx: number) => (
-                      <TableRow key={idx} className="hover:bg-slate-50 transition-colors">
-                        <TableCell className="py-4">
-                          <span className="text-sm font-semibold text-slate-900">
-                            {getEmployeeDisplayName(record)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-4 text-sm text-slate-600">
-                          {new Date(record.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <span className={`text-xs px-3 py-1.5 rounded-full font-bold ${
-                            record.status === 'PRESENT' 
-                              ? 'bg-emerald-100 text-emerald-700' 
-                              : record.status === 'ABSENT'
-                              ? 'bg-rose-100 text-rose-700'
-                              : 'bg-amber-100 text-amber-700'
-                          }`}>
-                            {record.status || 'N/A'}
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-4 text-sm text-slate-600">
-                          {record.timeIn ? new Date(record.timeIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--'}
-                        </TableCell>
-                        <TableCell className="py-4 text-sm text-slate-600">
-                          {record.timeOut ? new Date(record.timeOut).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--'}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </tbody>
-            </Table>
-        </CardContent>
-      </Card>
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
