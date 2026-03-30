@@ -5,6 +5,7 @@ import { useLeave } from '../../hooks/useLeave';
 import { useAuth } from '../../context/AuthContext';
 import ApplyLeaveModal from '../../components/leave/ApplyLeaveModal';
 import ApproveRejectLeaveModal from '../../components/leave/ApproveRejectLeaveModal';
+import ApiService from '../../services/api';
 import { CreateLeaveDto } from '../../services/api';
 
 const LeaveBalanceCard = ({ type, total, used, color, ...props }: { type: string, total: number, used: number, color: string, [key: string]: any }) => {
@@ -69,6 +70,19 @@ const LeaveManagement = () => {
     },
   });
 
+  const [employeeMap, setEmployeeMap] = useState<Record<number | string, string >>({});
+
+  const getEmployeeName = (leave: any) => {
+    // Simple direct approach - backend now provides full employee data
+    if (leave.employee?.firstName || leave.employee?.lastName) {
+      return `${leave.employee.firstName || ''} ${leave.employee.lastName || ''}`.trim();
+    }
+    if (leave.employee?.empCode) {
+      return leave.employee.empCode;
+    }
+    return 'Unknown';
+  };
+
   const currentYear = new Date().getFullYear();
   const financialYearStart = new Date().getMonth() >= 3 ? currentYear : currentYear - 1;
 
@@ -79,7 +93,7 @@ const LeaveManagement = () => {
     if (user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER') {
       fetchPendingLeaves();
     }
-  }, []);
+  }, [user?.role, fetchMyLeaveHistory, fetchMyLeaveBalance, fetchPendingLeaves, financialYearStart]);
 
   // Show notifications
   useEffect(() => {
@@ -121,29 +135,37 @@ const LeaveManagement = () => {
   };
 
   const openApproveModal = (leave: any) => {
+    const employeeName = leave.employee
+      ? `${leave.employee.firstName || ''} ${leave.employee.lastName || ''}`.trim()
+      : 'Unknown';
+    
     setApproveRejectModal({
       isOpen: true,
       leaveId: leave.id,
       action: 'approve',
       leaveDetails: {
-        employeeName: leave.employee ? `${leave.employee.firstName} ${leave.employee.lastName}` : 'N/A',
+        employeeName: employeeName || 'Unknown',
         type: leave.leaveType?.name || 'Leave',
         dates: `${new Date(leave.startDate).toLocaleDateString()} to ${new Date(leave.endDate).toLocaleDateString()}`,
-        reason: leave.reason,
+        reason: leave.reason || 'No reason provided',
       },
     });
   };
 
   const openRejectModal = (leave: any) => {
+    const employeeName = leave.employee
+      ? `${leave.employee.firstName || ''} ${leave.employee.lastName || ''}`.trim()
+      : 'Unknown';
+    
     setApproveRejectModal({
       isOpen: true,
       leaveId: leave.id,
       action: 'reject',
       leaveDetails: {
-        employeeName: leave.employee ? `${leave.employee.firstName} ${leave.employee.lastName}` : 'N/A',
+        employeeName: employeeName || 'Unknown',
         type: leave.leaveType?.name || 'Leave',
         dates: `${new Date(leave.startDate).toLocaleDateString()} to ${new Date(leave.endDate).toLocaleDateString()}`,
-        reason: leave.reason,
+        reason: leave.reason || 'No reason provided',
       },
     });
   };
@@ -210,9 +232,9 @@ const LeaveManagement = () => {
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-base">Pending Leave Requests</CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="p-0 overflow-x-auto">
                   {pendingLeaves.length > 0 ? (
-                    <div className="w-full overflow-x-auto">
+                    <div className="w-full inline-block min-w-full">
                       <Table className="w-full">
                         <TableHeader>
                             <TableRow>
@@ -221,41 +243,49 @@ const LeaveManagement = () => {
                                 <TableHead className="min-w-[110px] sm:min-w-[140px]">Dates</TableHead>
                                 <TableHead className="min-w-[50px] sm:min-w-[60px]">Days</TableHead>
                                 <TableHead className="hidden lg:table-cell min-w-[120px]">Reason</TableHead>
-                                <TableHead className="min-w-[200px] sticky right-0 bg-white">Action</TableHead>
+                                <TableHead className="min-w-[140px] sm:min-w-[180px]">Action</TableHead>
                             </TableRow>
                         </TableHeader>
                         <tbody>
                             {pendingLeaves.map(leave => (
                                 <TableRow key={leave.id}>
                                     <TableCell className="font-medium text-slate-900 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">
-                                      {leave.employee ? `${leave.employee.firstName} ${leave.employee.lastName}` : 'N/A'}
+                                      {getEmployeeName(leave)}
                                     </TableCell>
                                     <TableCell className="text-xs sm:text-sm min-w-[70px] sm:min-w-[80px]">{leave.leaveType?.name || 'Leave'}</TableCell>
                                     <TableCell className="text-xs text-slate-500 whitespace-nowrap min-w-[110px] sm:min-w-[140px]">
                                       {new Date(leave.startDate).toLocaleDateString()} to {new Date(leave.endDate).toLocaleDateString()}
                                     </TableCell>
                                     <TableCell className="text-xs sm:text-sm text-center min-w-[50px] sm:min-w-[60px]">{leave.totalDays}</TableCell>
-                                    <TableCell className="text-xs text-slate-500 max-w-[120px] truncate hidden lg:table-cell">{leave.reason}</TableCell>
-                                    <TableCell className="min-w-[200px] sticky right-0 bg-white">
-                                        <div className="flex gap-1 sm:gap-2">
-                                            <Button 
-                                              size="sm" 
-                                              variant="outline" 
-                                              className="text-emerald-600 hover:bg-emerald-50 border-emerald-200 text-xs px-2 sm:px-3 py-1 whitespace-nowrap"
-                                              onClick={() => openApproveModal(leave)}
-                                              disabled={isSubmitting}
-                                            >
-                                              Approve
-                                            </Button>
-                                            <Button 
-                                              size="sm" 
-                                              variant="outline" 
-                                              className="text-rose-600 hover:bg-rose-50 border-rose-200 text-xs px-2 sm:px-3 py-1 whitespace-nowrap"
-                                              onClick={() => openRejectModal(leave)}
-                                              disabled={isSubmitting}
-                                            >
-                                              Reject
-                                            </Button>
+                                    <TableCell className="text-xs text-slate-500 max-w-[120px] truncate">{leave.reason || 'No reason provided'}</TableCell>
+                                    <TableCell className="min-w-[140px] sm:min-w-[180px]">
+                                        <div className="flex flex-col gap-1 sm:flex-row sm:gap-2">
+                                            {leave.status === 'PENDING' ? (
+                                              <>
+                                                <Button 
+                                                  size="sm" 
+                                                  variant="outline" 
+                                                  className="text-emerald-600 hover:bg-emerald-50 border-emerald-200 text-xs px-2 py-1 whitespace-nowrap"
+                                                  onClick={() => openApproveModal(leave)}
+                                                  disabled={isSubmitting}
+                                                >
+                                                  Approve
+                                                </Button>
+                                                <Button 
+                                                  size="sm" 
+                                                  variant="outline" 
+                                                  className="text-rose-600 hover:bg-rose-50 border-rose-200 text-xs px-2 py-1 whitespace-nowrap"
+                                                  onClick={() => openRejectModal(leave)}
+                                                  disabled={isSubmitting}
+                                                >
+                                                  Reject
+                                                </Button>
+                                              </>
+                                            ) : (
+                                              <Badge variant={getStatusBadgeVariant(leave.status)}>
+                                                {leave.status}
+                                              </Badge>
+                                            )}
                                         </div>
                                     </TableCell>
                                 </TableRow>

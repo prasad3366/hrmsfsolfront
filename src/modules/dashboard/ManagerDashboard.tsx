@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { MOCK_EMPLOYEES } from '../../mock-data';
 import { useWfh } from '../../hooks/useWfh';
+import { useLeave } from '../../hooks/useLeave';
 import { useAttendance } from '../../hooks/useAttendance';
 import ApiService from '../../services/api';
 
@@ -62,11 +63,13 @@ const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", de
 const ManagerDashboard = () => {
   const navigate = useNavigate();
   const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
+  const { pendingLeaves, fetchPendingLeaves, approveLeave } = useLeave();
   const { records: attendanceRecords, isLoading: isAttendanceLoading } = useAttendance({ scope: 'all' });
   const [employees, setEmployees] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<number>(12);
   const [activeTasks, setActiveTasks] = useState<number>(34);
   const [completedTasks, setCompletedTasks] = useState<number>(128);
+  const [employeeMap, setEmployeeMap] = useState<Record<string, string>>({});
 
   const isEmployeeActive = (emp: any) => {
     const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
@@ -76,10 +79,42 @@ const ManagerDashboard = () => {
     if (typeof emp.isActive === 'boolean') return emp.isActive;
     return true;
   };
+
+  const getEmployeeDisplayName = (record: any) => {
+    if (!record) return 'Unknown';
+    if (record.employeeName) return record.employeeName;
+    if (record.employee?.firstName || record.employee?.lastName) {
+      const first = record.employee?.firstName || '';
+      const last = record.employee?.lastName || '';
+      return `${first} ${last}`.trim();
+    }
+    if (record.employee?.name) return record.employee.name;
+    if (record.employeeId) {
+      const idKey = String(record.employeeId);
+      if (employeeMap[idKey]) return employeeMap[idKey];
+    }
+    if (record.employee?.empCode && employeeMap[record.employee.empCode]) {
+      return employeeMap[record.employee.empCode];
+    }
+    return 'Unknown';
+  };
+
+  const getLeaveReason = (leave: any) => {
+    if (!leave) return 'No reason provided';
+    return (
+      leave.reason ||
+      leave.remarks ||
+      leave.comment ||
+      leave.description ||
+      leave.notes ||
+      'No reason provided'
+    );
+  };
   const [attendanceTab, setAttendanceTab] = useState<'inside' | 'outside' | 'wfh'>('inside');
 
   useEffect(() => {
     fetchAllWfhRequests();
+    fetchPendingLeaves();
     
     // Fetch team data from API
     ApiService.getAllEmployees()
@@ -94,6 +129,20 @@ const ManagerDashboard = () => {
         
         // Calculate completed tasks (placeholder)
         setCompletedTasks(activeEmployeeCount * 10);
+
+        // Build employee name map for display
+        const map: Record<string, string> = {};
+        employeeList.forEach((emp: any) => {
+          const id = emp.id ?? emp.employeeId ?? emp.user?.id;
+          const name = `${emp.firstName || emp.name || ''} ${emp.lastName || ''}`.trim() || emp.email || 'Unknown';
+          if (id !== undefined && id !== null) {
+            map[String(id)] = name;
+          }
+          if (emp.empCode) {
+            map[String(emp.empCode)] = name;
+          }
+        });
+        setEmployeeMap(map);
       })
       .catch((err) => {
         console.error('Failed to fetch team data', err);
@@ -104,7 +153,7 @@ const ManagerDashboard = () => {
         setActiveTasks(Math.floor(activeEmployeeCount * 2.8));
         setCompletedTasks(activeEmployeeCount * 10);
       });
-  }, [fetchAllWfhRequests]);
+  }, [fetchAllWfhRequests, fetchPendingLeaves]);
 
   // Calculate team attendance percentage
   const teamAttendance = useMemo(() => {
@@ -234,7 +283,7 @@ const ManagerDashboard = () => {
                         <TableRow key={emp.id} className="hover:bg-slate-50 transition-colors">
                             <TableCell className="py-4">
                                 <div className="flex items-center gap-3">
-                                    <img src={emp.avatar || emp.profilePic || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border-2 border-slate-100 shadow-sm" alt=""/>
+                                    <img src={emp.avatar || emp.profilePic || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect fill=%22%23e2e8f0%22 width=%2232%22 height=%2232%22/%3E%3Ctext x=%2216%22 y=%2224%22 font-size=%2216%22 font-weight=%22bold%22 fill=%22%2364748b%22 text-anchor=%22middle%22%3E?%3C/text%3E%3C/svg%3E'} className="w-8 h-8 rounded-full border-2 border-slate-100 shadow-sm" alt=""/>
                                     <span className="text-sm font-semibold text-slate-900">{emp.firstName && emp.lastName ? `${emp.firstName} ${emp.lastName}` : emp.name}</span>
                                 </div>
                             </TableCell>
@@ -276,6 +325,66 @@ const ManagerDashboard = () => {
         </CardContent>
       </Card>
     </div>
+
+    <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+      <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
+          <CardTitle className="text-base">Pending Leave Requests</CardTitle>
+          <Button variant="ghost" size="xs" onClick={() => navigate('/leave')}>View All</Button>
+      </CardHeader>
+      <CardContent className="p-0">
+          <Table>
+              <TableHeader>
+                  <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Days</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Action</TableHead>
+                  </TableRow>
+              </TableHeader>
+              <tbody>
+            {pendingLeaves.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-sm text-slate-500 py-6">
+                  No pending leave requests.
+                </TableCell>
+              </TableRow>
+            ) : (
+              pendingLeaves.map((leave) => (
+                <TableRow key={leave.id} className="hover:bg-slate-50 transition-colors">
+                  <TableCell className="py-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-semibold text-slate-900">
+                        {getEmployeeDisplayName(leave)}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-4">
+                    <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full font-bold">
+                      {leave.leaveType?.name || 'Leave'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-4 text-sm font-medium text-slate-600">
+                    {leave.totalDays ?? '--'} days
+                  </TableCell>
+                  <TableCell className="py-4 text-sm text-slate-600">
+                    {getLeaveReason(leave)}
+                  </TableCell>
+                  <TableCell className="py-4">
+                    <button
+                      onClick={() => approveLeave(leave.id)}
+                      className="text-xs text-emerald-600 font-bold hover:text-emerald-700 hover:underline"
+                    >
+                      Approve
+                    </button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </tbody>
+          </Table>
+      </CardContent>
+    </Card>
 
     <div className="lg:col-span-full">
       <Card className="border shadow-sm hover:shadow-md transition-shadow h-full" hoverEffect>

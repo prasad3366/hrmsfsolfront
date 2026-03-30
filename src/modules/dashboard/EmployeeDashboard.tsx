@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '../../components/ui/components';
 import {
   Calendar, Clock, FileText, ChevronRight, CheckCircle2, BarChart3,
@@ -113,6 +114,7 @@ const QuickActionButton = ({ icon: Icon, label, onClick }: any) => (
 
 // ────────────────────────────────────────────────
 export default function EmployeeDashboard() {
+  const navigate = useNavigate();
   const [isPunchModalOpen, setIsPunchModalOpen] = useState(false);
   const [isRequestWfhOpen, setIsRequestWfhOpen] = useState(false);
 
@@ -340,8 +342,16 @@ export default function EmployeeDashboard() {
                 <CardTitle>Quick Actions</CardTitle>
               </CardHeader>
               <CardContent className="p-5 space-y-2">
-                <QuickActionButton icon={FileText} label="View Payslip" />
-                <QuickActionButton icon={Calendar} label="Request Leave" />
+                <QuickActionButton
+                  icon={FileText}
+                  label="View Payslip"
+                  onClick={() => navigate('/payroll')}
+                />
+                <QuickActionButton
+                  icon={Calendar}
+                  label="Request Leave"
+                  onClick={() => navigate('/leave')}
+                />
                 <QuickActionButton
                   icon={Home}
                   label="Request Work From Home"

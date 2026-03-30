@@ -96,19 +96,37 @@ const HRDashboard = () => {
   const { records: attendanceRecords, isLoading: isAttendanceLoading } = useAttendance({ scope: 'all' });
 
   // Track employees for name resolution
-  const [employeeMap, setEmployeeMap] = useState<Record<number, string>>({});
+  const [employeeMap, setEmployeeMap] = useState<Record<string, string>>({});
 
   const getEmployeeDisplayName = (record: any) => {
+    if (!record) return 'Unknown';
     if (record.employeeName) return record.employeeName;
     if (record.employee?.firstName || record.employee?.lastName) {
       const first = record.employee?.firstName || '';
       const last = record.employee?.lastName || '';
       return `${first} ${last}`.trim();
     }
-    if (record.employeeId && employeeMap[record.employeeId]) {
-      return employeeMap[record.employeeId];
+    if (record.employee?.name) return record.employee.name;
+    if (record.employeeId) {
+      const idKey = String(record.employeeId);
+      if (employeeMap[idKey]) return employeeMap[idKey];
+    }
+    if (record.employee?.empCode && employeeMap[record.employee.empCode]) {
+      return employeeMap[record.employee.empCode];
     }
     return 'Unknown';
+  };
+
+  const getLeaveReason = (leave: any) => {
+    if (!leave) return 'No reason provided';
+    return (
+      leave.reason ||
+      leave.remarks ||
+      leave.comment ||
+      leave.description ||
+      leave.notes ||
+      'No reason provided'
+    );
   };
 
   // Calculate dynamic work duration data
@@ -191,10 +209,16 @@ const HRDashboard = () => {
         setTotalEmployees(activeEmployees.length);
 
         // Build employee name map for attendance display
-        const map: Record<number, string> = {};
+        const map: Record<string, string> = {};
         list.forEach((emp: any) => {
-          const name = `${emp.firstName || emp.name || ''} ${emp.lastName || ''}`.trim();
-          map[emp.id] = name || emp.email || 'Unknown';
+          const id = emp.id ?? emp.employeeId ?? emp.user?.id;
+          const name = `${emp.firstName || emp.name || ''} ${emp.lastName || ''}`.trim() || emp.email || 'Unknown';
+          if (id !== undefined && id !== null) {
+            map[String(id)] = name;
+          }
+          if (emp.empCode) {
+            map[String(emp.empCode)] = name;
+          }
         });
         setEmployeeMap(map);
 
@@ -384,6 +408,7 @@ const HRDashboard = () => {
                         <TableHead>Employee</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead>Days</TableHead>
+                        <TableHead>Reason</TableHead>
                         <TableHead>Action</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -400,7 +425,7 @@ const HRDashboard = () => {
                     <TableCell className="py-4">
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-semibold text-slate-900">
-                          {leave.employee ? `${leave.employee.firstName} ${leave.employee.lastName}` : 'Unknown'}
+                          {getEmployeeDisplayName(leave)}
                         </span>
                       </div>
                     </TableCell>
@@ -411,6 +436,9 @@ const HRDashboard = () => {
                     </TableCell>
                     <TableCell className="py-4 text-sm font-medium text-slate-600">
                       {leave.totalDays ?? '--'} days
+                    </TableCell>
+                    <TableCell className="py-4 text-sm text-slate-600">
+                      {getLeaveReason(leave)}
                     </TableCell>
                     <TableCell className="py-4">
                       <button

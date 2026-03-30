@@ -40,7 +40,7 @@ export const useLeave = () => {
     try {
       const updatedLeave = await api.approveLeave(leaveId);
       setPendingLeaves((prev) =>
-        prev.map((leave) => (leave.id === leaveId ? updatedLeave : leave))
+        prev.map((leave) => (leave.id === leaveId ? { ...leave, ...updatedLeave } : leave))
       );
       setSuccess('Leave approved successfully');
       return updatedLeave;
@@ -61,7 +61,7 @@ export const useLeave = () => {
     try {
       const updatedLeave = await api.rejectLeave(leaveId, remarks);
       setPendingLeaves((prev) =>
-        prev.map((leave) => (leave.id === leaveId ? updatedLeave : leave))
+        prev.map((leave) => (leave.id === leaveId ? { ...leave, ...updatedLeave } : leave))
       );
       setSuccess('Leave rejected successfully');
       return updatedLeave;
@@ -104,16 +104,39 @@ export const useLeave = () => {
     }
   }, []);
 
-  // Fetch pending leaves
+  // Fetch pending leaves (including approved/rejected active requests until endDate)
   const fetchPendingLeaves = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await api.getPendingLeaves();
-      setPendingLeaves(data);
+      const pending = await api.getPendingLeaves();
+      const allLeaves = await api.getLeaveHistory();
+      
+      const today = new Date();
+      const activeResolved = (allLeaves || []).filter((leave: Leave) => {
+        const endDate = new Date(leave.endDate);
+        return (
+          (leave.status === 'APPROVED' || leave.status === 'REJECTED') &&
+          endDate >= today
+        );
+      });
+
+      const combined = [...pending, ...activeResolved];
+      
+      // Deduplicate by ID, keeping the most recently updated one
+      const uniqueMap = new Map<number, Leave>();
+      combined.forEach((leave) => {
+        const existing = uniqueMap.get(leave.id);
+        if (!existing || new Date(leave.updatedAt) > new Date(existing.updatedAt)) {
+          uniqueMap.set(leave.id, leave);
+        }
+      });
+
+      setPendingLeaves(Array.from(uniqueMap.values()));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch pending leaves';
       setError(errorMessage);
+      console.error('Error in fetchPendingLeaves:', err);
     } finally {
       setIsLoading(false);
     }
