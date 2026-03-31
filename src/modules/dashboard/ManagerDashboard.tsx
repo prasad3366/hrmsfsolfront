@@ -63,6 +63,13 @@ const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", de
 const ManagerDashboard = () => {
   const navigate = useNavigate();
   const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
+  // Filter out expired WFH requests (endDate before today)
+  const today = new Date();
+  const activeWfhRequests = wfhRequests.filter(req => {
+    const end = new Date(req.endDate);
+    // Only keep requests where endDate is today or in the future
+    return end >= new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  });
   const { pendingLeaves, fetchPendingLeaves, approveLeave } = useLeave();
   const { records: attendanceRecords, isLoading: isAttendanceLoading } = useAttendance({ scope: 'all' });
   const [employees, setEmployees] = useState<any[]>([]);
@@ -179,10 +186,16 @@ const ManagerDashboard = () => {
   const wfhEmployees = attendanceRecords.filter(record => record.locationStatus === 'WFH');
 
   const recentAttendance = useMemo(() => {
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - 31);
+
     return attendanceRecords
-      .slice()
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 12);
+      .filter((record) => {
+        const recordDate = new Date(record.date);
+        return !Number.isNaN(recordDate.getTime()) && recordDate >= cutoff && recordDate <= now;
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [attendanceRecords]);
 
   // Calculate dynamic task data
@@ -585,7 +598,7 @@ const ManagerDashboard = () => {
                     </span>
                   </TableCell>
                   <TableCell className="py-4 text-sm font-semibold text-slate-900">
-                    {record.totalHours ? `${record.totalHours}h` : '--'}
+                    {record.totalHours ? `${record.totalHours.toFixed(2)}h` : '--'}
                   </TableCell>
                 </TableRow>
               ))

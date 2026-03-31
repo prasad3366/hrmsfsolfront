@@ -89,6 +89,10 @@ const HRDashboard = () => {
     return new Date(today.setDate(diff));
   });
   const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
+
+  // Filter WFH requests to only show non-expired
+  const today = new Date();
+  const activeWfhRequests = wfhRequests.filter(req => new Date(req.endDate) >= today);
   const { holidays, isSubmitting: isHolidaySubmitting, fetchHolidaysByYear, createHoliday, deleteHoliday } = useHolidays();
   const { pendingLeaves, fetchPendingLeaves, approveLeave } = useLeave();
   const { addNotification } = useNotifications();
@@ -165,7 +169,7 @@ const HRDashboard = () => {
       const dateStr = `${date.getDate()}-${monthNames[date.getMonth()]}`;
       days.push({ 
         date: dateStr, 
-        duration: parseFloat(totalDuration.toFixed(1)),
+        duration: parseFloat(totalDuration.toFixed(2)),
         count: dayRecords.length 
       });
     }
@@ -284,10 +288,16 @@ const HRDashboard = () => {
   const wfhEmployees = attendanceRecords.filter(record => record.locationStatus === 'WFH');
 
   const recentAttendance = useMemo(() => {
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - 31);
+
     return attendanceRecords
-      .slice()
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 12);
+      .filter((record) => {
+        const recordDate = new Date(record.date);
+        return !Number.isNaN(recordDate.getTime()) && recordDate >= cutoff && recordDate <= now;
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [attendanceRecords]);
 
   return (
@@ -473,6 +483,13 @@ const HRDashboard = () => {
                 <DollarSign size={20} className="mb-2" strokeWidth={1.5} />
                 <span className="text-xs font-semibold text-center">Run Payroll</span>
             </button>
+            <button
+              type="button"
+              onClick={() => window.open('https://palateofferletter.vercel.app/', '_blank')}
+              className="flex flex-col items-center justify-center p-4 rounded-lg bg-pink-50 hover:bg-pink-100 text-pink-700 transition-colors border border-pink-200">
+                <Briefcase size={20} className="mb-2" strokeWidth={1.5} />
+                <span className="text-xs font-semibold text-center">Offer Generate</span>
+            </button>
             <button 
               onClick={() => setIsCreateHolidayOpen(true)}
               className="flex flex-col items-center justify-center p-4 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 transition-colors border border-orange-200">
@@ -496,7 +513,7 @@ const HRDashboard = () => {
       </CardHeader>
       <CardContent className="pt-6">
         <WfhApprovalList
-          requests={wfhRequests}
+          requests={activeWfhRequests}
           isLoading={isWfhLoading}
           onRefresh={fetchAllWfhRequests}
         />

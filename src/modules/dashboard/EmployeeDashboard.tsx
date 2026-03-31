@@ -117,10 +117,15 @@ export default function EmployeeDashboard() {
   const navigate = useNavigate();
   const [isPunchModalOpen, setIsPunchModalOpen] = useState(false);
   const [isRequestWfhOpen, setIsRequestWfhOpen] = useState(false);
+  const [weekPage, setWeekPage] = useState(0); // 0 = most recent week
 
   const { user } = useAuth();
   const { todayRecord, records, refresh } = useAttendance();
   const { myWfhRequests, isLoading: isWfhLoading, fetchMyWfhRequests } = useWfh();
+
+  // Filter my WFH requests to only show non-expired
+  const today = new Date();
+  const activeMyWfhRequests = myWfhRequests.filter(req => new Date(req.endDate) >= today);
   const { myHolidays, fetchMyHolidays } = useHolidays();
   const { myLeaveBalance, fetchMyLeaveBalance, isLoading: isLeaveLoading } = useLeave();
   const { payrolls, fetchPayroll, loading: isPayrollLoading } = usePayroll();
@@ -154,13 +159,36 @@ export default function EmployeeDashboard() {
     return pendingWfh; // For now, just WFH requests
   }, [myWfhRequests]);
 
-  // Chart data - last 7 days (still using attendance for chart → can be removed later if needed)
-  const chartData = records
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(-7)
+  // Attended records in the last 31 days
+  const recentAttendance = useMemo(() => {
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - 31);
+
+    return records
+      .filter((record) => {
+        const recordDate = new Date(record.date);
+        return !Number.isNaN(recordDate.getTime()) && recordDate >= cutoff && recordDate <= now;
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [records]);
+
+  const totalWeeks = Math.max(1, Math.ceil(recentAttendance.length / 7));
+  const weekIndex = Math.min(Math.max(0, weekPage), totalWeeks - 1);
+  const weekAttendance = useMemo(() => {
+    const start = Math.max(0, recentAttendance.length - (weekIndex + 1) * 7);
+    const end = recentAttendance.length - weekIndex * 7;
+    return recentAttendance.slice(start, end);
+  }, [recentAttendance, weekIndex]);
+
+  useEffect(() => {
+    setWeekPage(0);
+  }, [recentAttendance.length]);
+
+  const chartData = weekAttendance
     .map((record) => ({
       day: new Date(record.date).toLocaleDateString('en-US', { weekday: 'short' }),
-      hours: parseFloat(record.totalHours?.toString() || '0'),
+      hours: parseFloat((record.totalHours || 0).toFixed(2)),
     }));
 
   const currentHours = todayRecord?.totalHours || 0;
@@ -216,8 +244,29 @@ export default function EmployeeDashboard() {
           <div className="lg:col-span-2 space-y-8">
             {/* Weekly Chart (still attendance based — consider changing title/data later) */}
             <Card className="border-gray-200">
-              <CardHeader className="pb-4">
-                <CardTitle>Weekly Working Hours</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between pb-4">
+                <div>
+                  <CardTitle>Weekly Working Hours</CardTitle>
+                  <p className="text-xs text-gray-500">Week {weekPage + 1} of {totalWeeks}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={weekPage >= totalWeeks - 1}
+                    onClick={() => setWeekPage((p) => Math.min(totalWeeks - 1, p + 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={weekPage <= 0}
+                    onClick={() => setWeekPage((p) => Math.max(0, p - 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
@@ -316,7 +365,7 @@ export default function EmployeeDashboard() {
                       )}
                       <div className="pt-3 border-t flex justify-between text-base font-medium">
                         <span>Total Hours</span>
-                        <span>{currentHours.toFixed(1)} h</span>
+                        <span>{currentHours.toFixed(2)} h</span>
                       </div>
                     </>
                   )}
@@ -373,11 +422,11 @@ export default function EmployeeDashboard() {
             <CardContent className="p-6">
               {isWfhLoading ? (
                 <div className="py-12 text-center text-gray-500">Loading...</div>
-              ) : myWfhRequests.length === 0 ? (
+              ) : activeMyWfhRequests.length === 0 ? (
                 <div className="py-12 text-center text-gray-500">No WFH requests yet</div>
               ) : (
                 <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {myWfhRequests.map((req) => (
+                  {activeMyWfhRequests.map((req) => (
                     <div
                       key={req.id}
                       className="p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors"

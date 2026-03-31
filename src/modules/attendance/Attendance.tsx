@@ -66,7 +66,7 @@ const Attendance = () => {
         <p className="text-slate-500">Track your work hours and logs</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 items-start">
         <Card className="col-span-1">
           <CardHeader>
              <CardTitle className="text-base">Today's Action</CardTitle>
@@ -123,7 +123,7 @@ const Attendance = () => {
                             <TableCell className="font-medium">{new Date(record.date).toLocaleDateString()}</TableCell>
                             <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                             <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
-                            <TableCell>{record.totalHours ? `${record.totalHours} hrs` : '0.00 hrs'}</TableCell>
+                            <TableCell>{record.totalHours ? `${record.totalHours.toFixed(2)} hrs` : '0.00 hrs'}</TableCell>
                             <TableCell>
                               <Badge variant={record.status === 'PRESENT' ? 'success' : record.status === 'ABSENT' ? 'danger' : 'default'}>
                                 {record.status}
