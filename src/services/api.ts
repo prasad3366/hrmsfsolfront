@@ -284,9 +284,11 @@ export interface Payroll {
   lopDays: number;
   basic: number;
   hra: number;
+  conveyance?: number;
+  specialAllowance?: number;
   pf: number;
   pt: number;
-  healthInsurance: number;
+  leaveDeduction?: number;
   grossSalary: number;
   deductions: number;
   netSalary: number;
@@ -313,6 +315,18 @@ export interface EmployeeSalary {
   effectiveFrom: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface SalaryStructure {
+  id: number;
+  name: string;
+  basicPercent: number;
+  hraPercent: number;
+  conveyancePercent: number;
+  pfPercent: number;
+  ptAmount: number;
+  healthInsurance: number;
+  createdAt: string;
 }
 
 class ApiService {
@@ -1629,6 +1643,55 @@ class ApiService {
     } catch (error) {
       console.warn('Error fetching all salaries:', error);
       return [];
+    }
+  }
+
+  async getSalaryStructures(): Promise<SalaryStructure[]> {
+    // Try multiple endpoint variations silently
+    const endpoints = [
+      `${API_BASE_URL}/salary/structures`,
+      `${API_BASE_URL}/salary-structures`,
+      `${API_BASE_URL}/payroll/structures`,
+    ];
+
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(endpoint, {
+          method: 'GET',
+          headers: this.getAuthHeaders(),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return Array.isArray(data) ? data : [];
+        }
+      } catch (error) {
+        // try next endpoint silently
+      }
+    }
+
+    // All endpoints failed or returned non-ok, return empty array
+    // Frontend will use default structure fallback
+    return [];
+  }
+
+
+  async createSalaryStructure(structure: Omit<SalaryStructure, 'id' | 'createdAt'>): Promise<SalaryStructure> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/salary/structures`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(structure),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create salary structure');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to create salary structure');
     }
   }
 }

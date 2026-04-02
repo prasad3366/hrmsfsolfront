@@ -114,13 +114,57 @@ const AppRoutes = () => {
   );
 };
 
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<React.PropsWithChildren<{}>, ErrorBoundaryState> {
+  public props: React.PropsWithChildren<{}>;
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: null,
+  };
+
+  constructor(props: React.PropsWithChildren<{}>) {
+    super(props);
+    this.props = props;
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('Uncaught error in component tree:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-slate-50">
+          <h1 className="text-2xl font-bold text-rose-600">Something went wrong</h1>
+          <p className="mt-2 text-slate-600">The application encountered an error. Please refresh or contact support.</p>
+          <pre className="mt-4 p-4 bg-white border rounded shadow-sm overflow-auto text-left text-xs text-slate-700 max-w-3xl">
+            {this.state.error?.toString()}
+          </pre>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 const App = () => {
   return (
     <AuthProvider>
       <NotificationProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
+        <ErrorBoundary>
+          <Router>
+            <AppRoutes />
+          </Router>
+        </ErrorBoundary>
       </NotificationProvider>
     </AuthProvider>
   );

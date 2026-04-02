@@ -76,6 +76,34 @@ const Payroll = () => {
 
   const salaryInfo = employeeSalaries.length > 0 ? employeeSalaries[0] : employeeDetails?.salaries?.[0];
 
+  // Default salary structure (fallback from database defaults: basic 35%, hra 50%, conveyance 10%, pf 12%, pt 200)
+  const defaultStructure = {
+    id: 0,
+    name: 'Default Structure',
+    basicPercent: 35,
+    hraPercent: 50,
+    conveyancePercent: 10,
+    pfPercent: 12,
+    ptAmount: 200,
+    healthInsurance: 500,
+  };
+
+  // Use employee's salary structure if embedded, otherwise use default
+  const salaryStructure = (salaryInfo as any)?.structure || defaultStructure;
+
+  const monthlyCTC =
+    salaryInfo?.monthlyCTC ??
+    ((salaryInfo as any)?.annualCTC
+      ? (salaryInfo as any).annualCTC / 12
+      : 0);
+
+  const computedBasic = monthlyCTC * (salaryStructure.basicPercent / 100);
+  const computedHra = computedBasic * (salaryStructure.hraPercent / 100);
+  const computedConveyance = monthlyCTC * (salaryStructure.conveyancePercent / 100);
+  const computedPf = computedBasic * (salaryStructure.pfPercent / 100);
+  const computedPt = salaryStructure.ptAmount;
+  const computedDeductions = computedPf + computedPt;
+
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
@@ -112,7 +140,7 @@ const Payroll = () => {
                         </p>
                         <h2 className="text-3xl font-bold mt-1">
                           {currentPayroll 
-                            ? `$${currentPayroll.netSalary?.toLocaleString() || '0.00'}`
+                            ? `₹${currentPayroll.netSalary?.toLocaleString() || '0'}`
                             : loadingDetails 
                               ? 'Loading...'
                               : salaryInfo?.annualCTC 
@@ -165,10 +193,12 @@ const Payroll = () => {
                     </div>
                     <p className="text-xs text-slate-500">Basic Pay</p>
                     <p className="text-lg font-bold text-slate-900">
-                        {payrolls.length === 0 && salaryInfo ? (
-                            `₹${(salaryInfo.monthlyCTC / 12)?.toLocaleString()}`
+                        {currentPayroll ? (
+                            `₹${currentPayroll.basic?.toLocaleString() || '0'}`
+                        ) : salaryInfo ? (
+                            `₹${computedBasic.toLocaleString()}`
                         ) : (
-                            `$${currentPayroll?.basic?.toLocaleString() || '0'}`
+                            '₹0'
                         )}
                     </p>
                 </CardContent>
@@ -180,10 +210,12 @@ const Payroll = () => {
                     </div>
                     <p className="text-xs text-slate-500">Gross Salary</p>
                     <p className="text-lg font-bold text-slate-900">
-                        {payrolls.length === 0 && salaryInfo ? (
-                            `₹${salaryInfo.monthlyCTC?.toLocaleString()}`
+                        {currentPayroll ? (
+                            `₹${currentPayroll.grossSalary?.toLocaleString() || '0'}`
+                        ) : salaryInfo ? (
+                            `₹${monthlyCTC.toLocaleString()}`
                         ) : (
-                            `$${currentPayroll?.grossSalary?.toLocaleString() || '0'}`
+                            '₹0'
                         )}
                     </p>
                 </CardContent>
@@ -195,10 +227,12 @@ const Payroll = () => {
                     </div>
                     <p className="text-xs text-slate-500">Deductions</p>
                     <p className="text-lg font-bold text-slate-900">
-                        {payrolls.length === 0 ? (
-                            '₹0'
+                        {currentPayroll ? (
+                            `-₹${currentPayroll.deductions?.toLocaleString() || '0'}`
+                        ) : salaryInfo ? (
+                            `-₹${computedDeductions.toLocaleString()}`
                         ) : (
-                            `-$${currentPayroll?.deductions?.toLocaleString() || '0'}`
+                            '₹0'
                         )}
                     </p>
                 </CardContent>
@@ -212,20 +246,32 @@ const Payroll = () => {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex justify-between p-3 bg-slate-50 rounded">
+                <span className="text-slate-600">Basic</span>
+                <span className="font-semibold">₹{currentPayroll.basic?.toLocaleString() || '0'}</span>
+              </div>
+              <div className="flex justify-between p-3 bg-slate-50 rounded">
                 <span className="text-slate-600">HRA</span>
-                <span className="font-semibold">${currentPayroll.hra?.toLocaleString()}</span>
+                <span className="font-semibold">₹{currentPayroll.hra?.toLocaleString() || '0'}</span>
+              </div>
+              <div className="flex justify-between p-3 bg-slate-50 rounded">
+                <span className="text-slate-600">Conveyance</span>
+                <span className="font-semibold">₹{(currentPayroll as any).conveyance?.toLocaleString() || '0'}</span>
+              </div>
+              <div className="flex justify-between p-3 bg-slate-50 rounded">
+                <span className="text-slate-600">Special Allowance</span>
+                <span className="font-semibold">₹{currentPayroll.specialAllowance?.toLocaleString() || '0'}</span>
               </div>
               <div className="flex justify-between p-3 bg-slate-50 rounded">
                 <span className="text-slate-600">PF</span>
-                <span className="font-semibold">-${currentPayroll.pf?.toLocaleString()}</span>
+                <span className="font-semibold">₹{currentPayroll.pf?.toLocaleString() || '0'}</span>
               </div>
               <div className="flex justify-between p-3 bg-slate-50 rounded">
                 <span className="text-slate-600">PT</span>
-                <span className="font-semibold">-${currentPayroll.pt?.toLocaleString()}</span>
+                <span className="font-semibold">₹{currentPayroll.pt?.toLocaleString() || '0'}</span>
               </div>
               <div className="flex justify-between p-3 bg-slate-50 rounded">
-                <span className="text-slate-600">Health Insurance</span>
-                <span className="font-semibold">${currentPayroll.healthInsurance?.toLocaleString()}</span>
+                <span className="text-slate-600">LOP Deduction</span>
+                <span className="font-semibold">₹{currentPayroll.leaveDeduction?.toLocaleString() || '0'}</span>
               </div>
               <div className="flex justify-between p-3 bg-slate-50 rounded">
                 <span className="text-slate-600">LOP Days</span>
@@ -247,7 +293,7 @@ const Payroll = () => {
                         {adj.name}
                       </span>
                       <span className="font-semibold">
-                        {adj.type === 'ALLOWANCE' ? '+' : '-'}${adj.amount?.toLocaleString()}
+                        {adj.type === 'ALLOWANCE' ? '+' : '-'}₹{adj.amount?.toLocaleString()}
                       </span>
                     </div>
                   ))}
@@ -294,9 +340,9 @@ const Payroll = () => {
                             <TableCell className="font-medium text-slate-900">{p.month}/{p.year}</TableCell>
                             <TableCell className="text-xs text-slate-500">{p.workingDays}</TableCell>
                             <TableCell className="text-xs text-slate-500">{p.presentDays}</TableCell>
-                            <TableCell className="text-emerald-600 font-medium">+ ${p.grossSalary.toLocaleString()}</TableCell>
-                            <TableCell className="text-rose-600 font-medium">- ${p.deductions.toLocaleString()}</TableCell>
-                            <TableCell className="font-bold">${p.netSalary.toLocaleString()}</TableCell>
+                            <TableCell className="text-emerald-600 font-medium">+ ₹{p.grossSalary !== undefined && p.grossSalary !== null ? p.grossSalary.toLocaleString() : '0'}</TableCell>
+                            <TableCell className="text-rose-600 font-medium">- ₹{p.deductions !== undefined && p.deductions !== null ? p.deductions.toLocaleString() : '0'}</TableCell>
+                            <TableCell className="font-bold">₹{p.netSalary !== undefined && p.netSalary !== null ? p.netSalary.toLocaleString() : '0'}</TableCell>
                             <TableCell className="text-right">
                                 <Button
                                   size="xs"

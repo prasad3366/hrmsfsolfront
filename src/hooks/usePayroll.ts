@@ -24,39 +24,6 @@ export const usePayroll = () => {
     }
   }, []);
 
-  const addPayrollAdjustment = useCallback(
-    async (
-      payrollId: number,
-      name: string,
-      type: 'ALLOWANCE' | 'DEDUCTION',
-      amount: number
-    ) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await ApiService.addPayrollAdjustment(payrollId, name, type, amount);
-        
-        // Update current payroll if it matches
-        if (currentPayroll && currentPayroll.id === payrollId) {
-          if (!currentPayroll.others) {
-            currentPayroll.others = [];
-          }
-          currentPayroll.others.push(result);
-          setCurrentPayroll({ ...currentPayroll });
-        }
-        
-        return result;
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to add adjustment';
-        setError(errorMessage);
-        throw err;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [currentPayroll]
-  );
-
   const fetchPayroll = useCallback(async (employeeId: number) => {
     setLoading(true);
     setError(null);
@@ -72,6 +39,46 @@ export const usePayroll = () => {
       setLoading(false);
     }
   }, []);
+
+  const addPayrollAdjustment = useCallback(
+    async (
+      payrollId: number,
+      name: string,
+      type: 'ALLOWANCE' | 'DEDUCTION',
+      amount: number
+    ) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await ApiService.addPayrollAdjustment(payrollId, name, type, amount);
+
+        if (currentPayroll && currentPayroll.id === payrollId) {
+          const updatedPayroll = {
+            ...currentPayroll,
+            others: [...(currentPayroll.others || []), result],
+            grossSalary: (result as any).grossSalary ?? currentPayroll.grossSalary,
+            deductions: (result as any).deductions ?? currentPayroll.deductions,
+            netSalary: (result as any).netSalary ?? currentPayroll.netSalary,
+          };
+          setCurrentPayroll(updatedPayroll);
+          setPayrolls((prev) => prev.map((p) => (p.id === payrollId ? { ...p, ...updatedPayroll } : p)));
+        }
+
+        if (currentPayroll?.employeeId) {
+          await fetchPayroll(currentPayroll.employeeId);
+        }
+
+        return result;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to add adjustment';
+        setError(errorMessage);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [currentPayroll, fetchPayroll]
+  );
 
   const clearError = useCallback(() => {
     setError(null);

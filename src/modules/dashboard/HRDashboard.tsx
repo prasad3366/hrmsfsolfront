@@ -485,7 +485,7 @@ const HRDashboard = () => {
             </button>
             <button
               type="button"
-              onClick={() => window.open('https://palateofferletter.vercel.app/', '_blank')}
+              onClick={() => window.open('https://palateoffer.vercel.app/', '_blank')}
               className="flex flex-col items-center justify-center p-4 rounded-lg bg-pink-50 hover:bg-pink-100 text-pink-700 transition-colors border border-pink-200">
                 <Briefcase size={20} className="mb-2" strokeWidth={1.5} />
                 <span className="text-xs font-semibold text-center">Offer Generate</span>
