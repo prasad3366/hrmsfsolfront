@@ -33,7 +33,7 @@ export interface AttendanceRecord {
 export interface LeaveRequest {
   id: string;
   employeeId: string;
-  type: 'Sick' | 'Casual' | 'Earned' | 'Maternity';
+  type: 'Casual Leave' | 'Sick Leave' | 'Maternity Leave';
   startDate: string;
   endDate: string;
   reason: string;

@@ -13,6 +13,7 @@ import ApiService from '../../services/api';
 import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeModal';
 import CreateHolidayModal from '../../components/holidays/CreateHolidayModal';
 import { useWfh } from '../../hooks/useWfh';
+import { useHolidays } from '../../hooks/useHolidays';
 import { useNotifications } from '../../context/NotificationContext';
 import { WfhApprovalList } from '../../components/wfh/WfhApprovalList';
 import { usePayroll } from '../../hooks/usePayroll';
@@ -84,7 +85,17 @@ const AdminDashboard = () => {
   };
 
   const { addNotification } = useNotifications();
+  const { createHoliday, isSubmitting: isHolidaySubmitting } = useHolidays();
   const { payrolls: allPayrolls, fetchPayroll, loading: isPayrollLoading } = usePayroll();
+
+  const handleHolidayCreated = async (data: any) => {
+    try {
+      await createHoliday(data);
+      setIsCreateHolidayOpen(false);
+    } catch (error) {
+      console.error('Holiday creation failed', error);
+    }
+  };
 
   useEffect(() => {
     fetchAllWfhRequests();
@@ -432,6 +443,8 @@ const AdminDashboard = () => {
     <CreateHolidayModal
       isOpen={isCreateHolidayOpen}
       onClose={() => setIsCreateHolidayOpen(false)}
+      onSubmit={handleHolidayCreated}
+      isSubmitting={isHolidaySubmitting}
     />
   </div>
 );

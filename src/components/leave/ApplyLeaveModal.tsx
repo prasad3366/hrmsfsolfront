@@ -63,10 +63,7 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
               >
                 <option value="1">Casual Leave</option>
                 <option value="2">Sick Leave</option>
-                <option value="3">Privilege Leave</option>
-                <option value="4">Comp Off</option>
-                <option value="5">Maternity Leave</option>
-                <option value="6">Paternity Leave</option>
+                <option value="3">Maternity Leave</option>
               </select>
             </div>
 

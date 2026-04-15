@@ -259,6 +259,8 @@ const HRDashboard = () => {
     }
   }, [wfhRequests, addNotification]);
 
+
+
   const handleEmployeeCreated = (employee: any) => {
     setIsCreateEmployeeOpen(false);
   };
@@ -315,7 +317,7 @@ const HRDashboard = () => {
           delay={0}
         />
       </div>
-      <StatCard title="Open Positions" value="18" icon={Briefcase} trend="up" subtext="3 urgent" color="purple" delay={100} />
+      <StatCard title="Active WFH Approvals" value={String(activeWfhRequests.length)} icon={Briefcase} trend="up" subtext="currently approved" color="purple" delay={100} />
       <StatCard title="Pending Leaves" value={pendingLeaves.length} icon={Clock} trend="down" subtext="awaiting review" color="orange" delay={200} />
       <StatCard title="Attendance Today" value="92%" icon={CheckCircle} trend="up" subtext="8% up" color="green" delay={300} />
     </div>
@@ -358,11 +360,11 @@ const HRDashboard = () => {
                   <Tooltip 
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', backgroundColor: '#fff' }}
                     labelStyle={{ color: '#000' }}
-                    formatter={(value: any, name: string, props: any) => {
+                    formatter={(value: any, name?: string, props?: any) => {
                       if (name === 'duration') {
                         return [`${value}h total`, 'Work Duration'];
                       }
-                      return [value, name];
+                      return [value, name || ''];
                     }}
                     content={(props: any) => {
                       const { active, payload, label } = props;
@@ -495,10 +497,6 @@ const HRDashboard = () => {
               className="flex flex-col items-center justify-center p-4 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 transition-colors border border-orange-200">
                 <Clock size={20} className="mb-2" strokeWidth={1.5} />
                 <span className="text-xs font-semibold text-center">Create Holidays</span>
-            </button>
-            <button className="flex flex-col items-center justify-center p-4 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors border border-emerald-200">
-                <Calendar size={20} className="mb-2" strokeWidth={1.5} />
-                <span className="text-xs font-semibold text-center">View Reports</span>
             </button>
         </CardContent>
       </Card>

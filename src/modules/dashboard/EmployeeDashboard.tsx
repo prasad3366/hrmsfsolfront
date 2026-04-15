@@ -143,13 +143,20 @@ export default function EmployeeDashboard() {
 
   // Calculate leave balance
   const totalLeaveBalance = useMemo(() => {
-    return myLeaveBalance.reduce((total, leaveType) => total + (leaveType.balance || 0), 0);
+    return myLeaveBalance.reduce((total, leaveType) => total + (leaveType.remaining || 0), 0);
   }, [myLeaveBalance]);
 
   // Get latest payslip
   const latestPayslip = useMemo(() => {
     if (payrolls.length === 0) return null;
-    return payrolls.sort((a, b) => new Date(b.payPeriodEnd).getTime() - new Date(a.payPeriodEnd).getTime())[0];
+    // Sort by year, then month, then createdAt as fallback
+    return payrolls
+      .slice()
+      .sort((a, b) => {
+        if (b.year !== a.year) return b.year - a.year;
+        if (b.month !== a.month) return b.month - a.month;
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      })[0];
   }, [payrolls]);
 
   // Calculate pending requests
@@ -225,8 +232,8 @@ export default function EmployeeDashboard() {
 
           <MetricCard
             title="Latest Payslip"
-            value={isPayrollLoading ? '...' : latestPayslip ? `₹${latestPayslip.netPay?.toLocaleString() || '0'}` : 'No data'}
-            subtext={latestPayslip ? `Net pay - ${new Date(latestPayslip.payPeriodEnd).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}` : 'No payslip available'}
+            value={isPayrollLoading ? '...' : latestPayslip ? `₹${latestPayslip.netSalary?.toLocaleString() || '0'}` : 'No data'}
+            subtext={latestPayslip ? `Net pay - ${latestPayslip.month && latestPayslip.year ? `${new Date(latestPayslip.year, latestPayslip.month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}` : 'No payslip available'}` : 'No payslip available'}
             icon={FileText}
           />
 
@@ -374,7 +381,7 @@ export default function EmployeeDashboard() {
                 <Button
                   onClick={() => setIsPunchModalOpen(true)}
                   className="w-full"
-                  variant={isPunchedIn ? 'default' : todayRecord?.hasPunchedOut ? 'secondary' : 'default'}
+                  variant={isPunchedIn ? 'primary' : todayRecord?.hasPunchedOut ? 'secondary' : 'primary'}
                 >
                   {!todayRecord?.hasPunchedIn
                     ? 'Punch In'

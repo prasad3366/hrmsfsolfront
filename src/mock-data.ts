@@ -82,9 +82,9 @@ export const MOCK_ATTENDANCE: AttendanceRecord[] = [
 
 // Mock Leaves
 export const MOCK_LEAVES: LeaveRequest[] = [
-  { id: 'l1', employeeId: '4', type: 'Sick', startDate: '2023-10-23', endDate: '2023-10-23', reason: 'Viral Fever', status: 'Approved' },
-  { id: 'l2', employeeId: '4', type: 'Casual', startDate: '2023-11-10', endDate: '2023-11-12', reason: 'Family function', status: 'Pending' },
-  { id: 'l3', employeeId: '5', type: 'Earned', startDate: '2023-12-01', endDate: '2023-12-10', reason: 'Vacation', status: 'Approved' },
+  { id: 'l1', employeeId: '4', type: 'Sick Leave', startDate: '2023-10-23', endDate: '2023-10-23', reason: 'Viral Fever', status: 'Approved' },
+  { id: 'l2', employeeId: '4', type: 'Casual Leave', startDate: '2023-11-10', endDate: '2023-11-12', reason: 'Family function', status: 'Pending' },
+  { id: 'l3', employeeId: '5', type: 'Maternity Leave', startDate: '2023-12-01', endDate: '2023-12-10', reason: 'Maternity', status: 'Approved' },
 ];
 
 // Mock Payroll
