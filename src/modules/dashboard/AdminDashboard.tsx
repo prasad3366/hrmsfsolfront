@@ -320,7 +320,7 @@ const AdminDashboard = () => {
 
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="h-[280px] w-full">
+          <div className="h-[280px] w-full min-h-[220px] min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={adminChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <defs>

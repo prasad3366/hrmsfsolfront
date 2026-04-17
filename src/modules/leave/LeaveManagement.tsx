@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
 import { Plus, Calendar, Clock, AlertCircle } from 'lucide-react';
 import { useLeave } from '../../hooks/useLeave';
@@ -42,7 +41,6 @@ const LeaveBalanceCard = ({ type, total, used, color, ...props }: { type: string
 
 const LeaveManagement = () => {
   const { user } = useAuth();
-  const location = useLocation();
   const {
     myLeaves,
     myLeaveBalance,
@@ -109,6 +107,8 @@ const LeaveManagement = () => {
     try {
       await applyLeave(dto);
       setIsApplyModalOpen(false);
+      // Refresh leave balance after applying for leave
+      fetchMyLeaveBalance(financialYearStart);
     } catch (err) {
       // Error is handled by the hook
     }
@@ -120,6 +120,8 @@ const LeaveManagement = () => {
       setApproveRejectModal({ ...approveRejectModal, isOpen: false });
       // Refresh pending leaves
       fetchPendingLeaves();
+      // Refresh leave balance in case it affects the current user's balance
+      fetchMyLeaveBalance(financialYearStart);
     } catch (err) {
       // Error is handled by the hook
     }
@@ -131,6 +133,8 @@ const LeaveManagement = () => {
       setApproveRejectModal({ ...approveRejectModal, isOpen: false });
       // Refresh pending leaves
       fetchPendingLeaves();
+      // Refresh leave balance in case it affects the current user's balance
+      fetchMyLeaveBalance(financialYearStart);
     } catch (err) {
       // Error is handled by the hook
     }
@@ -153,15 +157,6 @@ const LeaveManagement = () => {
       },
     });
   };
-
-  useEffect(() => {
-    if (location.hash === '#pending') {
-      const target = document.getElementById('pending-requests');
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }
-  }, [location.hash]);
 
   const openRejectModal = (leave: any) => {
     const employeeName = leave.employee
@@ -239,7 +234,7 @@ const LeaveManagement = () => {
 
       {(user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER') && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card id="pending-requests" className="lg:col-span-2" hoverEffect>
+          <Card className="lg:col-span-2" hoverEffect>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-base">Pending Leave Requests</CardTitle>
               </CardHeader>

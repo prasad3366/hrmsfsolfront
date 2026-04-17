@@ -28,7 +28,6 @@ const MetricCard = ({
   trend,
   trendUp = true,
   accent = false, // for pending items highlight
-  onClick,
 }: {
   title: string;
   value: string | number;
@@ -37,13 +36,9 @@ const MetricCard = ({
   trend?: string;
   trendUp?: boolean;
   accent?: boolean;
-  onClick?: () => void;
 }) => {
   return (
-    <Card
-      onClick={onClick}
-      className={`border border-gray-200 hover:border-gray-300 transition-colors shadow-sm ${onClick ? 'cursor-pointer' : ''}`}
-    >
+    <Card className="border border-gray-200 hover:border-gray-300 transition-colors shadow-sm">
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div>
@@ -132,7 +127,7 @@ export default function EmployeeDashboard() {
   const today = new Date();
   const activeMyWfhRequests = myWfhRequests.filter(req => new Date(req.endDate) >= today);
   const { myHolidays, fetchMyHolidays } = useHolidays();
-  const { myLeaves, myLeaveBalance, fetchMyLeaveBalance, fetchMyLeaveHistory, isLoading: isLeaveLoading } = useLeave();
+  const { myLeaveBalance, fetchMyLeaveBalance, isLoading: isLeaveLoading } = useLeave();
   const { payrolls, fetchPayroll, loading: isPayrollLoading } = usePayroll();
   const { assets: myAssets, isLoading: isAssetsLoading, fetchMyAssets } = useAssets();
 
@@ -140,12 +135,11 @@ export default function EmployeeDashboard() {
     fetchMyWfhRequests();
     fetchMyHolidays();
     fetchMyLeaveBalance(new Date().getFullYear());
-    fetchMyLeaveHistory();
     fetchMyAssets();
     if (user?.employeeId) {
       fetchPayroll(user.employeeId);
     }
-  }, [user?.employeeId, fetchMyLeaveHistory]);
+  }, [user?.employeeId]);
 
   // Calculate leave balance for only Casual and Sick leaves
   const totalLeaveBalance = useMemo(() => {
@@ -173,9 +167,9 @@ export default function EmployeeDashboard() {
   // Calculate pending requests
   const pendingRequests = useMemo(() => {
     const pendingWfh = myWfhRequests.filter(req => req.status === 'PENDING').length;
-    const pendingLeave = myLeaves.filter((leave) => leave.status === 'PENDING').length;
-    return pendingWfh + pendingLeave;
-  }, [myLeaves, myWfhRequests]);
+    // Note: Leave requests would need to be fetched separately if needed
+    return pendingWfh; // For now, just WFH requests
+  }, [myWfhRequests]);
 
   // Attended records in the last 31 days
   const recentAttendance = useMemo(() => {
@@ -230,7 +224,6 @@ export default function EmployeeDashboard() {
             value={isLeaveLoading ? '...' : `${totalLeaveBalance} days`}
             subtext="Casual + Sick remaining"
             icon={Calendar}
-            onClick={() => navigate('/leave')}
           />
 
           <MetricCard
@@ -247,7 +240,6 @@ export default function EmployeeDashboard() {
             value={isPayrollLoading ? '...' : latestPayslip ? `₹${latestPayslip.netSalary?.toLocaleString() || '0'}` : 'No data'}
             subtext={latestPayslip ? `Net pay - ${latestPayslip.month && latestPayslip.year ? `${new Date(latestPayslip.year, latestPayslip.month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}` : 'No payslip available'}` : 'No payslip available'}
             icon={FileText}
-            onClick={() => navigate('/payroll')}
           />
 
           <MetricCard
@@ -256,7 +248,6 @@ export default function EmployeeDashboard() {
             subtext="Leave + WFH awaiting approval"
             icon={AlertCircle}
             accent={true} // makes number red if > 0
-            onClick={() => navigate('/leave')}
           />
         </div>
 
@@ -289,7 +280,7 @@ export default function EmployeeDashboard() {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="h-80">
+              <CardContent className="h-80 min-h-[220px] min-w-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData.length > 0 ? chartData : [{ day: 'No data', hours: 0 }]}>
                     <defs>

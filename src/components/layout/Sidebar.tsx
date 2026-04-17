@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, CalendarCheck, FileText, 
   DollarSign, Briefcase, TrendingUp, Monitor, 
   File, HelpCircle, GraduationCap, Megaphone, 
-  BarChart2, Settings, LogOut 
+  BarChart2, Settings, LogOut, UserCheck
 } from 'lucide-react';
 import { cn } from '../ui/components';
 
@@ -30,6 +30,7 @@ const Sidebar = () => {
       { name: 'Attendance', path: '/attendance', icon: CalendarCheck },
       { name: 'Leave', path: '/leave', icon: FileText },
       { name: 'Payroll', path: '/payroll', icon: DollarSign },
+      { name: 'Team', path: '/team', icon: UserCheck },
       { name: 'Documents', path: '/documents', icon: File },
       { name: 'Helpdesk', path: '/helpdesk', icon: HelpCircle },
       { name: 'Training', path: '/training', icon: GraduationCap },

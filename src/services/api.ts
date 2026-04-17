@@ -329,6 +329,48 @@ export interface SalaryStructure {
   createdAt: string;
 }
 
+// =========== TEAM TYPES ===========
+
+export interface TeamMember {
+  id?: number;
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  empCode?: string;
+  designation?: string;
+  department?: string;
+}
+
+export interface TeamManager {
+  id?: number;
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  empCode?: string;
+}
+
+export interface Team {
+  id: number;
+  name: string;
+  manager?: TeamManager | string;
+  members?: TeamMember[];
+  membersCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateTeamDto {
+  name: string;
+  managerId: string; // empCode of the manager
+  employeeIds?: number[];
+}
+
+export interface AddMembersDto {
+  employeeIds: number[];
+}
+
 class ApiService {
   private static instance: ApiService;
 
@@ -1692,6 +1734,131 @@ class ApiService {
       return await response.json();
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to create salary structure');
+    }
+  }
+
+  // =========== TEAM ENDPOINTS ===========
+
+  async createTeam(team: CreateTeamDto): Promise<Team> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/teams`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(team),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to create team' }));
+        throw new Error(error.message || 'Failed to create team');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to create team');
+    }
+  }
+
+  async addMembers(teamId: number, members: AddMembersDto): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/teams/${teamId}/members`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(members),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to add members' }));
+        throw new Error(error.message || 'Failed to add members');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to add members');
+    }
+  }
+
+  async getAllTeams(): Promise<Team[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/teams`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to fetch teams' }));
+        throw new Error(errorData.message || `Server error: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch teams');
+    }
+  }
+
+  async removeTeamMember(teamId: number | string, employeeId: number): Promise<{ message: string }> {
+    try {
+      const id = typeof teamId === 'string' && teamId.includes(':') 
+        ? teamId.split(':')[0] 
+        : teamId.toString();
+      const response = await fetch(`${API_BASE_URL}/teams/${id}/members/${employeeId}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to remove member' }));
+        throw new Error(error.message || 'Failed to remove member');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to remove member');
+    }
+  }
+
+  async deleteTeam(teamId: number | string): Promise<{ message: string }> {
+    try {
+      const id = typeof teamId === 'string' && teamId.includes(':') 
+        ? teamId.split(':')[0] 
+        : teamId.toString();
+      const url = `${API_BASE_URL}/teams/${id}`;
+      console.log('🗑️ [ApiService.deleteTeam] Deleting team with URL:', url);
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to delete team' }));
+        throw new Error(error.message || 'Failed to delete team');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to delete team');
+    }
+  }
+
+  async getMyTeam(): Promise<Team | Team[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/teams/my-team`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          return [];
+        }
+        const errorData = await response.json().catch(() => ({ message: 'Failed to fetch my team' }));
+        throw new Error(errorData.message || `Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      // Handle both array and single object responses for backwards compatibility
+      return Array.isArray(data) ? data : (data ? [data] : []);
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch my team');
     }
   }
 }

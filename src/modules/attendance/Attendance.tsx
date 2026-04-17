@@ -118,8 +118,8 @@ const Attendance = () => {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        userAttendance.map((record) => (
-                          <TableRow key={record.id}>
+                        userAttendance.map((record, index) => (
+                          <TableRow key={record.id ?? `${record.date}-${index}`}>
                             <TableCell className="font-medium">{new Date(record.date).toLocaleDateString()}</TableCell>
                             <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                             <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>

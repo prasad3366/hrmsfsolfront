@@ -236,7 +236,7 @@ const ManagerDashboard = () => {
             <Button size="xs" variant="outline">View Tasks</Button>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="h-[280px] w-full">
+          <div className="h-[280px] w-full min-h-[220px] min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={taskData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
@@ -260,7 +260,7 @@ const ManagerDashboard = () => {
             <Button size="xs" variant="outline">Details</Button>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="h-[280px] w-full">
+          <div className="h-[280px] w-full min-h-[220px] min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={performanceData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />

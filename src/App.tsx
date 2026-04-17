@@ -10,6 +10,7 @@ import EmployeeProfile from './modules/employees/EmployeeProfile';
 import Attendance from './modules/attendance/Attendance';
 import LeaveManagement from './modules/leave/LeaveManagement';
 import Payroll from './modules/payroll/Payroll';
+import TeamManagement from './modules/team/Team';
 import Recruitment from './modules/recruitment/Recruitment';
 import Assets from './modules/assets/Assets';
 import Documents from './modules/documents/Documents';
@@ -83,6 +84,12 @@ const AppRoutes = () => {
         <Route path="payroll" element={
           <ProtectedRoute>
             <Payroll />
+          </ProtectedRoute>
+        } />
+
+        <Route path="team" element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'HR', 'MANAGER']}>
+            <TeamManagement />
           </ProtectedRoute>
         } />
 
