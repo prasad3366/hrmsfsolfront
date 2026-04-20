@@ -45,8 +45,8 @@ const Login = () => {
       const result = await login(email, password);
       
       if (result.success) {
-        // Navigate to dashboard
-        navigate('/dashboard');
+        // Navigate to dashboard and replace login entry in history
+        navigate('/dashboard', { replace: true });
       } else {
         setError(result.message || 'Login failed. Please try again.');
       }
