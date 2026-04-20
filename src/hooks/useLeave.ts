@@ -157,20 +157,43 @@ export const useLeave = () => {
     }
   }, []);
 
+  const normalizeLeaveAllocations = useCallback((balances: LeaveType[]): LeaveType[] => {
+    const defaultAllocation: Record<string, number> = {
+      'casual leave': 10,
+      'sick leave': 8,
+      'maternity leave': 182,
+    };
+
+    return balances.map((balance) => {
+      const normalizedType = (balance.leaveType || '').toLowerCase();
+      const defaultAllocated = defaultAllocation[normalizedType];
+
+      if (defaultAllocated !== undefined && (balance.used || 0) === 0 && balance.allocated !== defaultAllocated) {
+        return {
+          ...balance,
+          allocated: defaultAllocated,
+          remaining: defaultAllocated,
+        };
+      }
+
+      return balance;
+    });
+  }, []);
+
   // Fetch my leave balance
   const fetchMyLeaveBalance = useCallback(async (yearStart: number) => {
     setIsLoading(true);
     setError(null);
     try {
       const data = await api.getSelfLeaveBalance(yearStart);
-      setMyLeaveBalance(data);
+      setMyLeaveBalance(normalizeLeaveAllocations(data));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch your leave balance';
       setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [normalizeLeaveAllocations]);
 
   // Fetch monthly leaves
   const fetchMonthlyLeaves = useCallback(async (month: number, year: number) => {
@@ -184,6 +207,24 @@ export const useLeave = () => {
       setError(errorMessage);
     } finally {
       setIsLoading(false);
+    }
+  }, []);
+
+  // Request carry forward leaves
+  const requestCarryForward = useCallback(async (leaveTypeId: number, yearStart: number) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await api.requestCarryForward(leaveTypeId, yearStart);
+      setSuccess(result.message || 'Carry forward requested successfully');
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to request carry forward';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setIsSubmitting(false);
     }
   }, []);
 
@@ -210,5 +251,6 @@ export const useLeave = () => {
     fetchLeaveBalance,
     fetchMyLeaveBalance,
     fetchMonthlyLeaves,
+    requestCarryForward,
   };
 };

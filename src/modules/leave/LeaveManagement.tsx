@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
-import { Plus, Calendar, Clock, AlertCircle } from 'lucide-react';
+import { Plus, Calendar, Clock, AlertCircle, FileText, Gift } from 'lucide-react';
 import { useLeave } from '../../hooks/useLeave';
 import { useAuth } from '../../context/AuthContext';
 import ApplyLeaveModal from '../../components/leave/ApplyLeaveModal';
 import ApproveRejectLeaveModal from '../../components/leave/ApproveRejectLeaveModal';
+import MedicalCertificateModal from '../../components/leave/MedicalCertificateModal';
+import CarryForwardModal from '../../components/leave/CarryForwardModal';
 import ApiService from '../../services/api';
 import { CreateLeaveDto } from '../../services/api';
 
@@ -52,12 +54,14 @@ const LeaveManagement = () => {
     applyLeave,
     approveLeave,
     rejectLeave,
+    requestCarryForward,
     fetchMyLeaveHistory,
     fetchMyLeaveBalance,
     fetchPendingLeaves,
   } = useLeave();
 
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
+  const [isCarryForwardModalOpen, setIsCarryForwardModalOpen] = useState(false);
   const [approveRejectModal, setApproveRejectModal] = useState({
     isOpen: false,
     leaveId: 0,
@@ -68,6 +72,15 @@ const LeaveManagement = () => {
       dates: '',
       reason: '',
     },
+  });
+
+  const [certificateModal, setCertificateModal] = useState({
+    isOpen: false,
+    certificate: null as string | null,
+    fileName: '',
+    employeeName: '',
+    leaveType: '',
+    dates: '',
   });
 
   const [employeeMap, setEmployeeMap] = useState<Record<number | string, string >>({});
@@ -176,6 +189,21 @@ const LeaveManagement = () => {
     });
   };
 
+  const openCertificateModal = (leave: any) => {
+    const employeeName = leave.employee
+      ? `${leave.employee.firstName || ''} ${leave.employee.lastName || ''}`.trim()
+      : 'Unknown';
+
+    setCertificateModal({
+      isOpen: true,
+      certificate: leave.medicalCertificate || null,
+      fileName: leave.medicalCertificateFileName || 'certificate',
+      employeeName,
+      leaveType: leave.leaveType?.name || 'Leave',
+      dates: `${new Date(leave.startDate).toLocaleDateString()} to ${new Date(leave.endDate).toLocaleDateString()}`,
+    });
+  };
+
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'APPROVED':
@@ -209,9 +237,18 @@ const LeaveManagement = () => {
           <h1 className="text-2xl font-bold text-slate-900">Leave Management</h1>
           <p className="text-slate-500 text-sm">Track balances and manage requests</p>
         </div>
-        <Button className="gap-2" onClick={() => setIsApplyModalOpen(true)}>
+        <div className="flex gap-3 flex-col sm:flex-row w-full sm:w-auto">
+          <Button className="gap-2" onClick={() => setIsApplyModalOpen(true)}>
             <Plus size={16} /> Apply Leave
-        </Button>
+          </Button>
+          <Button 
+            variant="secondary" 
+            className="gap-2" 
+            onClick={() => setIsCarryForwardModalOpen(true)}
+          >
+            <Gift size={16} /> Carry Forward
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -266,6 +303,16 @@ const LeaveManagement = () => {
                                     <TableCell className="text-xs text-slate-500 max-w-[120px] truncate">{leave.reason || 'No reason provided'}</TableCell>
                                     <TableCell className="min-w-[140px] sm:min-w-[180px]">
                                         <div className="flex flex-col gap-1 sm:flex-row sm:gap-2">
+                                            {leave.medicalCertificate && (
+                                              <Button 
+                                                size="sm" 
+                                                variant="outline" 
+                                                className="text-blue-600 hover:bg-blue-50 border-blue-200 text-xs px-2 py-1 whitespace-nowrap gap-1"
+                                                onClick={() => openCertificateModal(leave)}
+                                              >
+                                                <FileText size={14} /> Certificate
+                                              </Button>
+                                            )}
                                             {leave.status === 'PENDING' ? (
                                               <>
                                                 <Button 
@@ -355,9 +402,21 @@ const LeaveManagement = () => {
                             <TableCell>{leave.totalDays}</TableCell>
                             <TableCell className="text-xs text-slate-500">{leave.reason}</TableCell>
                             <TableCell>
-                                <Badge variant={getStatusBadgeVariant(leave.status)}>
-                                    {leave.status}
-                                </Badge>
+                                <div className="flex items-center gap-2">
+                                  {leave.medicalCertificate && (
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      className="text-blue-600 hover:bg-blue-50 border-blue-200 text-xs px-2 py-1 gap-1"
+                                      onClick={() => openCertificateModal(leave)}
+                                    >
+                                      <FileText size={14} />
+                                    </Button>
+                                  )}
+                                  <Badge variant={getStatusBadgeVariant(leave.status)}>
+                                      {leave.status}
+                                  </Badge>
+                                </div>
                             </TableCell>
                         </TableRow>
                     ))}
@@ -383,9 +442,35 @@ const LeaveManagement = () => {
         onClose={() => setApproveRejectModal({ ...approveRejectModal, isOpen: false })}
         onApprove={() => handleApproveLeave(approveRejectModal.leaveId)}
         onReject={(remarks) => handleRejectLeave(approveRejectModal.leaveId, remarks)}
+        actionType={approveRejectModal.action}
         leaveDetails={approveRejectModal.leaveDetails}
         isSubmitting={isSubmitting}
-        actionType={approveRejectModal.action}
+      />
+
+      <MedicalCertificateModal
+        isOpen={certificateModal.isOpen}
+        onClose={() => setCertificateModal({ ...certificateModal, isOpen: false })}
+        certificate={certificateModal.certificate}
+        fileName={certificateModal.fileName}
+        employeeName={certificateModal.employeeName}
+        leaveType={certificateModal.leaveType}
+        dates={certificateModal.dates}
+      />
+
+      <CarryForwardModal
+        isOpen={isCarryForwardModalOpen}
+        onClose={() => setIsCarryForwardModalOpen(false)}
+        onSubmit={async (leaveTypeId: number, yearStart: number) => {
+          try {
+            await requestCarryForward(leaveTypeId, yearStart);
+            // Refresh leave balance after carry forward
+            await fetchMyLeaveBalance(yearStart + 1);
+          } catch (err) {
+            // Error is handled by the hook
+          }
+        }}
+        isSubmitting={isSubmitting}
+        leaveBalances={myLeaveBalance}
       />
     </div>
   );

@@ -182,6 +182,9 @@ export interface CreateLeaveDto {
   endDate: string | Date;
   durationType?: 'FULL_DAY' | 'HALF_DAY' | 'HALF_DAY_FIRST' | 'HALF_DAY_SECOND';
   reason: string;
+  medicalCertificate?: string | null; // Base64 encoded file or file URL
+  medicalCertificateFileName?: string;
+  isEmergency?: boolean;
 }
 
 export interface Leave {
@@ -196,6 +199,9 @@ export interface Leave {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   remarks?: string;
   yearStart: number;
+  medicalCertificate?: string | null;
+  medicalCertificateFileName?: string;
+  isEmergency?: boolean;
   createdAt: string;
   updatedAt: string;
   employee?: {
@@ -758,6 +764,9 @@ class ApiService {
           endDate: leaveDto.endDate,
           durationType: leaveDto.durationType || 'FULL_DAY',
           reason: leaveDto.reason,
+          medicalCertificate: leaveDto.medicalCertificate || null,
+          medicalCertificateFileName: leaveDto.medicalCertificateFileName || null,
+          isEmergency: leaveDto.isEmergency || false,
         }),
       });
 
@@ -1859,6 +1868,32 @@ class ApiService {
       return Array.isArray(data) ? data : (data ? [data] : []);
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch my team');
+    }
+  }
+
+  // ================= CARRY FORWARD =================
+  async requestCarryForward(
+    leaveTypeId: number,
+    yearStart: number,
+  ): Promise<{ message: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/leaves/carry-forward/request`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({
+          leaveTypeId,
+          yearStart,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to request carry forward');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to request carry forward');
     }
   }
 }
