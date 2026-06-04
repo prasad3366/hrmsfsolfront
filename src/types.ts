@@ -40,6 +40,19 @@ export interface LeaveRequest {
   status: 'Pending' | 'Approved' | 'Rejected';
 }
 
+export interface HelpdeskTicket {
+  id: string;
+  requestedById: number;
+  requestedByName: string;
+  requestedByEmail: string;
+  requestedByRole: Role;
+  issue: string;
+  reason: string;
+  status: 'Pending' | 'Approved' | 'Resolved';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PayrollRecord {
   id: string;
   employeeId: string;

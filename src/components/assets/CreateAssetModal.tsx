@@ -95,8 +95,9 @@ export const CreateAssetModal = ({ isOpen, isLoading, onClose, onSubmit }: Creat
             )}
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Asset Name *</label>
+              <label htmlFor="assetName" className="block text-sm font-medium text-slate-700 mb-1">Asset Name *</label>
               <Input
+                id="assetName"
                 type="text"
                 name="name"
                 value={formData.name}
@@ -107,8 +108,9 @@ export const CreateAssetModal = ({ isOpen, isLoading, onClose, onSubmit }: Creat
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+              <label htmlFor="assetDescription" className="block text-sm font-medium text-slate-700 mb-1">Description</label>
               <textarea
+                id="assetDescription"
                 name="description"
                 value={formData.description}
                 onChange={handleChange}
@@ -119,11 +121,12 @@ export const CreateAssetModal = ({ isOpen, isLoading, onClose, onSubmit }: Creat
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Assign To Employee (Optional)</label>
+              <label htmlFor="assignToEmployee" className="block text-sm font-medium text-slate-700 mb-1">Assign To Employee (Optional)</label>
               {loadingEmployees ? (
                 <div className="p-3 text-sm text-slate-500">Loading employees...</div>
               ) : (
                 <select
+                  id="assignToEmployee"
                   name="assignedTo"
                   value={formData.assignedTo}
                   onChange={handleChange}

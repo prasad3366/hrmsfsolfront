@@ -26,7 +26,7 @@ export const AddPayrollAdjustmentModal: React.FC<AddPayrollAdjustmentModalProps>
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === 'amount' ? value : value,
+      [name]: value,
     }));
   };
 
@@ -37,7 +37,7 @@ export const AddPayrollAdjustmentModal: React.FC<AddPayrollAdjustmentModalProps>
         payrollId,
         formData.name,
         formData.type,
-        parseInt(formData.amount, 10)
+        Number.parseInt(formData.amount, 10)
       );
       
       // Reset form
@@ -49,8 +49,8 @@ export const AddPayrollAdjustmentModal: React.FC<AddPayrollAdjustmentModalProps>
       
       onSuccess?.();
       onClose();
-    } catch (err) {
-      // Error is handled in hook
+    } catch (error) {
+      console.error('Add payroll adjustment failed', error);
     }
   };
 

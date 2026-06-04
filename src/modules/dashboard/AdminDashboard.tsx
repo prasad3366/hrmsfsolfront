@@ -3,19 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
 import { 
   Users, DollarSign, Briefcase, Activity, UserPlus, 
-  Calendar, CheckCircle, Layers, ArrowUp, ArrowDown, MoreHorizontal, Clock
+  Calendar, CheckCircle, Layers, ArrowUp, ArrowDown, Clock
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
-import { MOCK_EMPLOYEES } from '../../mock-data';
 import ApiService from '../../services/api';
 import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeModal';
 import CreateHolidayModal from '../../components/holidays/CreateHolidayModal';
 import { useWfh } from '../../hooks/useWfh';
 import { useHolidays } from '../../hooks/useHolidays';
 import { useNotifications } from '../../context/NotificationContext';
-import { WfhApprovalList } from '../../components/wfh/WfhApprovalList';
 import { usePayroll } from '../../hooks/usePayroll';
 
 const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", delay = 0 }: any) => {
@@ -53,7 +51,7 @@ const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", de
                         <ArrowDown size={12} strokeWidth={3} /> {subtext}
                     </span>
                 )}
-                {!trend && <span className="text-slate-400">{subtext}</span>}
+                {trend == null && <span className="text-slate-400">{subtext}</span>}
                 {trend && <span className="text-slate-400 ml-2 text-xs">vs last month</span>}
             </div>
         </div>
@@ -73,7 +71,7 @@ const AdminDashboard = () => {
   const [recentJoiners, setRecentJoiners] = useState<any[]>([]);
   const [totalEmployees, setTotalEmployees] = useState<number | null>(null);
   const [newHiresCount, setNewHiresCount] = useState<number>(0);
-  const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
+  const { wfhRequests, fetchAllWfhRequests } = useWfh();
 
   const isEmployeeActive = (emp: any) => {
     const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
@@ -86,7 +84,7 @@ const AdminDashboard = () => {
 
   const { addNotification } = useNotifications();
   const { createHoliday, isSubmitting: isHolidaySubmitting } = useHolidays();
-  const { payrolls: allPayrolls, fetchPayroll, loading: isPayrollLoading } = usePayroll();
+  const { payrolls: allPayrolls } = usePayroll();
 
   const handleHolidayCreated = async (data: any) => {
     try {
@@ -106,7 +104,7 @@ const AdminDashboard = () => {
     let mounted = true;
     ApiService.getAllEmployees()
       .then((data) => {
-        if (!mounted) return;
+        if (mounted === false) return;
         const list = data || [];
         const activeEmployees = list.filter(isEmployeeActive);
         setTotalEmployees(activeEmployees.length);
@@ -157,7 +155,7 @@ const AdminDashboard = () => {
 
   // Calculate payroll cost and month-over-month trend
   const { totalPayrollCost, payrollTrend } = useMemo(() => {
-    if (!allPayrolls || allPayrolls.length === 0) {
+    if (allPayrolls == null || allPayrolls.length === 0) {
       return { totalPayrollCost: 0, payrollTrend: '0%' };
     }
 
@@ -196,7 +194,7 @@ const AdminDashboard = () => {
 
   // Calculate active projects (using approved WFH requests as active work arrangements)
   const { activeProjects, newProjects } = useMemo(() => {
-    if (!wfhRequests) return { activeProjects: 0, newProjects: 0 };
+    if (wfhRequests == null) return { activeProjects: 0, newProjects: 0 };
 
     const now = new Date();
     const approvedWfh = wfhRequests.filter(
@@ -273,7 +271,7 @@ const AdminDashboard = () => {
 
   // Calculate days since joining
   const calculateDaysSinceJoined = (createdAt?: string) => {
-    if (!createdAt) return 'Recently';
+    if (createdAt == null || createdAt === '') return 'Recently';
     const now = new Date();
     const joinDate = new Date(createdAt);
     const diffTime = Math.abs(now.getTime() - joinDate.getTime());
@@ -294,7 +292,12 @@ const AdminDashboard = () => {
   return (
   <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <div onClick={() => navigate('/employees')} role="button" tabIndex={0} className="cursor-pointer">
+      <div onClick={() => navigate('/employees')} role="button" tabIndex={0} onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          navigate('/employees');
+        }
+      }} className="cursor-pointer">
         <StatCard
           title="Total Employees"
           value={totalEmployees !== null ? String(totalEmployees.toLocaleString()) : '—'}

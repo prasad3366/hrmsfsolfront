@@ -28,7 +28,7 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
       setEmpLoading(true);
       ApiService.getAllEmployees()
         .then((data) => {
-          if (!mounted) return;
+          if (mounted === false) return;
           setEmployees(data || []);
         })
         .catch((err) => {
@@ -61,20 +61,20 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
     e.preventDefault();
     
     // Validate before submitting
-    const annualCTC = parseInt(formData.annualCTC, 10);
-    const structureId = parseInt(formData.structureId, 10);
+    const annualCTC = Number.parseInt(formData.annualCTC, 10);
+    const structureId = Number.parseInt(formData.structureId, 10);
 
     if (!formData.empCode) {
       setValidationError('Employee selection is required');
       return;
     }
 
-    if (!formData.annualCTC || isNaN(annualCTC) || annualCTC <= 0) {
+    if (!formData.annualCTC || Number.isNaN(annualCTC) || annualCTC <= 0) {
       setValidationError('Annual CTC must be a valid positive number');
       return;
     }
 
-    if (!formData.structureId || isNaN(structureId) || structureId <= 0) {
+    if (!formData.structureId || Number.isNaN(structureId) || structureId <= 0) {
       setValidationError('Salary Structure ID must be a valid positive number');
       return;
     }
@@ -106,7 +106,7 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
         onClose();
       }, 1500);
     } catch (err) {
-      // Error is handled in hook and displayed below
+      console.error('Failed to assign salary:', err);
     }
   };
 

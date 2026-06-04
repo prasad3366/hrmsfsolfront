@@ -10,21 +10,59 @@ import {
 import { 
   Edit, Briefcase, Package
 } from 'lucide-react';
+import { Employee } from '../../types';
 
-const isEmployeeActive = (emp: any) => {
-  const status = (emp?.status || emp?.user?.status || '').toString().toUpperCase();
+const INACTIVE_STATUS = new Set(['INACTIVE', 'TERMINATED']);
+
+const isEmployeeActive = (emp: any): boolean => {
+  const status = String(emp?.status || emp?.user?.status || '').toUpperCase();
   if (status === 'ACTIVE') return true;
-  if (status === 'INACTIVE' || status === 'TERMINATED') return false;
+  if (INACTIVE_STATUS.has(status)) return false;
   if (typeof emp?.user?.isActive === 'boolean') return emp.user.isActive;
   if (typeof emp?.isActive === 'boolean') return emp.isActive;
   return true;
 };
 
+const buildProfileInitialData = (employee: Employee) => ({
+  email: employee.user?.email ?? employee.email,
+  firstName: employee.firstName ?? '',
+  lastName: employee.lastName ?? '',
+  empCode: employee.empCode ?? '',
+  department: employee.department ?? '',
+  designation: employee.designation ?? '',
+  role: employee.user?.role ?? employee.role ?? 'EMPLOYEE',
+  employmentType: employee.employmentType,
+  status: employee.status,
+  sourceOfHire: employee.sourceOfHire,
+  dateOfJoining: employee.dateOfJoining ? new Date(employee.dateOfJoining).toISOString().split('T')[0] : '',
+  currentExperience: employee.currentExperience,
+  reportingManager: employee.reportingManager,
+  dateOfBirth: employee.dateOfBirth ? new Date(employee.dateOfBirth).toISOString().split('T')[0] : '',
+  age: employee.age,
+  gender: employee.gender,
+  currentAddress: employee.currentAddress,
+  permanentAddress: employee.permanentAddress,
+  pincode: employee.pincode,
+  city: employee.city,
+  maritalStatus: employee.maritalStatus,
+  phone: employee.phone,
+  personalMobile: employee.personalMobile,
+  panNumber: employee.panNumber,
+  aadharNumber: employee.aadharNumber,
+  pfNumber: employee.pfNumber,
+  uanNumber: employee.uanNumber,
+  bankAccountNumber: employee.bankAccountNumber,
+  bankName: employee.bankName,
+  ifscCode: employee.ifscCode,
+  dateOfExit: employee.dateOfExit ? new Date(employee.dateOfExit).toISOString().split('T')[0] : '',
+  isExperienced: employee.isExperienced,
+});
+
 const EmployeeProfile = () => {
     const { id } = useParams();
     const { user } = useAuth();
 
-    const [employee, setEmployee] = useState<any | null>(null);
+    const [employee, setEmployee] = useState<Employee | null>(null);
     const [assets, setAssets] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [assetsLoading, setAssetsLoading] = useState(false);
@@ -44,17 +82,17 @@ const EmployeeProfile = () => {
 
         ApiService.getEmployeeById(empId as string)
             .then((data) => {
-                if (!mounted) return;
+                if (mounted === false) return;
                 console.log('Employee data loaded:', data);
                 setEmployee(data);
             })
             .catch((err) => {
-                if (!mounted) return;
+                if (mounted === false) return;
                 console.error('Error loading employee profile:', err);
                 setError(err instanceof Error ? err.message : String(err));
             })
             .finally(() => {
-                if (!mounted) return;
+                if (mounted === false) return;
                 setLoading(false);
             });
 
@@ -72,16 +110,16 @@ const EmployeeProfile = () => {
 
         ApiService.getMyAssetsByUserId(employee.id)
             .then((data) => {
-                if (!mounted) return;
+                if (mounted === false) return;
                 setAssets(data || []);
             })
             .catch((err) => {
-                if (!mounted) return;
+                if (mounted === false) return;
                 console.error('Failed to load assets for employee:', err);
                 setAssets([]);
             })
             .finally(() => {
-                if (!mounted) return;
+                if (mounted === false) return;
                 setAssetsLoading(false);
             });
 
@@ -95,42 +133,7 @@ const EmployeeProfile = () => {
         setIsEditOpen(false);
     };
 
-    const profileInitialData = employee
-      ? {
-          email: employee.user?.email ?? employee.email,
-          firstName: employee.firstName ?? '',
-          lastName: employee.lastName ?? '',
-          empCode: employee.empCode ?? '',
-          department: employee.department ?? '',
-          designation: employee.designation ?? '',
-          role: employee.user?.role ?? employee.role ?? 'EMPLOYEE',
-          employmentType: employee.employmentType,
-          status: employee.status,
-          sourceOfHire: employee.sourceOfHire,
-          dateOfJoining: employee.dateOfJoining ? new Date(employee.dateOfJoining).toISOString().split('T')[0] : '',
-          currentExperience: employee.currentExperience,
-          reportingManager: employee.reportingManager,
-          dateOfBirth: employee.dateOfBirth ? new Date(employee.dateOfBirth).toISOString().split('T')[0] : '',
-          age: employee.age,
-          gender: employee.gender,
-          currentAddress: employee.currentAddress,
-          permanentAddress: employee.permanentAddress,
-          pincode: employee.pincode,
-          city: employee.city,
-          maritalStatus: employee.maritalStatus,
-          phone: employee.phone,
-          personalMobile: employee.personalMobile,
-          panNumber: employee.panNumber,
-          aadharNumber: employee.aadharNumber,
-          pfNumber: employee.pfNumber,
-          uanNumber: employee.uanNumber,
-          bankAccountNumber: employee.bankAccountNumber,
-          bankName: employee.bankName,
-          ifscCode: employee.ifscCode,
-          dateOfExit: employee.dateOfExit ? new Date(employee.dateOfExit).toISOString().split('T')[0] : '',
-          isExperienced: employee.isExperienced,
-        }
-      : undefined;
+    const profileInitialData = employee ? buildProfileInitialData(employee) : undefined;
 
     if (loading) {
         return (
@@ -344,19 +347,25 @@ const EmployeeProfile = () => {
                         <p className="text-sm text-slate-600 mt-1">{asset.description}</p>
                       )}
                       <p className="text-xs text-slate-500 mt-2">
-                        {asset.status === 'RETURNED' && asset.returnedAt 
-                          ? `Returned: ${new Date(asset.returnedAt).toLocaleDateString('en-US', {
+                        {(() => {
+                          if (asset.status === 'RETURNED' && asset.returnedAt) {
+                            return `Returned: ${new Date(asset.returnedAt).toLocaleDateString('en-US', {
                               month: 'short',
                               day: 'numeric',
                               year: 'numeric',
-                            })}`
-                          : `Assigned: ${asset.assignedAt 
-                              ? new Date(asset.assignedAt).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric',
-                                })
-                              : 'N/A'}`}
+                            })}`;
+                          }
+
+                          if (asset.assignedAt) {
+                            return `Assigned: ${new Date(asset.assignedAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}`;
+                          }
+
+                          return 'Assigned: N/A';
+                        })()}
                       </p>
                     </div>
                     {asset.status === 'RETURNED' ? (
@@ -364,9 +373,9 @@ const EmployeeProfile = () => {
                         Returned
                       </Badge>
                     ) : (
-                      <Badge variant="default" className="bg-emerald-100 text-emerald-800 border-none whitespace-nowrap">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5" />
-                        Assigned
+                      <Badge variant="default" className="bg-emerald-100 text-emerald-800 border-none inline-flex items-center whitespace-nowrap">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5 inline-block" />
+                        <span>Assigned</span>
                       </Badge>
                     )}
                   </div>

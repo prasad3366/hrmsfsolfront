@@ -1,25 +1,25 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
 import { 
-  Users, Briefcase, Calendar, CheckCircle, UserPlus, Clock, ArrowUp, ArrowDown, Trash2, DollarSign, ChevronLeft, ChevronRight
+  Users, Briefcase, Calendar, CheckCircle, UserPlus, Clock, ArrowUp, ArrowDown, Trash2, DollarSign, ChevronLeft, ChevronRight, AlertTriangle
 } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend
+import {
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line
 } from 'recharts';
-import { MOCK_EMPLOYEES } from '../../mock-data';
 import ApiService from '../../services/api';
 import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeModal';
 import CreateHolidayModal from '../../components/holidays/CreateHolidayModal';
 import { useWfh } from '../../hooks/useWfh';
 import { useHolidays } from '../../hooks/useHolidays';
 import { useNotifications } from '../../context/NotificationContext';
+import { useAuth } from '../../context/AuthContext';
 import { WfhApprovalList } from '../../components/wfh/WfhApprovalList';
 import { useAttendance } from '../../hooks/useAttendance';
 import { useLeave } from '../../hooks/useLeave';
+import { HelpdeskTicket } from '../../types';
 
-const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", delay = 0 }: any) => {
+const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", delay = 0, onClick }: any) => {
   const colors: Record<string, string> = {
     blue: "border-blue-200",
     green: "border-emerald-200",
@@ -36,8 +36,10 @@ const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", de
     rose: "bg-rose-100 text-rose-600",
   };
 
+  const cardClass = `border ${colors[color]} shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 animate-in fade-in slide-in-from-bottom-4 ${onClick ? 'cursor-pointer' : ''}`;
+
   return (
-    <Card className={`border ${colors[color]} shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 animate-in fade-in slide-in-from-bottom-4`} style={{ animationDelay: `${delay}ms` }} hoverEffect>
+    <Card className={cardClass} style={{ animationDelay: `${delay}ms` }} hoverEffect onClick={onClick}>
       <CardContent className="p-6 flex items-start justify-between">
         <div className="flex-1">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">{title}</p>
@@ -54,7 +56,7 @@ const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", de
                         <ArrowDown size={12} strokeWidth={3} /> {subtext}
                     </span>
                 )}
-                {!trend && <span className="text-slate-400">{subtext}</span>}
+                {trend == null && <span className="text-slate-400">{subtext}</span>}
             </div>
         </div>
         
@@ -66,44 +68,117 @@ const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", de
   );
 };
 
+// Helper functions to reduce complexity
+const isEmployeeActive = (emp: any): boolean => {
+  const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
+  if (status === 'ACTIVE') return true;
+  if (status === 'INACTIVE' || status === 'TERMINATED') return false;
+  if (typeof emp.user?.isActive === 'boolean') return emp.user.isActive;
+  if (typeof emp.isActive === 'boolean') return emp.isActive;
+  return true;
+};
+
+const filterActiveWfhRequests = (requests: any[]): any[] => {
+  const today = new Date();
+  return requests.filter(req => new Date(req.endDate) >= today);
+};
+
+const getLeaveReason = (leave: any) => {
+  if (leave == null) return 'No reason provided';
+  return (
+    leave.reason ||
+    leave.remarks ||
+    leave.comment ||
+    leave.description ||
+    leave.notes ||
+    'No reason provided'
+  );
+};
+
+const buildWorkDurationData = (currentWeekStart: Date, attendanceRecords: any[]) => {
+  const days = [];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(currentWeekStart);
+    date.setDate(date.getDate() + i);
+
+    const dayRecords = attendanceRecords.filter(record => {
+      const recordDate = new Date(record.date);
+      return recordDate.toDateString() === date.toDateString();
+    });
+
+    let totalDuration = 0;
+
+    if (dayRecords.length > 0) {
+      dayRecords.forEach(record => {
+        if (record.status === 'PRESENT' && record.punchIn && record.punchOut) {
+          const checkIn = new Date(record.punchIn);
+          const checkOut = new Date(record.punchOut);
+          const hoursWorked = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60);
+          totalDuration += hoursWorked;
+        } else if (record.status === 'PRESENT') {
+          totalDuration += 8;
+        }
+      });
+    }
+
+    const dateStr = `${date.getDate()}-${monthNames[date.getMonth()]}`;
+    days.push({
+      date: dateStr,
+      duration: Number.parseFloat(totalDuration.toFixed(2)),
+      count: dayRecords.length,
+    });
+  }
+
+  return days;
+};
+
+const getWeekStartDate = (): Date => {
+  const today = new Date();
+  const day = today.getDay();
+  const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(today.setDate(diff));
+};
+
+const WorkDurationTooltip = (props: any) => {
+  const { active, payload } = props;
+  if (active !== true || payload?.length === 0) return null;
+  const data = payload?.[0]?.payload;
+  if (data == null) return null;
+
+  return (
+    <div className="bg-white p-3 rounded-lg text-sm border border-slate-200 shadow-lg" style={{ minWidth: '200px' }}>
+      <p className="text-slate-900 font-semibold">{data.date}</p>
+      <p className="text-slate-700 mt-1">Total Hours: <span className="text-blue-600">{data.duration}h</span></p>
+      <p className="text-slate-700">Employees: <span className="text-blue-600">{data.count || 0}</span></p>
+    </div>
+  );
+};
+
 const HRDashboard = () => {
   const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [totalEmployees, setTotalEmployees] = useState<number | null>(null);
   const [newHiresCount, setNewHiresCount] = useState<number>(0);
   const [isCreateHolidayOpen, setIsCreateHolidayOpen] = useState(false);
-
-  const isEmployeeActive = (emp: any) => {
-    const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
-    if (status === 'ACTIVE') return true;
-    if (status === 'INACTIVE' || status === 'TERMINATED') return false;
-    if (typeof emp.user?.isActive === 'boolean') return emp.user.isActive;
-    if (typeof emp.isActive === 'boolean') return emp.isActive;
-    return true;
-  };
   const [attendanceTab, setAttendanceTab] = useState<'inside' | 'outside' | 'wfh'>('inside');
-  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
-    const today = new Date();
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is Sunday
-    return new Date(today.setDate(diff));
-  });
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getWeekStartDate);
+  
   const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
-
-  // Filter WFH requests to only show non-expired
-  const today = new Date();
-  const activeWfhRequests = wfhRequests.filter(req => new Date(req.endDate) >= today);
+  const activeWfhRequests = filterActiveWfhRequests(wfhRequests);
   const { holidays, isSubmitting: isHolidaySubmitting, fetchHolidaysByYear, createHoliday, deleteHoliday } = useHolidays();
   const { pendingLeaves, fetchPendingLeaves, approveLeave } = useLeave();
   const { addNotification } = useNotifications();
-  const { user } = useAuth();
   const { records: attendanceRecords, isLoading: isAttendanceLoading } = useAttendance({ scope: 'all' });
+  const [helpdeskTickets, setHelpdeskTickets] = useState<HelpdeskTicket[]>([]);
 
   // Track employees for name resolution
   const [employeeMap, setEmployeeMap] = useState<Record<string, string>>({});
 
   const getEmployeeDisplayName = (record: any) => {
-    if (!record) return 'Unknown';
+    if (record == null) return 'Unknown';
     if (record.employeeName) return record.employeeName;
     if (record.employee?.firstName || record.employee?.lastName) {
       const first = record.employee?.firstName || '';
@@ -122,7 +197,7 @@ const HRDashboard = () => {
   };
 
   const getLeaveReason = (leave: any) => {
-    if (!leave) return 'No reason provided';
+    if (leave == null) return 'No reason provided';
     return (
       leave.reason ||
       leave.remarks ||
@@ -133,49 +208,7 @@ const HRDashboard = () => {
     );
   };
 
-  // Calculate dynamic work duration data
-  const workDurationData = useMemo(() => {
-    const days = [];
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(currentWeekStart);
-      date.setDate(date.getDate() + i);
-      
-      // Get all attendance records for this specific day
-      const dayRecords = attendanceRecords.filter(record => {
-        const recordDate = new Date(record.date);
-        return recordDate.toDateString() === date.toDateString();
-      });
-      
-      // Calculate total work hours for the day
-      let totalDuration = 0;
-      
-      if (dayRecords.length > 0) {
-        dayRecords.forEach(record => {
-          // Only count PRESENT records
-          if (record.status === 'PRESENT' && record.punchIn && record.punchOut) {
-            const checkIn = new Date(record.punchIn);
-            const checkOut = new Date(record.punchOut);
-            const hoursWorked = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60);
-            totalDuration += hoursWorked;
-          } else if (record.status === 'PRESENT') {
-            // If no timeIn/timeOut but marked present, assume full day
-            totalDuration += 8;
-          }
-        });
-      }
-      
-      const dateStr = `${date.getDate()}-${monthNames[date.getMonth()]}`;
-      days.push({ 
-        date: dateStr, 
-        duration: parseFloat(totalDuration.toFixed(2)),
-        count: dayRecords.length 
-      });
-    }
-    
-    return days;
-  }, [currentWeekStart, attendanceRecords]);
+  const workDurationData = useMemo(() => buildWorkDurationData(currentWeekStart, attendanceRecords), [currentWeekStart, attendanceRecords]);
 
   const handlePreviousWeek = () => {
     setCurrentWeekStart(new Date(currentWeekStart.getTime() - 7 * 24 * 60 * 60 * 1000));
@@ -197,6 +230,47 @@ const HRDashboard = () => {
     fetchPendingLeaves();
   }, [fetchAllWfhRequests, fetchPendingLeaves]);
 
+  useEffect(() => {
+    const loadHelpdeskTickets = async () => {
+      try {
+        // Try to fetch from API first
+        try {
+          const tickets = await ApiService.getHelpdeskTickets();
+          setHelpdeskTickets(tickets || []);
+          // Sync with localStorage
+          localStorage.setItem('foodeez_helpdesk_tickets', JSON.stringify(tickets || []));
+        } catch (apiErr) {
+          console.warn('Failed to fetch helpdesk tickets from API, falling back to localStorage:', apiErr);
+          // Fallback to localStorage
+          const stored = localStorage.getItem('foodeez_helpdesk_tickets');
+          if (stored) {
+            const parsed = JSON.parse(stored) as HelpdeskTicket[];
+            setHelpdeskTickets(parsed);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load helpdesk tickets for HR dashboard:', err);
+        setHelpdeskTickets([]);
+      }
+    };
+
+    loadHelpdeskTickets();
+
+    // Refresh helpdesk tickets every 5 seconds to reflect status changes
+    const interval = setInterval(loadHelpdeskTickets, 5000);
+
+    // Listen for helpdesk updates from other components (e.g., when a ticket is resolved in the Helpdesk page)
+    const handleHelpdeskUpdate = () => {
+      loadHelpdeskTickets();
+    };
+    window.addEventListener('helpdeskTicketsUpdated', handleHelpdeskUpdate);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('helpdeskTicketsUpdated', handleHelpdeskUpdate);
+    };
+  }, [user?.id]); // Reload when user changes (logout/login)
+
   // Fetch holidays on mount
   useEffect(() => {
     fetchHolidaysByYear(new Date().getFullYear());
@@ -207,7 +281,7 @@ const HRDashboard = () => {
     let mounted = true;
     ApiService.getAllEmployees()
       .then((data) => {
-        if (!mounted) return;
+        if (mounted === false) return;
         const list = data || [];
         const activeEmployees = list.filter(isEmployeeActive);
         setTotalEmployees(activeEmployees.length);
@@ -230,7 +304,7 @@ const HRDashboard = () => {
         const now = Date.now();
         const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
         const newCount = activeEmployees.filter((emp: any) => {
-          if (!emp.createdAt) return false;
+          if (emp.createdAt == null || emp.createdAt === '') return false;
           const created = new Date(emp.createdAt).getTime();
           return now - created <= THIRTY_DAYS;
         }).length;
@@ -277,7 +351,7 @@ const HRDashboard = () => {
       // Refresh holidays list
       fetchHolidaysByYear(new Date().getFullYear());
     } catch (error) {
-      // Error is handled by the hook
+      console.error('Failed to create holiday:', error);
     }
   };
 
@@ -297,7 +371,7 @@ const HRDashboard = () => {
     return attendanceRecords
       .filter((record) => {
         const recordDate = new Date(record.date);
-        return !Number.isNaN(recordDate.getTime()) && recordDate >= cutoff && recordDate <= now;
+        return Number.isNaN(recordDate.getTime()) === false && recordDate >= cutoff && recordDate <= now;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [attendanceRecords]);
@@ -306,7 +380,11 @@ const HRDashboard = () => {
   <div className="space-y-8">
     {/** Stat cards - clicking Total Employees navigates to the employee list */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <div onClick={() => navigate('/employees')} role="button" tabIndex={0} className="cursor-pointer">
+      <button
+        type="button"
+        onClick={() => navigate('/employees')}
+        className="cursor-pointer w-full text-left"
+      >
         <StatCard
           title="Total Employees"
           value={totalEmployees !== null ? String(totalEmployees.toLocaleString()) : '—'}
@@ -316,9 +394,10 @@ const HRDashboard = () => {
           color="blue"
           delay={0}
         />
-      </div>
+      </button>
       <StatCard title="Active WFH Approvals" value={String(activeWfhRequests.length)} icon={Briefcase} trend="up" subtext="currently approved" color="purple" delay={100} />
       <StatCard title="Pending Leaves" value={pendingLeaves.length} icon={Clock} trend="down" subtext="awaiting review" color="orange" delay={200} />
+      <StatCard title="Pending Helpdesk Tickets" value={String(helpdeskTickets.filter((ticket) => ticket.status === 'Pending').length)} icon={AlertTriangle} trend="down" subtext="awaiting HR review" color="rose" delay={250} onClick={() => navigate('/helpdesk')} />
       <StatCard title="Attendance Today" value="92%" icon={CheckCircle} trend="up" subtext="8% up" color="green" delay={300} />
     </div>
 
@@ -366,18 +445,7 @@ const HRDashboard = () => {
                       }
                       return [value, name || ''];
                     }}
-                    content={(props: any) => {
-                      const { active, payload, label } = props;
-                      if (!active || !payload || !payload.length) return null;
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-white p-3 rounded-lg text-sm border border-slate-200 shadow-lg" style={{ minWidth: '200px' }}>
-                          <p className="text-slate-900 font-semibold">{data.date}</p>
-                          <p className="text-slate-700 mt-1">Total Hours: <span className="text-blue-600">{data.duration}h</span></p>
-                          <p className="text-slate-700">Employees: <span className="text-blue-600">{data.count || 0}</span></p>
-                        </div>
-                      );
-                    }}
+                    content={WorkDurationTooltip}
                   />
                   <Legend 
                     verticalAlign="top" 
@@ -540,9 +608,9 @@ const HRDashboard = () => {
                       <span className="text-slate-600 font-medium">{new Date(holiday.date).toLocaleDateString('en-GB')}</span>
                     </div>
                     {holiday.location && (
-                      <a href="#" className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                      <div className="flex items-center gap-2 text-xs text-blue-600 font-medium">
                         <span>📍 {holiday.location}</span>
-                      </a>
+                      </div>
                     )}
                   </div>
                 </div>

@@ -125,10 +125,11 @@ const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label htmlFor="forgot-email" className="block text-sm font-medium text-slate-700 mb-2">
                   Email Address<span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="forgot-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -141,10 +142,11 @@ const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
               {otpRequested && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label htmlFor="forgot-otp" className="block text-sm font-medium text-slate-700 mb-2">
                       OTP<span className="text-red-500">*</span>
                     </label>
                     <input
+                      id="forgot-otp"
                       type="text"
                       value={otp}
                       onChange={(e) => setOtp(e.target.value)}
@@ -155,11 +157,12 @@ const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label htmlFor="forgot-new-password" className="block text-sm font-medium text-slate-700 mb-2">
                       New Password<span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <input
+                        id="forgot-new-password"
                         type={showPassword ? 'text' : 'password'}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
@@ -179,11 +182,12 @@ const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label htmlFor="forgot-confirm-password" className="block text-sm font-medium text-slate-700 mb-2">
                       Confirm Password<span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <input
+                        id="forgot-confirm-password"
                         type={showConfirmPassword ? 'text' : 'password'}
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}

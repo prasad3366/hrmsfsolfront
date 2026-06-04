@@ -11,7 +11,6 @@ interface ApplyLeaveModalProps {
 }
 
 const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSubmit, isSubmitting }) => {
-  if (!isOpen) return null;
   const [formData, setFormData] = useState({
     leaveTypeId: 1,
     startDate: '',
@@ -23,13 +22,34 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
   });
   const [certificateError, setCertificateError] = useState('');
 
+  const calculateDays = (start: string, end: string, duration: string): number => {
+    if (!start || !end) return 0;
+    if (duration === 'FULL_DAY' || duration === 'HALF_DAY_FIRST' || duration === 'HALF_DAY_SECOND') {
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      const diff = endDate.getTime() - startDate.getTime();
+      const days = Math.floor(diff / 86400000) + 1;
+      return duration === 'FULL_DAY' ? days : 0.5;
+    }
+    return 0;
+  };
+
+  const totalDays = useMemo(
+    () => calculateDays(formData.startDate, formData.endDate, formData.durationType),
+    [formData.startDate, formData.endDate, formData.durationType]
+  );
+
+  const requiresMedicalCertificate = formData.leaveTypeId === 2 && totalDays > 2;
+
+  if (!isOpen) return null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setCertificateError('');
 
     // Check if sick leave > 2 days and no certificate
-    const totalDays = calculateDays(formData.startDate, formData.endDate, formData.durationType);
-    if (formData.leaveTypeId === 2 && totalDays > 2 && !formData.medicalCertificate) {
+    const totalDaysForSubmit = calculateDays(formData.startDate, formData.endDate, formData.durationType);
+    if (formData.leaveTypeId === 2 && totalDaysForSubmit > 2 && !formData.medicalCertificate) {
       setCertificateError('Medical certificate is required for sick leave more than 2 days');
       return;
     }
@@ -52,27 +72,9 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
       setCertificateError('');
       onClose();
     } catch (error) {
-      // Error handling is managed by the hook
+      console.error('Failed to submit leave request', error);
     }
   };
-
-  const calculateDays = (start: string, end: string, duration: string): number => {
-    if (!start || !end) return 0;
-    if (duration === 'FULL_DAY' || duration === 'HALF_DAY_FIRST' || duration === 'HALF_DAY_SECOND') {
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      const diff = endDate.getTime() - startDate.getTime();
-      const days = Math.floor(diff / 86400000) + 1;
-      return duration === 'FULL_DAY' ? days : 0.5;
-    }
-    return 0;
-  };
-
-  const totalDays = useMemo(() => calculateDays(formData.startDate, formData.endDate, formData.durationType), 
-    [formData.startDate, formData.endDate, formData.durationType]
-  );
-
-  const requiresMedicalCertificate = formData.leaveTypeId === 2 && totalDays > 2;
 
   const handleCertificateUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -123,10 +125,11 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
           <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Leave Type</label>
+              <label htmlFor="leaveTypeId" className="block text-sm font-medium text-slate-700 mb-2">Leave Type</label>
               <select
+                id="leaveTypeId"
                 value={formData.leaveTypeId.toString()}
-                onChange={(e) => setFormData({ ...formData, leaveTypeId: parseInt(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, leaveTypeId: Number.parseInt(e.target.value, 10) })}
                 className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
               >
                 <option value="1">Casual Leave</option>
@@ -136,8 +139,9 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Duration Type</label>
+              <label htmlFor="durationType" className="block text-sm font-medium text-slate-700 mb-2">Duration Type</label>
               <select
+                id="durationType"
                 value={formData.durationType}
                 onChange={(e) => setFormData({ ...formData, durationType: e.target.value as 'FULL_DAY' | 'HALF_DAY_FIRST' | 'HALF_DAY_SECOND' })}
                 className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
@@ -151,8 +155,9 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Start Date</label>
+              <label htmlFor="startDate" className="block text-sm font-medium text-slate-700 mb-2">Start Date</label>
               <Input
+                id="startDate"
                 type="date"
                 value={formData.startDate}
                 onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
@@ -161,8 +166,9 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">End Date</label>
+              <label htmlFor="endDate" className="block text-sm font-medium text-slate-700 mb-2">End Date</label>
               <Input
+                id="endDate"
                 type="date"
                 value={formData.endDate}
                 onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
@@ -172,8 +178,9 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Reason</label>
+            <label htmlFor="reason" className="block text-sm font-medium text-slate-700 mb-2">Reason</label>
             <textarea
+              id="reason"
               value={formData.reason}
               onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
               placeholder="Please provide a reason for your leave request"

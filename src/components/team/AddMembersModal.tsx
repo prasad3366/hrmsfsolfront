@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTeam } from '../../hooks/useTeam';
-import ApiService from '../../services/api';
+import ApiService, { TeamMember } from '../../services/api';
 import {
   Card,
   CardContent,
@@ -55,9 +55,9 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
       console.log('📋 [AddMembersModal.fetchEmployees] Current team members:', currentMembers);
       
       // Filter out employees who are already in this team or are managers
-      const currentMemberIds = currentMembers.map(id => Number(id));
+      const currentMemberIdSet = new Set(currentMembers.map(Number));
       const availableEmployees = allEmployees.filter(emp =>
-        !currentMemberIds.includes(Number(emp.id)) &&
+        !currentMemberIdSet.has(Number(emp.id)) &&
         (emp.user?.role !== 'MANAGER' && emp.role !== 'MANAGER')
       );
       
@@ -74,7 +74,8 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
     const id = Number(employeeId);
     console.log('🔘 [AddMembersModal.handleEmployeeToggle] Toggling employee ID:', employeeId, typeof employeeId, 'converted to:', id);
     setSelectedEmployeeIds(prev => {
-      const newSelected = prev.includes(id)
+      const currentMemberIdSet = new Set(prev);
+      const newSelected = currentMemberIdSet.has(id)
         ? prev.filter(selectedId => selectedId !== id)
         : [...prev, id];
       console.log('🔘 [AddMembersModal.handleEmployeeToggle] Previous selected:', prev);
@@ -104,7 +105,7 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
     const validSelectedIds = selectedEmployeeIds.filter(id => employees.some(emp => Number(emp.id) === id));
     console.log('🔍 [AddMembersModal] Valid selected IDs:', validSelectedIds);
 
-    const result = await addMembers(teamId, { employeeIds: validSelectedIds });
+    const result = await addMembers(Number(teamId), { employeeIds: validSelectedIds });
 
     if (result) {
       console.log('✅ Members added successfully, refreshing team data...');
@@ -125,7 +126,7 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
       return;
     }
 
-    if (!window.confirm('Remove this employee from the team?')) {
+    if (!globalThis.confirm('Remove this employee from the team?')) {
       return;
     }
 
@@ -197,7 +198,7 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
 
             {selectedEmployeeIds.length > 0 && (
               <div className="text-sm text-gray-600">
-                {selectedEmployeeIds.length} employee{selectedEmployeeIds.length !== 1 ? 's' : ''} selected
+                {selectedEmployeeIds.length} employee{selectedEmployeeIds.length > 1 ? 's' : ''} selected
               </div>
             )}
 

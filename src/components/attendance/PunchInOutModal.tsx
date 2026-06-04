@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button } from '../../components/ui/components';
-import { MapPin, Loader, AlertCircle, CheckCircle } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import ApiService from '../../services/api';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { useNotifications } from '../../context/NotificationContext';
@@ -29,26 +29,42 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
 
   // ✅ FIXED LOGIC - Support both old AttendanceRecord and new TodayAttendanceStatus
   const hasPunchedIn =
-    localPunchedIn !== undefined
-      ? localPunchedIn
-      : (todayRecord?.hasPunchedIn ?? !!todayRecord?.punchInTime);
+    localPunchedIn === undefined
+      ? (todayRecord?.hasPunchedIn ?? Boolean(todayRecord?.punchInTime))
+      : localPunchedIn;
 
   const hasPunchedOut =
-    localPunchedOut !== undefined
-      ? localPunchedOut
-      : (todayRecord?.hasPunchedOut ?? !!todayRecord?.punchOutTime);
+    localPunchedOut === undefined
+      ? (todayRecord?.hasPunchedOut ?? Boolean(todayRecord?.punchOutTime))
+      : localPunchedOut;
+
+  let punchButtonLabel = 'Punch In';
+  if (hasPunchedIn) {
+    punchButtonLabel = hasPunchedOut ? 'Completed' : 'Punch Out';
+  }
+
+  // Action handler defined later
 
   // ✅ Reset + refresh on open
   useEffect(() => {
-    if (isOpen) {
-      onSuccess(); // always fetch latest
-    } else {
+    if (!isOpen) {
       setLocalPunchedIn(undefined);
       setLocalPunchedOut(undefined);
       setErrorMessage('');
       setSuccessMessage('');
+      return;
     }
-  }, [isOpen]);
+
+    const refreshAttendance = async () => {
+      try {
+        await onSuccess();
+      } catch (err) {
+        console.error('Failed to refresh attendance on modal open:', err);
+      }
+    };
+
+    refreshAttendance();
+  }, [isOpen, onSuccess]);
 
   const handlePunchIn = async () => {
     try {
@@ -56,7 +72,7 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
       setSuccessMessage('');
 
       const coords = await requestLocation();
-      if (!coords) {
+      if (coords == null) {
         setErrorMessage(geoError?.message || 'Failed to get location');
         return;
       }
@@ -101,14 +117,14 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
       setSuccessMessage('');
 
       const coords = await requestLocation();
-      if (!coords) {
+      if (coords == null) {
         setErrorMessage(geoError?.message || 'Failed to get location');
         return;
       }
 
       setIsSubmitting(true);
 
-      const res = await ApiService.punchOut(coords.latitude, coords.longitude);
+      await ApiService.punchOut(coords.latitude, coords.longitude);
 
       // ✅ INSTANT UI SWITCH
       setLocalPunchedOut(true);
@@ -137,7 +153,12 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  let actionHandler: (() => Promise<void>) | undefined = handlePunchIn;
+  if (hasPunchedIn) {
+    actionHandler = hasPunchedOut ? undefined : handlePunchOut;
+  }
+
+  if (isOpen === false) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -176,7 +197,7 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
           </div>
 
           {/* INFO */}
-          {hasPunchedIn && !hasPunchedOut && (
+          {hasPunchedIn && hasPunchedOut === false && (
             <div className="p-3 bg-blue-100 text-blue-700 rounded">
               You are currently punched in. Click "Punch Out".
             </div>
@@ -197,13 +218,9 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
           )}
 
           {/* BUTTONS */}
-          {!hasPunchedIn ? (
-            <Button onClick={handlePunchIn} disabled={isSubmitting || isGeoLoading}>
-              {isSubmitting ? 'Processing...' : 'Punch In'}
-            </Button>
-          ) : !hasPunchedOut ? (
-            <Button onClick={handlePunchOut} disabled={isSubmitting || isGeoLoading}>
-              {isSubmitting ? 'Processing...' : 'Punch Out'}
+          {actionHandler ? (
+            <Button onClick={actionHandler} disabled={isSubmitting || isGeoLoading}>
+              {isSubmitting ? 'Processing...' : punchButtonLabel}
             </Button>
           ) : (
             <div className="text-green-600 text-center font-semibold">

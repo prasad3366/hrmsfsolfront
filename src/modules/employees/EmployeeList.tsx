@@ -5,9 +5,40 @@ import ApiService from '../../services/api';
 import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeModal';
 import { 
   Table, TableHeader, TableRow, TableHead, TableCell, 
-  Button, Input, Badge, Card, CardHeader, CardTitle, CardContent 
+  Button, Input, Badge, Card, CardHeader, CardContent 
 } from '../../components/ui/components';
 import { Search, Plus, Filter, Download, MoreHorizontal } from 'lucide-react';
+
+// Helper functions to reduce complexity
+const isEmployeeActive = (emp: any): boolean => {
+  const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
+  if (status === 'ACTIVE') return true;
+  if (status === 'INACTIVE' || status === 'TERMINATED') return false;
+  if (typeof emp.user?.isActive === 'boolean') return emp.user.isActive;
+  if (typeof emp.isActive === 'boolean') return emp.isActive;
+  return true;
+};
+
+const mapEmployeeData = (emp: any): any => ({
+  id: emp.id,
+  name: `${emp.firstName ?? ''} ${emp.lastName ?? ''}`.trim() || emp.empCode || 'Unknown',
+  email: emp.user?.email ?? emp.email ?? '',
+  designation: emp.designation ?? '',
+  role: emp.role ?? emp.user?.role ?? 'EMPLOYEE',
+  department: emp.department ?? '',
+  status: isEmployeeActive(emp) ? 'Active' : 'Inactive',
+  joinDate: emp.createdAt ? new Date(emp.createdAt).toLocaleDateString() : '-',
+  avatar: emp.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent((emp.firstName ?? '') + ' ' + (emp.lastName ?? ''))}`,
+});
+
+const filterEmployees = (employees: any[], searchTerm: string): any[] => {
+  const mapped = employees.map(mapEmployeeData);
+  return mapped.filter((emp) =>
+    emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.department.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+};
 
 const EmployeeList = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -18,23 +49,13 @@ const EmployeeList = () => {
   const { user } = useAuth();
 
   const canManageEmployees = user?.role === 'ADMIN' || user?.role === 'HR';
-  const canViewEmployees = user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER';
-
-  const isEmployeeActive = (emp: any) => {
-    const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
-    if (status === 'ACTIVE') return true;
-    if (status === 'INACTIVE' || status === 'TERMINATED') return false;
-    if (typeof emp.user?.isActive === 'boolean') return emp.user.isActive;
-    if (typeof emp.isActive === 'boolean') return emp.isActive;
-    return true;
-  };
 
   const fetchEmployees = () => {
     let mounted = true;
     setIsLoading(true);
     ApiService.getAllEmployees()
       .then((data) => {
-        if (!mounted) return;
+        if (mounted === false) return;
         setEmployees(data || []);
       })
       .catch((err) => {
@@ -57,25 +78,10 @@ const EmployeeList = () => {
     fetchEmployees();
   };
 
-  const filteredEmployees = useMemo(() => {
-    const mapped = employees.map((emp) => ({
-      id: emp.id,
-      name: `${emp.firstName ?? ''} ${emp.lastName ?? ''}`.trim() || emp.empCode || 'Unknown',
-      email: emp.user?.email ?? emp.email ?? '',
-      designation: emp.designation ?? '',
-      role: emp.role ?? emp.user?.role ?? 'EMPLOYEE',
-      department: emp.department ?? '',
-      status: isEmployeeActive(emp) ? 'Active' : 'Inactive',
-      joinDate: emp.createdAt ? new Date(emp.createdAt).toLocaleDateString() : '-',
-      avatar: emp.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent((emp.firstName ?? '') + ' ' + (emp.lastName ?? ''))}`,
-    }));
-
-    return mapped.filter((emp) =>
-      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.department.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [employees, searchTerm]);
+  const filteredEmployees = useMemo(
+    () => filterEmployees(employees, searchTerm),
+    [employees, searchTerm]
+  );
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">

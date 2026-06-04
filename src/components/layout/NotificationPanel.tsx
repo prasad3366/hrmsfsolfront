@@ -1,7 +1,7 @@
-import React, { useContext } from 'react';
-import { X, Check, CheckCheck, AlertCircle, Clock, Bell } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { X, Check, AlertCircle, Clock, Bell } from 'lucide-react';
 import { useNotifications } from '../../context/NotificationContext';
-import { AuthProvider} from '../../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface NotificationPanelProps {
   isOpen: boolean;
@@ -9,19 +9,17 @@ interface NotificationPanelProps {
 }
 
 export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }) => {
-  const { notifications, markAsRead, markAllAsRead, clearNotifications, removeNotification, unreadCount, getFilteredNotifications } =
+  const { markAsRead, markAllAsRead, clearNotifications, removeNotification, getFilteredNotifications } =
     useNotifications();
-  const authContext = useContext(AuthProvider);
+  const authContext = useAuth();
   
   // Get current user role and ID (fallback to 'EMPLOYEE' and 0 if not available)
-  const userRole = authContext?.user?.role || 'EMPLOYEE';
-  const userId = authContext?.user?.employeeId || 0;
+  const userRole = authContext.user?.role || 'EMPLOYEE';
+  const userId = authContext.user?.employeeId || 0;
   
   // Filter notifications based on user role and ID
   const filteredNotifications = getFilteredNotifications(userRole, userId);
   const filteredUnreadCount = filteredNotifications.filter(n => !n.read).length;
-
-  if (!isOpen) return null;
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -55,12 +53,27 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
     return date.toLocaleDateString();
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  if (!isOpen) return null;
+
   return (
     <>
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-40 bg-black/20"
+      <button
+        type="button"
+        aria-label="Close notifications"
         onClick={onClose}
+        className="fixed inset-0 z-40 bg-black/20"
       />
 
       {/* Panel */}
@@ -112,12 +125,13 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
           ) : (
             <div className="divide-y divide-slate-100">
               {filteredNotifications.map((notif) => (
-                <div
+                <button
+                  type="button"
                   key={notif.id}
-                  onClick={() => !notif.read && markAsRead(notif.id)}
-                  className={`p-4 hover:bg-slate-50 transition-all cursor-pointer border-l-4 ${
-                    !notif.read 
-                      ? 'bg-blue-50 border-l-blue-500' 
+                  onClick={() => notif.read === false && markAsRead(notif.id)}
+                  className={`w-full text-left p-4 hover:bg-slate-50 transition-all cursor-pointer border-l-4 ${
+                    notif.read === false
+                      ? 'bg-blue-50 border-l-blue-500'
                       : 'border-l-transparent'
                   }`}
                 >
@@ -130,7 +144,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
                         <h3 className="font-semibold text-sm text-slate-900 leading-snug">
                           {notif.title}
                         </h3>
-                        {!notif.read && (
+                        {notif.read === false && (
                           <span className="w-3 h-3 bg-blue-600 rounded-full flex-shrink-0 mt-1" />
                         )}
                       </div>
@@ -149,7 +163,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
                       <X size={16} className="text-slate-400" />
                     </button>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}

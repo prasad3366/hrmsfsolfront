@@ -25,7 +25,7 @@ const Documents = () => {
     try {
       const list = await api.getAllEmployees();
       setEmployeeList(list || []);
-      if (!selectedEmployeeId && list?.length > 0) {
+      if (selectedEmployeeId == null && list?.length > 0) {
         setSelectedEmployeeId(list[0].id);
       }
     } catch (e: any) {
@@ -36,7 +36,7 @@ const Documents = () => {
   useEffect(() => {
     const init = async () => {
       // try to resolve employee id from JWT-derived user info
-      if (!employeeId && user) {
+      if (employeeId == null && user) {
         const maybeId = Number((user as any).employeeId || user.id);
         if (Number.isInteger(maybeId)) setEmployeeId(maybeId);
       }
@@ -59,11 +59,24 @@ const Documents = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employeeId, selectedEmployeeId, role, user]);
 
-  const getCurrentEmployeeId = () => {
+  const getCurrentEmployeeId = (): number | undefined => {
     if (role === 'HR' || role === 'ADMIN') {
       return selectedEmployeeId || employeeId;
     }
     return employeeId;
+  };
+
+  const getDocumentStatusVariant = (status: string): 'success' | 'warning' | 'danger' | 'default' => {
+    switch (status) {
+      case 'APPROVED':
+        return 'success';
+      case 'PENDING':
+        return 'warning';
+      case 'REJECTED':
+        return 'danger';
+      default:
+        return 'default';
+    }
   };
 
   const fetchRequired = async () => {
@@ -160,7 +173,7 @@ const Documents = () => {
   const handleView = async (documentId: number) => {
     try {
       setLoading(true);
-      const { blob, fileName, mimeType } = await api.downloadDocumentFile(documentId);
+      const { blob } = await api.downloadDocumentFile(documentId);
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       // optionally revoke URL later
@@ -174,7 +187,7 @@ const Documents = () => {
 
   const handleUpload = async () => {
     const targetId = getCurrentEmployeeId();
-    if (!targetId) return alert('Employee id not detected. Contact HR.');
+    if (targetId == null) return alert('Employee id not detected. Contact HR.');
     const docIds: number[] = [];
     const uploadFiles: File[] = [];
     for (const r of required) {
@@ -207,19 +220,24 @@ const Documents = () => {
         </CardHeader>
         <CardContent>
           <div className="mb-4">
-            {!resolved ? (
-              <div className="text-sm text-slate-500">Resolving employee identity...</div>
-            ) : !employeeId ? (
-              <div className="text-sm text-rose-600">Could not auto-detect employee. Contact HR to link your account.</div>
-            ) : (
-              <div className="text-sm text-slate-600">Employee detected.</div>
-            )}
+            {(() => {
+              if (resolved === false) {
+                return <div className="text-sm text-slate-500">Resolving employee identity...</div>;
+              }
+
+              if (employeeId == null) {
+                return <div className="text-sm text-rose-600">Could not auto-detect employee. Contact HR to link your account.</div>;
+              }
+
+              return <div className="text-sm text-slate-600">Employee detected.</div>;
+            })()}
           </div>
 
           {(role === 'HR' || role === 'ADMIN') && (
             <div className="mb-4">
-              <label className="text-xs font-medium text-slate-600 mb-1 block">Select Employee</label>
+              <label htmlFor="selectEmployee" className="text-xs font-medium text-slate-600 mb-1 block">Select Employee</label>
               <select
+                id="selectEmployee"
                 value={selectedEmployeeId || ''}
                 onChange={(e) => {
                   const selectedId = Number(e.target.value);
@@ -267,7 +285,7 @@ const Documents = () => {
                   type="file"
                   onChange={(e) => {
                     const fileKey = r.virtual ? 'virtual-relieving' : r.id;
-                    onFileChange(fileKey as any, e.target.files?.[0]);
+                    onFileChange(fileKey, e.target.files?.[0]);
                   }}
                 />
               </div>
@@ -317,13 +335,13 @@ const Documents = () => {
                       )}
                     </td>
                     <td className="p-2 flex items-center gap-2">
-                      <Badge variant={d.status === 'APPROVED' ? 'success' : d.status === 'PENDING' ? 'warning' : 'danger'}>{d.status}</Badge>
+                      <Badge variant={getDocumentStatusVariant(d.status)}>{d.status}</Badge>
                     </td>
                     {(role === 'HR' || role === 'ADMIN') && (
                       <td className="p-2">
                         {d.status === 'PENDING' && (
                           <div className="flex gap-1">
-                            <Button size="xs" variant="success" className="bg-green-600 text-white hover:bg-green-700" onClick={() => handleApprove(d.id)}>Approve</Button>
+                            <Button size="xs" variant="primary" className="bg-green-600 text-white hover:bg-green-700" onClick={() => handleApprove(d.id)}>Approve</Button>
                             <Button size="xs" variant="danger" onClick={() => handleReject(d.id)}>Reject</Button>
                           </div>
                         )}

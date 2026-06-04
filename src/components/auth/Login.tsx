@@ -50,8 +50,8 @@ const Login = () => {
       } else {
         setError(result.message || 'Login failed. Please try again.');
       }
-    } catch (err) {
-      setError('An unexpected error occurred.');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'An unexpected error occurred.');
     } finally {
       setLoading(false);
     }
@@ -153,9 +153,10 @@ const Login = () => {
                 <form onSubmit={handleSubmit} className="space-y-4">
                     
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-slate-700 ml-1">Email<span className="text-red-500">*</span></label>
+                        <label htmlFor="login-email" className="text-xs font-semibold text-slate-700 ml-1">Email<span className="text-red-500">*</span></label>
                         <div className="relative">
                             <Input 
+                                id="login-email"
                                 type="email" 
                                 placeholder="admin@example.com"
                                 value={email} 
@@ -167,9 +168,10 @@ const Login = () => {
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-slate-700 ml-1">Password<span className="text-red-500">*</span></label>
+                        <label htmlFor="login-password" className="text-xs font-semibold text-slate-700 ml-1">Password<span className="text-red-500">*</span></label>
                         <div className="relative">
                             <Input 
+                                id="login-password"
                                 type={showPassword ? "text" : "password"} 
                                 placeholder="••••••••••••"
                                 value={password} 

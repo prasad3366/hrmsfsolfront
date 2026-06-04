@@ -14,6 +14,7 @@ import TeamManagement from './modules/team/Team';
 import Recruitment from './modules/recruitment/Recruitment';
 import Assets from './modules/assets/Assets';
 import Documents from './modules/documents/Documents';
+import Helpdesk from './modules/helpdesk/Helpdesk';
 import { Construction } from 'lucide-react';
 
 // Protected Route Wrapper
@@ -108,7 +109,7 @@ const AppRoutes = () => {
         {/* Placeholders for remaining modules */}
         <Route path="performance" element={<ProtectedRoute><PlaceholderModule title="Performance" /></ProtectedRoute>} />
         <Route path="documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
-        <Route path="helpdesk" element={<ProtectedRoute><PlaceholderModule title="Helpdesk" /></ProtectedRoute>} />
+        <Route path="helpdesk" element={<ProtectedRoute><Helpdesk /></ProtectedRoute>} />
         <Route path="training" element={<ProtectedRoute><PlaceholderModule title="Training" /></ProtectedRoute>} />
         <Route path="announcements" element={<ProtectedRoute><PlaceholderModule title="Announcements" /></ProtectedRoute>} />
         <Route path="reports" element={<ProtectedRoute><PlaceholderModule title="Reports" /></ProtectedRoute>} />

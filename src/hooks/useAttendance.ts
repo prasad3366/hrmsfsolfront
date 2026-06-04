@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import ApiService, { AttendanceRecord, TodayAttendanceStatus } from '../services/api';
 
 export interface UseAttendanceOptions {

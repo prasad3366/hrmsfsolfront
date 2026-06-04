@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
-import ApiService from '../services/api';
-import { EmployeeSalary, AssignSalaryDto } from '../services/api';
+import ApiService, { AssignSalaryDto, EmployeeSalary } from '../services/api';
 
 export const useSalary = () => {
   const [salary, setSalary] = useState<EmployeeSalary | null>(null);
@@ -20,7 +19,7 @@ export const useSalary = () => {
       if (err instanceof Error) {
         errorMessage = err.message;
       } else if (typeof err === 'object' && err !== null && 'message' in err) {
-        errorMessage = (err as any).message;
+        errorMessage = err.message;
       }
       
       console.error('Salary assignment error:', err);

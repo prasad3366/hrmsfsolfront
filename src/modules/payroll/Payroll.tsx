@@ -1,13 +1,116 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
+import { Card, CardHeader, CardTitle, CardContent, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
 import { Download, CreditCard, DollarSign, TrendingUp, Calendar, Plus } from 'lucide-react';
 import { usePayroll } from '../../hooks/usePayroll';
 import { useAuth } from '../../context/AuthContext';
 import { RunPayrollModal } from '../../components/payroll/RunPayrollModal';
 import { AssignSalaryModal } from '../../components/payroll/AssignSalaryModal';
 import { AddPayrollAdjustmentModal } from '../../components/payroll/AddPayrollAdjustmentModal';
-import { Payroll as PayrollType, EmployeeSalary } from '../../services/api';
-import ApiService from '../../services/api';
+import ApiService, { Payroll as PayrollType, EmployeeSalary } from '../../services/api';
+
+// Helper functions to reduce complexity
+const DEFAULT_SALARY_STRUCTURE = {
+  id: 0,
+  name: 'Default Structure',
+  basicPercent: 35,
+  hraPercent: 50,
+  conveyancePercent: 10,
+  pfPercent: 12,
+  ptAmount: 200,
+  healthInsurance: 500,
+};
+
+const getSalaryStructure = (salaryInfo: any) => {
+  return salaryInfo?.structure || DEFAULT_SALARY_STRUCTURE;
+};
+
+const getMonthlyCTC = (salaryInfo: any): number => {
+  return salaryInfo?.monthlyCTC ?? (salaryInfo?.annualCTC ? salaryInfo.annualCTC / 12 : 0);
+};
+
+const calculateSalaryComponents = (monthlyCTC: number, structure: any) => {
+  const basic = monthlyCTC * (structure.basicPercent / 100);
+  return {
+    basic,
+    hra: basic * (structure.hraPercent / 100),
+    conveyance: monthlyCTC * (structure.conveyancePercent / 100),
+    pf: basic * (structure.pfPercent / 100),
+    pt: structure.ptAmount,
+  };
+};
+
+const getSalaryInfo = (employeeSalaries: EmployeeSalary[], employeeDetails: any): any => {
+  return employeeSalaries.length > 0 ? employeeSalaries[0] : employeeDetails?.salaries?.[0];
+};
+
+const getDigitalSalaryValue = (currentPayroll: PayrollType | null, loadingDetails: boolean, salaryInfo: any): string => {
+  if (currentPayroll) {
+    return `₹${currentPayroll.netSalary?.toLocaleString() || '0'}`;
+  }
+  if (loadingDetails) return 'Loading...';
+  if (salaryInfo?.annualCTC) return `₹${salaryInfo.annualCTC.toLocaleString()}`;
+  return 'Not Assigned';
+};
+
+const buildSalarySummary = (currentPayroll: PayrollType | null, salaryInfo: any, loading: boolean, loadingDetails: boolean) => {
+  if (loading || loadingDetails) {
+    return <p className="text-slate-400 text-sm">Loading...</p>;
+  }
+
+  if (currentPayroll) {
+    return (
+      <>
+        <div className="flex justify-between text-sm mb-1 text-slate-300">
+          <span>Month</span>
+          <span>{currentPayroll.month}/{currentPayroll.year}</span>
+        </div>
+        <div className="flex justify-between text-sm text-slate-300">
+          <span>Present Days</span>
+          <span>{currentPayroll.presentDays} / {currentPayroll.workingDays}</span>
+        </div>
+      </>
+    );
+  }
+
+  if (salaryInfo) {
+    return (
+      <>
+        <div className="flex justify-between text-sm mb-1 text-slate-300">
+          <span>Monthly CTC</span>
+          <span>₹{salaryInfo.monthlyCTC?.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between text-sm text-slate-300">
+          <span>Effective From</span>
+          <span>{new Date(salaryInfo.effectiveFrom).toLocaleDateString()}</span>
+        </div>
+      </>
+    );
+  }
+
+  return <p className="text-slate-400 text-sm">Salary not assigned yet</p>;
+};
+
+const getFormattedSalaryValue = (
+  currentPayroll: PayrollType | null,
+  salaryInfo: any,
+  computedValue: number,
+  fallbackKey: string,
+  leading = '₹'
+) => {
+  if (currentPayroll) {
+    const value = currentPayroll[fallbackKey]?.toLocaleString() || '0';
+    return `${leading}${value}`;
+  }
+  if (salaryInfo) {
+    return `${leading}${computedValue.toLocaleString()}`;
+  }
+  return `${leading}0`;
+};
+
+const shouldShowManagementButtons = (role: string): boolean => {
+  const upperRole = role?.toUpperCase();
+  return upperRole === 'HR' || upperRole === 'ADMIN';
+};
 
 const Payroll = () => {
   const { user } = useAuth();
@@ -74,35 +177,20 @@ const Payroll = () => {
     );
   }
 
-  const salaryInfo = employeeSalaries.length > 0 ? employeeSalaries[0] : employeeDetails?.salaries?.[0];
-
-  // Default salary structure (fallback from database defaults: basic 35%, hra 50%, conveyance 10%, pf 12%, pt 200)
-  const defaultStructure = {
-    id: 0,
-    name: 'Default Structure',
-    basicPercent: 35,
-    hraPercent: 50,
-    conveyancePercent: 10,
-    pfPercent: 12,
-    ptAmount: 200,
-    healthInsurance: 500,
-  };
+  const salaryInfo = getSalaryInfo(employeeSalaries, employeeDetails);
 
   // Use employee's salary structure if embedded, otherwise use default
-  const salaryStructure = (salaryInfo as any)?.structure || defaultStructure;
-
-  const monthlyCTC =
-    salaryInfo?.monthlyCTC ??
-    ((salaryInfo as any)?.annualCTC
-      ? (salaryInfo as any).annualCTC / 12
-      : 0);
-
-  const computedBasic = monthlyCTC * (salaryStructure.basicPercent / 100);
-  const computedHra = computedBasic * (salaryStructure.hraPercent / 100);
-  const computedConveyance = monthlyCTC * (salaryStructure.conveyancePercent / 100);
-  const computedPf = computedBasic * (salaryStructure.pfPercent / 100);
-  const computedPt = salaryStructure.ptAmount;
+  const salaryStructure = getSalaryStructure(salaryInfo);
+  const monthlyCTC = getMonthlyCTC(salaryInfo);
+  const { basic: computedBasic, pf: computedPf, pt: computedPt } = calculateSalaryComponents(monthlyCTC, salaryStructure);
   const computedDeductions = computedPf + computedPt;
+
+  const digitalSalaryValue = getDigitalSalaryValue(currentPayroll, loadingDetails, salaryInfo);
+  const salarySummaryElement = buildSalarySummary(currentPayroll, salaryInfo, loading, loadingDetails);
+
+  const basicPayValue = getFormattedSalaryValue(currentPayroll, salaryInfo, computedBasic, 'basic');
+  const grossSalaryValue = getFormattedSalaryValue(currentPayroll, salaryInfo, monthlyCTC, 'grossSalary');
+  const deductionsValue = getFormattedSalaryValue(currentPayroll, salaryInfo, computedDeductions, 'deductions', '-₹');
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
@@ -112,7 +200,7 @@ const Payroll = () => {
           <p className="text-slate-500 text-sm">Salary details and payslips</p>
         </div>
         <div className="flex gap-2">
-          {(user?.role?.toUpperCase() === 'HR' || user?.role?.toUpperCase() === 'ADMIN') && (
+          {shouldShowManagementButtons(user?.role) && (
             <>
               <Button variant="outline" className="gap-2" onClick={() => setIsRunPayrollOpen(true)}>
                 <Plus size={16} /> Run Payroll
@@ -138,49 +226,12 @@ const Payroll = () => {
                         <p className="text-slate-400 text-xs uppercase tracking-widest">
                           {currentPayroll ? 'Net Salary' : 'Annual CTC'}
                         </p>
-                        <h2 className="text-3xl font-bold mt-1">
-                          {currentPayroll 
-                            ? `₹${currentPayroll.netSalary?.toLocaleString() || '0'}`
-                            : loadingDetails 
-                              ? 'Loading...'
-                              : salaryInfo?.annualCTC 
-                                ? `₹${salaryInfo.annualCTC.toLocaleString()}`
-                                : 'Not Assigned'
-                          }
-                        </h2>
+                        <h2 className="text-3xl font-bold mt-1">{digitalSalaryValue}</h2>
                     </div>
                     <CreditCard className="text-slate-400" />
                 </div>
 
-                <div className="relative z-10">
-                    {loading || loadingDetails ? (
-                      <p className="text-slate-400 text-sm">Loading...</p>
-                    ) : currentPayroll ? (
-                      <>
-                        <div className="flex justify-between text-sm mb-1 text-slate-300">
-                            <span>Month</span>
-                            <span>{currentPayroll.month}/{currentPayroll.year}</span>
-                        </div>
-                        <div className="flex justify-between text-sm text-slate-300">
-                            <span>Present Days</span>
-                            <span>{currentPayroll.presentDays} / {currentPayroll.workingDays}</span>
-                        </div>
-                      </>
-                    ) : salaryInfo ? (
-                      <>
-                        <div className="flex justify-between text-sm mb-1 text-slate-300">
-                            <span>Monthly CTC</span>
-                            <span>₹{salaryInfo.monthlyCTC?.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-sm text-slate-300">
-                            <span>Effective From</span>
-                            <span>{new Date(salaryInfo.effectiveFrom).toLocaleDateString()}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-slate-400 text-sm">Salary not assigned yet</p>
-                    )}
-                </div>
+                <div className="relative z-10">{salarySummaryElement}</div>
             </div>
         </div>
 
@@ -192,15 +243,7 @@ const Payroll = () => {
                         <DollarSign size={20} />
                     </div>
                     <p className="text-xs text-slate-500">Basic Pay</p>
-                    <p className="text-lg font-bold text-slate-900">
-                        {currentPayroll ? (
-                            `₹${currentPayroll.basic?.toLocaleString() || '0'}`
-                        ) : salaryInfo ? (
-                            `₹${computedBasic.toLocaleString()}`
-                        ) : (
-                            '₹0'
-                        )}
-                    </p>
+                    <p className="text-lg font-bold text-slate-900">{basicPayValue}</p>
                 </CardContent>
             </Card>
             <Card hoverEffect className="flex flex-col justify-center">
@@ -209,15 +252,7 @@ const Payroll = () => {
                         <TrendingUp size={20} />
                     </div>
                     <p className="text-xs text-slate-500">Gross Salary</p>
-                    <p className="text-lg font-bold text-slate-900">
-                        {currentPayroll ? (
-                            `₹${currentPayroll.grossSalary?.toLocaleString() || '0'}`
-                        ) : salaryInfo ? (
-                            `₹${monthlyCTC.toLocaleString()}`
-                        ) : (
-                            '₹0'
-                        )}
-                    </p>
+                    <p className="text-lg font-bold text-slate-900">{grossSalaryValue}</p>
                 </CardContent>
             </Card>
             <Card hoverEffect className="flex flex-col justify-center">
@@ -226,15 +261,7 @@ const Payroll = () => {
                         <Calendar size={20} />
                     </div>
                     <p className="text-xs text-slate-500">Deductions</p>
-                    <p className="text-lg font-bold text-slate-900">
-                        {currentPayroll ? (
-                            `-₹${currentPayroll.deductions?.toLocaleString() || '0'}`
-                        ) : salaryInfo ? (
-                            `-₹${computedDeductions.toLocaleString()}`
-                        ) : (
-                            '₹0'
-                        )}
-                    </p>
+                    <p className="text-lg font-bold text-slate-900">{deductionsValue}</p>
                 </CardContent>
             </Card>
         </div>

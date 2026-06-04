@@ -18,8 +18,6 @@ const CarryForwardModal: React.FC<CarryForwardModalProps> = ({
   isSubmitting,
   leaveBalances,
 }) => {
-  if (!isOpen) return null;
-
   const [selectedLeaveTypeId, setSelectedLeaveTypeId] = useState<number | null>(null);
   const [error, setError] = useState('');
 
@@ -41,6 +39,8 @@ const CarryForwardModal: React.FC<CarryForwardModalProps> = ({
     ? (selectedLeave.allocated || 0) + (selectedLeave.carryForward || 0) - (selectedLeave.used || 0)
     : 0;
 
+  if (!isOpen) return null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -60,7 +60,7 @@ const CarryForwardModal: React.FC<CarryForwardModalProps> = ({
       setSelectedLeaveTypeId(null);
       onClose();
     } catch (err) {
-      // Error is handled by parent component
+      console.error('Error requesting carry forward:', err);
     }
   };
 
@@ -95,7 +95,7 @@ const CarryForwardModal: React.FC<CarryForwardModalProps> = ({
 
           {/* Leave Type Selection */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-3">Select Leave Type</label>
+            <div className="block text-sm font-medium text-slate-700 mb-3">Select Leave Type</div>
             <div className="space-y-2">
               {eligibleLeaves.length > 0 ? (
                 eligibleLeaves.map((leave) => {

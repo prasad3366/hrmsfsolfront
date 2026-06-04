@@ -6,7 +6,6 @@ import {
   Input,
   Card,
   CardHeader,
-  CardTitle,
   CardContent,
   Table,
   TableHeader,
@@ -19,6 +18,44 @@ import { useAssets } from '../../hooks/useAssets';
 import { CreateAssetModal } from '../../components/assets/CreateAssetModal';
 import { AssignAssetModal } from '../../components/assets/AssignAssetModal';
 import { useNotifications } from '../../context/NotificationContext';
+
+const getAssetAssignedLabel = (asset: any): string => {
+  if (asset.user?.firstName && asset.user?.lastName) {
+    return `${asset.user.firstName} ${asset.user.lastName}`;
+  }
+  if (asset.user?.email) {
+    return asset.user.email;
+  }
+  if (asset.assignedTo) {
+    return `User #${asset.assignedTo}`;
+  }
+  return '-';
+};
+
+const renderAssetStatusBadge = (asset: any) => {
+  if (asset.status === 'RETURNED') {
+    return (
+      <Badge variant="default" className="bg-gray-200 text-gray-800 border-none">
+        Returned
+      </Badge>
+    );
+  }
+
+  if (asset.status === 'ASSIGNED') {
+    return (
+      <Badge variant="default" className="bg-emerald-100 text-emerald-800 border-none inline-flex items-center whitespace-nowrap">
+        <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5 inline-block" />
+        <span>Assigned</span>
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="default" className="bg-amber-100 text-amber-800 border-none">
+      Unassigned
+    </Badge>
+  );
+};
 
 const Assets = () => {
   const navigate = useNavigate();
@@ -39,11 +76,77 @@ const Assets = () => {
     (asset.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
   );
 
+  const assetContent = isLoading ? (
+    <div className="p-8 text-center text-slate-500">Loading assets...</div>
+  ) : filteredAssets.length === 0 ? (
+    <div className="p-8 text-center text-slate-500">
+      {searchTerm ? 'No assets found matching your search.' : 'No assets created yet.'}
+    </div>
+  ) : (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Asset Name</TableHead>
+          <TableHead>Description</TableHead>
+          <TableHead>Assigned To</TableHead>
+          <TableHead>Assigned Date</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Created Date</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <tbody>
+        {filteredAssets.map((asset) => (
+          <TableRow key={asset.id} className="hover:bg-slate-50">
+            <TableCell className="font-medium">{asset.name}</TableCell>
+            <TableCell className="text-sm text-slate-600">{asset.description || '-'}</TableCell>
+            <TableCell className="text-sm">{getAssetAssignedLabel(asset)}</TableCell>
+            <TableCell className="text-sm">
+              {asset.assignedAt ? new Date(asset.assignedAt).toLocaleDateString() : '-'}
+            </TableCell>
+            <TableCell className="text-sm">{renderAssetStatusBadge(asset)}</TableCell>
+            <TableCell className="text-sm">
+              {new Date(asset.createdAt).toLocaleDateString()}
+            </TableCell>
+            <TableCell className="text-right">
+              <div className="flex gap-2 justify-end">
+                {asset.status !== 'RETURNED' && !asset.assignedTo && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedAssetId(asset.id);
+                      setIsAssignModalOpen(true);
+                    }}
+                  >
+                    Assign
+                  </Button>
+                )}
+                {asset.status !== 'RETURNED' && asset.assignedTo && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleReturnAsset(asset.id)}
+                  >
+                    Return
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon">
+                  <MoreHorizontal size={18} />
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </tbody>
+    </Table>
+  );
+
   const handleCreateAsset = async (data: any) => {
     try {
-      const newAsset = await createAsset(data);
+      await createAsset(data);
       addNotification({
-        type: 'success',
+        type: 'other',
         title: 'Asset Created',
         message: `Asset "${data.name}" has been created successfully.`,
       });
@@ -57,7 +160,7 @@ const Assets = () => {
       }
     } catch (err) {
       addNotification({
-        type: 'error',
+        type: 'other',
         title: 'Error',
         message: err instanceof Error ? err.message : 'Failed to create asset',
       });
@@ -69,7 +172,7 @@ const Assets = () => {
     try {
       await assignAsset(data);
       addNotification({
-        type: 'success',
+        type: 'other',
         title: 'Asset Assigned',
         message: 'Asset has been assigned successfully.',
       });
@@ -82,7 +185,7 @@ const Assets = () => {
       }, 500);
     } catch (err) {
       addNotification({
-        type: 'error',
+        type: 'other',
         title: 'Error',
         message: err instanceof Error ? err.message : 'Failed to assign asset',
       });
@@ -94,13 +197,13 @@ const Assets = () => {
     try {
       await returnAsset(assetId);
       addNotification({
-        type: 'success',
+        type: 'other',
         title: 'Asset Returned',
         message: 'Asset has been returned successfully.',
       });
     } catch (err) {
       addNotification({
-        type: 'error',
+        type: 'other',
         title: 'Error',
         message: err instanceof Error ? err.message : 'Failed to return asset',
       });
@@ -141,96 +244,7 @@ const Assets = () => {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-8 text-center text-slate-500">Loading assets...</div>
-          ) : filteredAssets.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">
-              {searchTerm ? 'No assets found matching your search.' : 'No assets created yet.'}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Asset Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Assigned To</TableHead>
-                  <TableHead>Assigned Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created Date</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <tbody>
-                {filteredAssets.map((asset) => (
-                  <TableRow key={asset.id} className="hover:bg-slate-50">
-                    <TableCell className="font-medium">{asset.name}</TableCell>
-                    <TableCell className="text-sm text-slate-600">{asset.description || '-'}</TableCell>
-                    <TableCell className="text-sm">
-                      {asset.user?.firstName && asset.user?.lastName
-                        ? `${asset.user.firstName} ${asset.user.lastName}`
-                        : asset.user?.email
-                        ? asset.user.email
-                        : asset.assignedTo
-                        ? `User #${asset.assignedTo}`
-                        : '-'}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {asset.assignedAt ? new Date(asset.assignedAt).toLocaleDateString() : '-'}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {asset.status === 'RETURNED' ? (
-                        <Badge variant="default" className="bg-gray-200 text-gray-800 border-none">
-                          Returned
-                        </Badge>
-                      ) : asset.status === 'ASSIGNED' ? (
-                        <Badge variant="default" className="bg-emerald-100 text-emerald-800 border-none">
-                          <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5" />
-                          Assigned
-                        </Badge>
-                      ) : (
-                        <Badge variant="default" className="bg-amber-100 text-amber-800 border-none">
-                          Unassigned
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {new Date(asset.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex gap-2 justify-end">
-                        {asset.status !== 'RETURNED' && !asset.assignedTo && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedAssetId(asset.id);
-                              setIsAssignModalOpen(true);
-                            }}
-                          >
-                            Assign
-                          </Button>
-                        )}
-                        {asset.status !== 'RETURNED' && asset.assignedTo && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleReturnAsset(asset.id)}
-                          >
-                            Return
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal size={18} />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </tbody>
-            </Table>
-          )}
-        </CardContent>
+        <CardContent className="p-0">{assetContent}</CardContent>
       </Card>
 
       <CreateAssetModal

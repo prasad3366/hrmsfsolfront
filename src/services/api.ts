@@ -132,7 +132,7 @@ export interface Asset {
   description?: string;
   assignedTo?: number;
   assignedAt?: string | null;
-  status: 'ASSIGNED' | 'RETURNED' | string;
+  status: 'ASSIGNED' | 'RETURNED';
   returnedAt?: string | null;
   createdAt: string;
   user?: {
@@ -227,6 +227,7 @@ export interface LeaveBalance {
 }
 
 export interface LeaveType {
+  id: number;
   leaveType: string;
   allocated: number;
   used: number;
@@ -449,7 +450,7 @@ class ApiService {
       localStorage.setItem('refreshToken', data.refreshToken);
       
       return data;
-    } catch (error) {
+    } catch {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       throw new Error('Token refresh failed');
@@ -472,7 +473,7 @@ class ApiService {
       localStorage.removeItem('refreshToken');
 
       return await response.json();
-    } catch (error) {
+    } catch {
       // Clear tokens anyway
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
@@ -1071,7 +1072,7 @@ class ApiService {
         try {
           const parsed = JSON.parse(body || '{}');
           msg = parsed.message || msg;
-        } catch (e) {
+        } catch {
           if (body) msg = `${msg}: ${body}`;
         }
         throw new Error(msg);
@@ -1118,7 +1119,7 @@ class ApiService {
         try {
           const parsed = JSON.parse(body || '{}');
           err = parsed.message || err;
-        } catch (e) {
+        } catch {
           if (body) err = `${err}: ${body}`;
         }
         throw new Error(err);
@@ -1130,36 +1131,52 @@ class ApiService {
     }
   }
 
+  private buildDocumentsQueryString(employeeId?: number, role?: string): string {
+    if (employeeId && role) {
+      return `?employeeId=${employeeId}&role=${role}`;
+    }
+    if (employeeId) {
+      return `?employeeId=${employeeId}`;
+    }
+    if (role) {
+      return `?role=${role}`;
+    }
+    return '';
+  }
+
+  private async fetchWithFallback(url: string, altUrl: string, options: RequestInit): Promise<Response> {
+    let response = await fetch(url, options);
+    if (response.status === 404 && API_BASE_URL.includes('/api')) {
+      response = await fetch(altUrl, options);
+    }
+    return response;
+  }
+
+  private parseErrorResponse(body: string): string {
+    try {
+      const parsed = JSON.parse(body || '{}');
+      return parsed.message || 'Unknown error';
+    } catch (error) {
+      console.debug('Failed to parse error response', error);
+      return body || 'Unknown error';
+    }
+  }
+
   async getDocuments(employeeId?: number, role?: string): Promise<any[]> {
     try {
-      const q = employeeId ? `?employeeId=${employeeId}${role ? `&role=${role}` : ''}` : role ? `?role=${role}` : '';
+      const q = this.buildDocumentsQueryString(employeeId, role);
       const url = `${API_BASE_URL}/hrms/documents${q}`;
+      const altUrl = `${API_BASE_URL.replace(/\/api\/?$/, '')}/hrms/documents${q}`;
+
       console.log('getDocuments request to:', url);
-      let response = await fetch(url, {
+      const response = await this.fetchWithFallback(url, altUrl, {
         method: 'GET',
         headers: this.getAuthHeaders(),
       });
 
-      // If the backend is not mounted under `/api` but API_BASE_URL contains `/api`,
-      // try a fallback without the `/api` prefix when we get 404.
-      if (response.status === 404 && API_BASE_URL.includes('/api')) {
-        const altBase = API_BASE_URL.replace(/\/api\/?$/, '');
-        const altUrl = `${altBase}/hrms/documents${q}`;
-        response = await fetch(altUrl, {
-          method: 'GET',
-          headers: this.getAuthHeaders(),
-        });
-      }
-
       if (!response.ok) {
         const body = await response.text().catch(() => '');
-        let msg = `Failed to fetch documents (${response.status})`;
-        try {
-          const parsed = JSON.parse(body || '{}');
-          msg = parsed.message || msg;
-        } catch (e) {
-          if (body) msg = `${msg}: ${body}`;
-        }
+        const msg = `Failed to fetch documents (${response.status}): ${this.parseErrorResponse(body)}`;
         throw new Error(msg);
       }
 
@@ -1225,7 +1242,7 @@ class ApiService {
       const contentDisposition = response.headers.get('content-disposition');
       let fileName: string | undefined;
       if (contentDisposition) {
-        const match = contentDisposition.match(/filename="?([^\"]+)"?/);
+        const match = /filename="?([^"]+)"?/.exec(contentDisposition);
         if (match) fileName = match[1];
       }
 
@@ -1252,14 +1269,14 @@ class ApiService {
         throw new Error(err || 'Failed to download payslip');
       }
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const url = globalThis.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `payslip-${payrollId}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
-      window.URL.revokeObjectURL(url);
+      globalThis.URL.revokeObjectURL(url);
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to download payslip');
     }
@@ -1287,8 +1304,8 @@ class ApiService {
           return meEmployee;
         }
       }
-    } catch {
-      // continue to next lookup
+    } catch (error) {
+      console.debug('Failed first employee lookup by user/me', error);
     }
 
     // Then try direct employee by id
@@ -1297,8 +1314,8 @@ class ApiService {
       if (response.ok) {
         return await response.json();
       }
-    } catch {
-      // continue
+    } catch (error) {
+      console.debug('Failed direct employee lookup by id', error);
     }
 
     // Third fallback: self endpoint if direct id path didn't succeed but we may be cross-user
@@ -1310,8 +1327,8 @@ class ApiService {
           return meEmployee;
         }
       }
-    } catch {
-      // continue
+    } catch (error) {
+      console.debug('Failed employee fallback (employees/me)', error);
     }
 
     // Fallback: Use getAllEmployees if user has permission (requires ADMIN/HR/MANAGER)
@@ -1319,8 +1336,8 @@ class ApiService {
       const list = await this.getAllEmployees();
       const found = list.find((e: any) => String(e.id) === String(id) || String(e.userId) === String(id) || String(e.user?.id) === String(id));
       if (found) return found;
-    } catch (err) {
-      // If getAllEmployees fails (403 Forbidden or other error), continue to error
+    } catch (error) {
+      console.debug('Failed to fallback to getAllEmployees', error);
     }
 
     throw new Error(`Employee with ID ${id} not found`);
@@ -1361,46 +1378,45 @@ class ApiService {
     }
   }
 
+  private async tryEmployeeIdUrl(url: string): Promise<number | null> {
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      if ('employeeId' in data) return data.employeeId;
+      if ('id' in data) return data.id;
+      
+      return null;
+    } catch (error) {
+      console.debug('Failed employee ID URL fetch', error);
+      return null;
+    }
+  }
+
   async getEmployeeIdByUserId(): Promise<{ employeeId: number }> {
-    // Primary approach: Try dedicated endpoints first (no role restrictions)
-    const tryUrls = [
+    const urls = [
       `${API_BASE_URL}/employees/me`,
       `${API_BASE_URL}/employees/info/id`,
     ];
 
-    for (const url of tryUrls) {
-      try {
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: this.getAuthHeaders(),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          // Handle both response formats
-          if ('employeeId' in data) {
-            return { employeeId: data.employeeId };
-          }
-          if ('id' in data) {
-            return { employeeId: data.id };
-          }
-        }
-      } catch (err) {
-        // try next
-      }
+    for (const url of urls) {
+      const employeeId = await this.tryEmployeeIdUrl(url);
+      if (employeeId) return { employeeId };
     }
 
-    // Fallback: Use getAllEmployees and search for current user (requires ADMIN/HR/MANAGER role)
+    // Fallback: Use getAllEmployees and search for current user
     try {
       const list = await this.getAllEmployees();
-      if (list && list.length > 0) {
-        const employee = list[0];
-        if (employee.id) {
-          return { employeeId: employee.id };
-        }
+      if (list?.length > 0 && list[0].id) {
+        return { employeeId: list[0].id };
       }
-    } catch (err) {
-      // continue - getAllEmployees may return 403 for non-admin users
+    } catch (error) {
+      console.debug('Failed fallback getAllEmployees for employeeId', error);
     }
 
     throw new Error('Failed to get employee ID');
@@ -1608,7 +1624,8 @@ class ApiService {
           const errorData = await response.json();
           errorMessage = errorData.message || errorData.error || JSON.stringify(errorData);
           console.error('Backend error response:', errorData);
-        } catch {
+        } catch (error) {
+          console.debug('Failed to parse assign salary error response', error);
           errorMessage = `Server error: ${response.status} ${response.statusText}`;
         }
         throw new Error(errorMessage);
@@ -1717,7 +1734,7 @@ class ApiService {
           return Array.isArray(data) ? data : [];
         }
       } catch (error) {
-        // try next endpoint silently
+        console.debug('Failed to fetch team data from endpoint', error);
       }
     }
 
@@ -1865,7 +1882,10 @@ class ApiService {
 
       const data = await response.json();
       // Handle both array and single object responses for backwards compatibility
-      return Array.isArray(data) ? data : (data ? [data] : []);
+      if (Array.isArray(data)) {
+        return data;
+      }
+      return data ? [data] : [];
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch my team');
     }
@@ -1894,6 +1914,96 @@ class ApiService {
       return await response.json();
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to request carry forward');
+    }
+  }
+
+  // ================= HELPDESK TICKETS =================
+  async createHelpdeskTicket(data: { issue: string; reason: string }): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/helpdesk/tickets`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create helpdesk ticket');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to create helpdesk ticket');
+    }
+  }
+
+  async getHelpdeskTickets(): Promise<any[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/helpdesk/tickets`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch helpdesk tickets');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch helpdesk tickets');
+    }
+  }
+
+  async getMyHelpdeskTickets(): Promise<any[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/helpdesk/tickets/my-tickets`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch my helpdesk tickets');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch my helpdesk tickets');
+    }
+  }
+
+  async approveHelpdeskTicket(ticketId: string): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/helpdesk/tickets/${ticketId}/approve`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to approve helpdesk ticket');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to approve helpdesk ticket');
+    }
+  }
+
+  async resolveHelpdeskTicket(ticketId: string): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/helpdesk/tickets/${ticketId}/resolve`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to resolve helpdesk ticket');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to resolve helpdesk ticket');
     }
   }
 }

@@ -36,7 +36,7 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
       await onApprove();
       onClose();
     } catch (error) {
-      // Error handling is managed by the hook
+      console.error('Approve leave request failed:', error);
     }
   };
 
@@ -47,7 +47,7 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
       setRemarks('');
       onClose();
     } catch (error) {
-      // Error handling is managed by the hook
+      console.error('Reject leave request failed:', error);
     }
   };
 
@@ -95,8 +95,9 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
 
               {actionType === 'reject' && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-3">Remarks (Optional)</label>
+                  <label htmlFor="rejectionRemarks" className="block text-sm font-medium text-slate-700 mb-3">Remarks (Optional)</label>
                   <textarea
+                    id="rejectionRemarks"
                     value={remarks}
                     onChange={(e) => setRemarks(e.target.value)}
                     placeholder="Add remarks for rejection"

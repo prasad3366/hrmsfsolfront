@@ -28,7 +28,7 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
     setEmpLoading(true);
     ApiService.getAllEmployees()
       .then((data) => {
-        if (!mounted) return;
+        if (mounted === false) return;
         setEmployees(data || []);
       })
       .catch((err) => {
@@ -42,15 +42,15 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === 'month' || name === 'year' ? parseInt(value, 10) : value,
+      [name]: name === 'month' || name === 'year' ? Number.parseInt(value, 10) : value,
     }));
   };
  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
  
-    const idValue = parseInt(formData.employeeIdentifier, 10);
-    const isNumericId = !Number.isNaN(idValue);
+    const idValue = Number.parseInt(formData.employeeIdentifier, 10);
+    const isNumericId = Number.isNaN(idValue) === false;
  
  
     // Only include employeeId or empCode if defined, to match RunPayrollDto type
@@ -82,7 +82,7 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
       onSuccess?.();
       onClose();
     } catch (err) {
-      // Error is handled in hook
+      console.error('Failed to run payroll:', err);
     }
   };
  

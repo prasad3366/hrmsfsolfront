@@ -42,7 +42,7 @@ const CreateHolidayModal: React.FC<CreateHolidayModalProps> = ({
       });
       onClose();
     } catch (error) {
-      // Error handling is managed by the hook
+      console.error('Failed to create holiday', error);
     }
   };
 
@@ -69,10 +69,11 @@ const CreateHolidayModal: React.FC<CreateHolidayModalProps> = ({
         <form onSubmit={handleSubmit} className="p-8 space-y-8">
           {/* Holiday Name */}
           <div className="space-y-3">
-            <label className="block text-sm font-semibold text-slate-900">
+            <label htmlFor="holiday-name" className="block text-sm font-semibold text-slate-900">
               Holiday Name <span className="text-red-500">*</span>
             </label>
             <Input
+              id="holiday-name"
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -85,10 +86,11 @@ const CreateHolidayModal: React.FC<CreateHolidayModalProps> = ({
 
           {/* Date */}
           <div className="space-y-3">
-            <label className="block text-sm font-semibold text-slate-900">
+            <label htmlFor="holiday-date" className="block text-sm font-semibold text-slate-900">
               Date <span className="text-red-500">*</span>
             </label>
             <Input
+              id="holiday-date"
               type="date"
               value={formData.date}
               onChange={(e) => setFormData({ ...formData, date: e.target.value })}
@@ -100,10 +102,11 @@ const CreateHolidayModal: React.FC<CreateHolidayModalProps> = ({
 
           {/* Description */}
           <div className="space-y-3">
-            <label className="block text-sm font-semibold text-slate-900">
+            <label htmlFor="holiday-description" className="block text-sm font-semibold text-slate-900">
               Description <span className="text-slate-400 font-normal">(Optional)</span>
             </label>
             <textarea
+              id="holiday-description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Add any notes or description about this holiday"
@@ -115,10 +118,11 @@ const CreateHolidayModal: React.FC<CreateHolidayModalProps> = ({
 
           {/* Location */}
           <div className="space-y-3">
-            <label className="block text-sm font-semibold text-slate-900">
+            <label htmlFor="holiday-location" className="block text-sm font-semibold text-slate-900">
               Location <span className="text-slate-400 font-normal">(Optional)</span>
             </label>
             <Input
+              id="holiday-location"
               type="text"
               value={formData.location}
               onChange={(e) => setFormData({ ...formData, location: e.target.value })}
@@ -130,8 +134,9 @@ const CreateHolidayModal: React.FC<CreateHolidayModalProps> = ({
 
           {/* Optional Holiday Checkbox */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
-            <label className="flex items-center cursor-pointer">
+            <label htmlFor="isOptional" className="flex items-center cursor-pointer">
               <input
+                id="isOptional"
                 type="checkbox"
                 checked={formData.isOptional}
                 onChange={(e) => setFormData({ ...formData, isOptional: e.target.checked })}

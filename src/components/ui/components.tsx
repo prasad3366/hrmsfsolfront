@@ -151,10 +151,27 @@ interface DialogProps {
 export const Dialog = ({ open, onOpenChange, children }: DialogProps) => {
   if (!open) return null;
 
+  const handleBackdropClick = () => onOpenChange(false);
+  
+  const handleBackdropKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') onOpenChange(false);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div onClick={() => onOpenChange(false)} className="absolute inset-0" />
-      <div onClick={(e) => e.stopPropagation()} className="relative">
+      <button
+        type="button"
+        aria-label="Close dialog"
+        onClick={handleBackdropClick}
+        onKeyDown={handleBackdropKeyDown}
+        className="absolute inset-0"
+      />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        role="presentation"
+        tabIndex={-1}
+        className="relative"
+      >
         {children}
       </div>
     </div>

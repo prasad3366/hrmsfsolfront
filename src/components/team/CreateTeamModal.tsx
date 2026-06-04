@@ -239,7 +239,7 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
               )}
               {selectedEmployeeIds.length > 0 && (
                 <p className="text-sm text-gray-600">
-                  {selectedEmployeeIds.length} member{selectedEmployeeIds.length !== 1 ? 's' : ''} selected
+                  {selectedEmployeeIds.length} member{selectedEmployeeIds.length > 1 ? 's' : ''} selected
                 </p>
               )}
             </div>

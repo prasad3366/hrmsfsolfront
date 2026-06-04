@@ -1,6 +1,6 @@
 import React from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../../components/ui/components';
-import { Plus, MoreHorizontal, Calendar, MessageSquare, Paperclip } from 'lucide-react';
+import { Button, Badge } from '../../components/ui/components';
+import { Plus, MoreHorizontal, MessageSquare, Paperclip } from 'lucide-react';
 
 interface Candidate {
     id: string;

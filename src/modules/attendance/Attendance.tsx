@@ -5,11 +5,37 @@ import {
 } from '../../components/ui/components';
 import { useAttendance } from '../../hooks/useAttendance';
 import { PunchInOutModal } from '../../components/attendance/PunchInOutModal';
-import { Calendar as CalendarIcon, Clock, MapPin } from 'lucide-react';
+import { Clock, MapPin } from 'lucide-react';
 
 const Attendance = () => {
   const { records, todayRecord, isLoading, refresh } = useAttendance();
   const [isPunchOpen, setIsPunchOpen] = React.useState(false);
+
+  if (isLoading) {
+    return (
+      <div className="p-6 md:p-8 max-w-7xl mx-auto text-center text-slate-500">
+        Loading attendance records...
+      </div>
+    );
+  }
+
+  const hasPunchedIn = Boolean(todayRecord?.hasPunchedIn ?? todayRecord?.punchInTime);
+  const hasPunchedOut = Boolean(todayRecord?.hasPunchedOut ?? todayRecord?.punchOutTime);
+
+  const punchActionLabel = hasPunchedIn
+    ? hasPunchedOut
+      ? 'View'
+      : 'Check Out'
+    : 'Check In';
+
+  const statusBadgeVariant = (status: string) => {
+    const normalized = status?.toString().toUpperCase();
+    if (normalized === 'PRESENT') return 'success';
+    if (normalized === 'ABSENT') return 'danger';
+    return 'default';
+  };
+
+  const rowKey = (record: any, index: number) => (record.date ? `${record.date}-${index}` : `record-${index}`);
 
   // Group multiple punches per day into a single row: first punch-in and last punch-out.
   const userAttendance = React.useMemo(() => {
@@ -81,14 +107,14 @@ const Attendance = () => {
                     className="h-32 w-32 rounded-full bg-blue-600 text-white font-bold text-lg shadow-lg hover:bg-blue-700 transition-all transform hover:scale-105 flex flex-col items-center justify-center"
                   >
                     <Clock size={32} className="mb-2" />
-                    {!todayRecord?.hasPunchedIn && !todayRecord?.punchInTime ? 'Check In' : !todayRecord?.hasPunchedOut && !todayRecord?.punchOutTime ? 'Check Out' : 'View'}
+                    {punchActionLabel}
                   </Button>
                 </div>
                 <div className="mt-6 flex flex-col items-center text-sm text-slate-500 gap-2">
                     <MapPin size={16} />
                     <span>Remote - IP 192.168.1.1</span>
-                    {(todayRecord?.hasPunchedIn || todayRecord?.punchInTime) && (
-                      <span>Check-In Time: {new Date(todayRecord.punchInTime || todayRecord.punchInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    {hasPunchedIn && (
+                      <span>Check-In Time: {new Date(todayRecord.punchInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     )}
                 </div>
             </div>
@@ -119,13 +145,13 @@ const Attendance = () => {
                         </TableRow>
                       ) : (
                         userAttendance.map((record, index) => (
-                          <TableRow key={record.id ?? `${record.date}-${index}`}>
+                          <TableRow key={rowKey(record, index)}>
                             <TableCell className="font-medium">{new Date(record.date).toLocaleDateString()}</TableCell>
                             <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                             <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                             <TableCell>{record.totalHours ? `${record.totalHours.toFixed(2)} hrs` : '0.00 hrs'}</TableCell>
                             <TableCell>
-                              <Badge variant={record.status === 'PRESENT' ? 'success' : record.status === 'ABSENT' ? 'danger' : 'default'}>
+                              <Badge variant={statusBadgeVariant(record.status)}>
                                 {record.status}
                               </Badge>
                             </TableCell>

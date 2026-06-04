@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '../../components/ui/components';
 import {
-  Calendar, Clock, FileText, ChevronRight, CheckCircle2, BarChart3,
-  Home, Award, Activity, Target, AlertCircle, IndianRupee, Package // ← added Package for assets
+  Calendar, Clock, FileText, ChevronRight,
+  Home, Award, Target, AlertCircle, Package
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -17,6 +17,69 @@ import { useLeave } from '../../hooks/useLeave';
 import { useAssets } from '../../hooks/useAssets';
 import { useAuth } from '../../context/AuthContext';
 import { usePayroll } from '../../hooks/usePayroll';
+
+// ────────────────────────────────────────────────
+// Helper functions to reduce complexity
+const filterCasualSickLeaves = (leaves: any[]) => {
+  return leaves.filter((lt) => {
+    const name = (lt.leaveType || '').toLowerCase();
+    return name.includes('casual') || name.includes('sick');
+  });
+};
+
+const calculateTotalLeaveBalance = (leaves: any[]) => {
+  return filterCasualSickLeaves(leaves).reduce((total, lt) => total + (lt.remaining || 0), 0);
+};
+
+const getLatestPayslip = (payrolls: any[]) => {
+  if (payrolls.length === 0) return null;
+  return [...payrolls].sort((a, b) => {
+    if (b.year !== a.year) return b.year - a.year;
+    if (b.month !== a.month) return b.month - a.month;
+    return Number.parseFloat((b.createdAt || 0).toString()) - Number.parseFloat((a.createdAt || 0).toString());
+  })[0];
+};
+
+const getPendingRequestsCount = (requests: any[]) => {
+  return requests.filter((req) => {
+    const status = (req?.status || '').toString().toUpperCase();
+    return status === 'PENDING';
+  }).length;
+};
+
+const getPayslipValue = (isPayrollLoading: boolean, latestPayslip: any) => {
+  if (isPayrollLoading) return '...';
+  if (latestPayslip) return `₹${latestPayslip.netSalary?.toLocaleString() || '0'}`;
+  return 'No data';
+};
+
+const getPayslipSubtext = (latestPayslip: any) => {
+  if (!latestPayslip) return 'No payslip available';
+  if (latestPayslip.month && latestPayslip.year) {
+    const date = new Date(latestPayslip.year, latestPayslip.month - 1);
+    return `Net pay - ${date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+  }
+  return 'No payslip available';
+};
+
+const filterRecentAttendance = (records: any[], daysBack = 31) => {
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setDate(cutoff.getDate() - daysBack);
+
+  return records
+    .filter((r) => {
+      const date = new Date(r.date);
+      return Number.isNaN(date.getTime()) === false && date >= cutoff && date <= now;
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+};
+
+const getWeekAttendance = (records: any[], weekIndex: number) => {
+  const start = Math.max(0, records.length - (weekIndex + 1) * 7);
+  const end = records.length - weekIndex * 7;
+  return records.slice(start, end);
+};
 
 // ────────────────────────────────────────────────
 // Metric Card (slightly improved version)
@@ -126,6 +189,16 @@ export default function EmployeeDashboard() {
   // Filter my WFH requests to only show non-expired
   const today = new Date();
   const activeMyWfhRequests = myWfhRequests.filter(req => new Date(req.endDate) >= today);
+  const hasPunchedIn = Boolean(todayRecord?.hasPunchedIn ?? todayRecord?.punchInTime);
+  const hasPunchedOut = Boolean(todayRecord?.hasPunchedOut ?? todayRecord?.punchOutTime);
+
+  const punchButtonVariant: 'primary' | 'secondary' = hasPunchedOut ? 'secondary' : 'primary';
+  const punchButtonLabel = hasPunchedIn
+    ? hasPunchedOut
+      ? 'View Details'
+      : 'Punch Out'
+    : 'Punch In';
+
   const { myHolidays, fetchMyHolidays } = useHolidays();
   const { myLeaveBalance, fetchMyLeaveBalance, isLoading: isLeaveLoading } = useLeave();
   const { payrolls, fetchPayroll, loading: isPayrollLoading } = usePayroll();
@@ -142,56 +215,32 @@ export default function EmployeeDashboard() {
   }, [user?.employeeId]);
 
   // Calculate leave balance for only Casual and Sick leaves
-  const totalLeaveBalance = useMemo(() => {
-    return myLeaveBalance
-      .filter((leaveType) => {
-        const typeName = (leaveType.leaveType || '').toLowerCase();
-        return typeName.includes('casual') || typeName.includes('sick');
-      })
-      .reduce((total, leaveType) => total + (leaveType.remaining || 0), 0);
-  }, [myLeaveBalance]);
+  const totalLeaveBalance = useMemo(
+    () => calculateTotalLeaveBalance(myLeaveBalance),
+    [myLeaveBalance]
+  );
 
   // Get latest payslip
-  const latestPayslip = useMemo(() => {
-    if (payrolls.length === 0) return null;
-    // Sort by year, then month, then createdAt as fallback
-    return payrolls
-      .slice()
-      .sort((a, b) => {
-        if (b.year !== a.year) return b.year - a.year;
-        if (b.month !== a.month) return b.month - a.month;
-        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
-      })[0];
-  }, [payrolls]);
+  const latestPayslip = useMemo(() => getLatestPayslip(payrolls), [payrolls]);
 
   // Calculate pending requests
-  const pendingRequests = useMemo(() => {
-    const pendingWfh = myWfhRequests.filter(req => req.status === 'PENDING').length;
-    // Note: Leave requests would need to be fetched separately if needed
-    return pendingWfh; // For now, just WFH requests
-  }, [myWfhRequests]);
+  const pendingRequests = useMemo(
+    () => getPendingRequestsCount(myWfhRequests),
+    [myWfhRequests]
+  );
 
   // Attended records in the last 31 days
-  const recentAttendance = useMemo(() => {
-    const now = new Date();
-    const cutoff = new Date(now);
-    cutoff.setDate(cutoff.getDate() - 31);
-
-    return records
-      .filter((record) => {
-        const recordDate = new Date(record.date);
-        return !Number.isNaN(recordDate.getTime()) && recordDate >= cutoff && recordDate <= now;
-      })
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [records]);
+  const recentAttendance = useMemo(
+    () => filterRecentAttendance(records),
+    [records]
+  );
 
   const totalWeeks = Math.max(1, Math.ceil(recentAttendance.length / 7));
   const weekIndex = Math.min(Math.max(0, weekPage), totalWeeks - 1);
-  const weekAttendance = useMemo(() => {
-    const start = Math.max(0, recentAttendance.length - (weekIndex + 1) * 7);
-    const end = recentAttendance.length - weekIndex * 7;
-    return recentAttendance.slice(start, end);
-  }, [recentAttendance, weekIndex]);
+  const weekAttendance = useMemo(
+    () => getWeekAttendance(recentAttendance, weekIndex),
+    [recentAttendance, weekIndex]
+  );
 
   useEffect(() => {
     setWeekPage(0);
@@ -200,7 +249,7 @@ export default function EmployeeDashboard() {
   const chartData = weekAttendance
     .map((record) => ({
       day: new Date(record.date).toLocaleDateString('en-US', { weekday: 'short' }),
-      hours: parseFloat((record.totalHours || 0).toFixed(2)),
+      hours: Number.parseFloat((record.totalHours || 0).toFixed(2)),
     }));
 
   const currentHours = todayRecord?.totalHours || 0;
@@ -211,7 +260,7 @@ export default function EmployeeDashboard() {
     ? new Date(todayRecord.punchOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null;
 
-  const isPunchedIn = todayRecord?.hasPunchedIn && !todayRecord?.hasPunchedOut;
+  const attendanceStatus = hasPunchedIn ? (hasPunchedOut ? 'Completed' : 'Active') : 'Not Started';
 
   return (
     <div className="min-h-screen bg-gray-50/40 pb-12">
@@ -237,8 +286,8 @@ export default function EmployeeDashboard() {
 
           <MetricCard
             title="Latest Payslip"
-            value={isPayrollLoading ? '...' : latestPayslip ? `₹${latestPayslip.netSalary?.toLocaleString() || '0'}` : 'No data'}
-            subtext={latestPayslip ? `Net pay - ${latestPayslip.month && latestPayslip.year ? `${new Date(latestPayslip.year, latestPayslip.month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}` : 'No payslip available'}` : 'No payslip available'}
+            value={getPayslipValue(isPayrollLoading, latestPayslip)}
+            subtext={getPayslipSubtext(latestPayslip)}
             icon={FileText}
           />
 
@@ -327,9 +376,9 @@ export default function EmployeeDashboard() {
                   { task: 'Review project proposal', status: 'completed' },
                   { task: 'Client presentation prep', status: 'pending' },
                   { task: 'Code review for team PR', status: 'in-progress' },
-                ].map((item, i) => (
+                ].map((item) => (
                   <div
-                    key={i}
+                    key={item.task}
                     className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors"
                   >
                     <div className="font-medium text-gray-800">{item.task}</div>
@@ -354,13 +403,7 @@ export default function EmployeeDashboard() {
                 <div className="space-y-4">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Status</span>
-                    <span className="font-medium">
-                      {!todayRecord?.hasPunchedIn
-                        ? 'Not Started'
-                        : todayRecord?.hasPunchedOut
-                        ? 'Completed'
-                        : 'Active'}
-                    </span>
+                    <span className="font-medium">{attendanceStatus}</span>
                   </div>
 
                   {todayRecord?.hasPunchedIn && (
@@ -386,13 +429,9 @@ export default function EmployeeDashboard() {
                 <Button
                   onClick={() => setIsPunchModalOpen(true)}
                   className="w-full"
-                  variant={isPunchedIn ? 'primary' : todayRecord?.hasPunchedOut ? 'secondary' : 'primary'}
+                  variant={punchButtonVariant}
                 >
-                  {!todayRecord?.hasPunchedIn
-                    ? 'Punch In'
-                    : !todayRecord?.hasPunchedOut
-                    ? 'Punch Out'
-                    : 'View Details'}
+                  {punchButtonLabel}
                 </Button>
               </CardContent>
             </Card>
@@ -555,9 +594,9 @@ export default function EmployeeDashboard() {
                             Returned
                           </Badge>
                         ) : (
-                          <Badge variant="default" className="bg-emerald-100 text-emerald-800 border-none whitespace-nowrap">
-                            <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5" />
-                            Assigned
+                          <Badge variant="default" className="bg-emerald-100 text-emerald-800 border-none inline-flex items-center whitespace-nowrap">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5 inline-block" />
+                            <span>Assigned</span>
                           </Badge>
                         )}
                       </div>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 export interface Notification {
   id: string;
@@ -28,6 +28,27 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
+// Helper function to reduce nesting complexity in filtering
+const shouldShowNotification = (notification: Notification, userRole: string, userId: number): boolean => {
+  const hasRoleRestriction = notification.recipientRoles && notification.recipientRoles.length > 0;
+
+  if (!hasRoleRestriction) return true;
+
+  const roleMatches = notification.recipientRoles.includes(userRole);
+  if (!roleMatches) return false;
+
+  const hasUserRestriction = notification.recipientIds && notification.recipientIds.length > 0;
+  if (!hasUserRestriction) return true;
+
+  return notification.recipientIds.includes(userId);
+};
+
+const scheduleNotificationRemoval = (id: string, removeFn: (id: string) => void) => {
+  setTimeout(() => {
+    removeFn(id);
+  }, 10000);
+};
+
 export const useNotifications = () => {
   const ctx = useContext(NotificationContext);
   if (!ctx) {
@@ -38,6 +59,12 @@ export const useNotifications = () => {
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  const removeNotificationAfterTimeout = useCallback((notificationId: string) => {
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+    }, 10000);
+  }, []);
 
   const addNotification = useCallback((notif: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -51,11 +78,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     // Auto-remove notification after 10 seconds if it's a temporary one
     if (notif.type === 'punch_in' || notif.type === 'punch_out') {
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
-      }, 10000);
+      scheduleNotificationRemoval(id, removeNotificationAfterTimeout);
     }
-  }, []);
+  }, [removeNotificationAfterTimeout]);
 
   const markAsRead = useCallback((id: string) => {
     setNotifications((prev) =>
@@ -75,40 +100,31 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
-  const getFilteredNotifications = useCallback((userRole: string, userId: number): Notification[] => {
-    return notifications.filter((n) => {
-      // If no recipient roles specified, show to all
-      if (!n.recipientRoles || n.recipientRoles.length === 0) {
-        return true;
-      }
-      // If user's role is in recipient list
-      const roleMatch = n.recipientRoles.includes(userRole);
-      if (!roleMatch) return false;
-
-      // If no specific recipient IDs, show to all users in that role
-      if (!n.recipientIds || n.recipientIds.length === 0) {
-        return true;
-      }
-      // Show only if user ID is in the list
-      return n.recipientIds.includes(userId);
-    });
-  }, [notifications]);
+  const getFilteredNotifications = useCallback(
+    (userRole: string, userId: number): Notification[] => {
+      return notifications.filter((n) => shouldShowNotification(n, userRole, userId));
+    },
+    [notifications]
+  );
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
+  const contextValue = useMemo(
+    () => ({
+      notifications,
+      unreadCount,
+      addNotification,
+      markAsRead,
+      markAllAsRead,
+      clearNotifications,
+      removeNotification,
+      getFilteredNotifications,
+    }),
+    [notifications, unreadCount, addNotification, markAsRead, markAllAsRead, clearNotifications, removeNotification, getFilteredNotifications]
+  );
+
   return (
-    <NotificationContext.Provider
-      value={{
-        notifications,
-        unreadCount,
-        addNotification,
-        markAsRead,
-        markAllAsRead,
-        clearNotifications,
-        removeNotification,
-        getFilteredNotifications,
-      }}
-    >
+    <NotificationContext.Provider value={contextValue}>
       {children}
     </NotificationContext.Provider>
   );

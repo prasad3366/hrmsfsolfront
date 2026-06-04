@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input } from '../../components/ui/components';
 import { X, Loader, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
-import ApiService, { CreateEmployeeDto, CreateEmployeeResponse } from '../../services/api';
+import ApiService, { CreateEmployeeDto } from '../../services/api';
 
 interface CreateEmployeeModalProps {
   isOpen: boolean;
@@ -11,6 +11,96 @@ interface CreateEmployeeModalProps {
   initialData?: Partial<CreateEmployeeDto>;
   employeeId?: number;
 }
+
+// Helper functions to reduce complexity
+const normalizeDto = (data?: Partial<CreateEmployeeDto>): CreateEmployeeDto => ({
+  email: data?.email ?? '',
+  firstName: data?.firstName ?? '',
+  lastName: data?.lastName ?? '',
+  empCode: data?.empCode ?? '',
+  department: data?.department ?? '',
+  designation: data?.designation ?? '',
+  role: data?.role ?? 'EMPLOYEE',
+  employmentType: data?.employmentType ?? 'FULL_TIME',
+  status: data?.status ?? 'ACTIVE',
+  sourceOfHire: data?.sourceOfHire ?? '',
+  dateOfJoining: data?.dateOfJoining ?? '',
+  currentExperience: data?.currentExperience ?? undefined,
+  reportingManager: data?.reportingManager ?? '',
+  dateOfBirth: data?.dateOfBirth ?? '',
+  age: data?.age ?? undefined,
+  gender: data?.gender ?? 'MALE',
+  currentAddress: data?.currentAddress ?? '',
+  permanentAddress: data?.permanentAddress ?? '',
+  pincode: data?.pincode ?? '',
+  city: data?.city ?? '',
+  maritalStatus: data?.maritalStatus ?? 'UNMARRIED',
+  phone: data?.phone ?? '',
+  personalMobile: data?.personalMobile ?? '',
+  panNumber: data?.panNumber ?? '',
+  aadharNumber: data?.aadharNumber ?? '',
+  pfNumber: data?.pfNumber ?? '',
+  uanNumber: data?.uanNumber ?? '',
+  bankAccountNumber: data?.bankAccountNumber ?? '',
+  bankName: data?.bankName ?? '',
+  ifscCode: data?.ifscCode ?? '',
+  dateOfExit: data?.dateOfExit ?? '',
+  isExperienced: data?.isExperienced ?? false,
+});
+
+const validateRequiredFields = (data: CreateEmployeeDto): string | null => {
+  if (!data.email || !data.firstName || !data.lastName || !data.empCode || !data.department || !data.designation) {
+    return 'Please fill in all required fields';
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(data.email)) {
+    return 'Please enter a valid email address';
+  }
+  return null;
+};
+
+const checkCredentialsDeactivation = (
+  mode: string,
+  formData: CreateEmployeeDto,
+  originalData: CreateEmployeeDto | null
+): boolean => {
+  if (mode !== 'edit' || !originalData) return false;
+  
+  if (formData.status === 'INACTIVE' && originalData.status !== 'INACTIVE') {
+    return true;
+  }
+
+  if (formData.dateOfExit) {
+    const exitDate = new Date(formData.dateOfExit);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    exitDate.setHours(0, 0, 0, 0);
+
+    if (exitDate <= today && !originalData.dateOfExit) return true;
+    
+    if (originalData.dateOfExit) {
+      const originalExitDate = new Date(originalData.dateOfExit);
+      originalExitDate.setHours(0, 0, 0, 0);
+      if (exitDate <= today && originalExitDate > today) return true;
+    }
+  }
+
+  return false;
+};
+
+const getStatusBadgeClass = (status: string): string => {
+  if (status === 'INACTIVE') {
+    return 'bg-red-100 text-red-700 border border-red-300';
+  }
+
+  if (status === 'ACTIVE') {
+    return 'bg-emerald-100 text-emerald-700 border border-emerald-300';
+  }
+
+  return 'bg-blue-100 text-blue-700 border border-blue-300';
+};
+
+const getResetFormData = (): CreateEmployeeDto => normalizeDto();
 
 export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
   isOpen,
@@ -25,42 +115,6 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [originalData, setOriginalData] = useState<CreateEmployeeDto | null>(null);
-
-  const normalizeDto = (data?: Partial<CreateEmployeeDto>): CreateEmployeeDto => ({
-    email: data?.email ?? '',
-    firstName: data?.firstName ?? '',
-    lastName: data?.lastName ?? '',
-    empCode: data?.empCode ?? '',
-    department: data?.department ?? '',
-    designation: data?.designation ?? '',
-    role: data?.role ?? 'EMPLOYEE',
-    employmentType: data?.employmentType ?? 'FULL_TIME',
-    status: data?.status ?? 'ACTIVE',
-    sourceOfHire: data?.sourceOfHire ?? '',
-    dateOfJoining: data?.dateOfJoining ?? '',
-    currentExperience: data?.currentExperience ?? undefined,
-    reportingManager: data?.reportingManager ?? '',
-    dateOfBirth: data?.dateOfBirth ?? '',
-    age: data?.age ?? undefined,
-    gender: data?.gender ?? 'MALE',
-    currentAddress: data?.currentAddress ?? '',
-    permanentAddress: data?.permanentAddress ?? '',
-    pincode: data?.pincode ?? '',
-    city: data?.city ?? '',
-    maritalStatus: data?.maritalStatus ?? 'UNMARRIED',
-    phone: data?.phone ?? '',
-    personalMobile: data?.personalMobile ?? '',
-    panNumber: data?.panNumber ?? '',
-    aadharNumber: data?.aadharNumber ?? '',
-    pfNumber: data?.pfNumber ?? '',
-    uanNumber: data?.uanNumber ?? '',
-    bankAccountNumber: data?.bankAccountNumber ?? '',
-    bankName: data?.bankName ?? '',
-    ifscCode: data?.ifscCode ?? '',
-    dateOfExit: data?.dateOfExit ?? '',
-    isExperienced: data?.isExperienced ?? false,
-  });
-
   const [formData, setFormData] = useState<CreateEmployeeDto>(normalizeDto());
 
   useEffect(() => {
@@ -75,7 +129,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
   }, [mode, initialData]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
+    const { name, value } = e.target;
     const isCheckbox = (e.target as HTMLInputElement).type === 'checkbox';
     setFormData((prev) => ({
       ...prev,
@@ -83,142 +137,59 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
     }));
   };
 
-  // Check if credentials will be deactivated based on status or dateOfExit changes
-  const credentialsWillBeDeactivated = useMemo(() => {
-    if (mode !== 'edit') return false;
+  const credentialsWillBeDeactivated = useMemo(
+    () => checkCredentialsDeactivation(mode, formData, originalData),
+    [formData.status, formData.dateOfExit, originalData, mode]
+  );
 
-    // Check if status is being changed to INACTIVE
-    if (formData.status === 'INACTIVE' && originalData?.status !== 'INACTIVE') {
-      return true;
+  const submitEmployee = async () => {
+    if (mode === 'edit') {
+      if (!employeeId) throw new Error('Employee ID is required for update');
+      return ApiService.updateEmployee(employeeId, formData);
+    }
+    return ApiService.createEmployee(formData);
+  };
+
+  const getSuccessMessage = (response: any) => {
+    if (mode === 'edit') {
+      return `✓ ${response.message || 'Employee updated successfully'}` +
+        (response.credentialsDeactivated ? ' | 🔒 User credentials have been deactivated.' : '');
     }
 
-    // Check if dateOfExit is being set to today or in the past
-    if (formData.dateOfExit) {
-      const exitDate = new Date(formData.dateOfExit);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      exitDate.setHours(0, 0, 0, 0);
-
-      if (exitDate <= today && !originalData?.dateOfExit) {
-        return true;
-      }
-
-      // Also check if dateOfExit is being changed to today or earlier
-      if (originalData?.dateOfExit) {
-        const originalExitDate = new Date(originalData.dateOfExit);
-        originalExitDate.setHours(0, 0, 0, 0);
-        if (exitDate <= today && originalExitDate > today) {
-          return true;
-        }
-      }
-    }
-
-    return false;
-  }, [formData.status, formData.dateOfExit, originalData, mode]);
+    return `✓ Employee created successfully! Password: ${response.password}`;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    // Validate required fields
-    if (!formData.email || !formData.firstName || !formData.lastName || !formData.empCode || !formData.department || !formData.designation) {
-      setErrorMessage('Please fill in all required fields');
-      return;
-    }
-
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      setErrorMessage('Please enter a valid email address');
+    const validationError = validateRequiredFields(formData);
+    if (validationError) {
+      setErrorMessage(validationError);
       return;
     }
 
     try {
       setIsSubmitting(true);
+      const response = await submitEmployee();
 
-      let response: any;
-      if (mode === 'edit') {
-        if (!employeeId) {
-          throw new Error('Employee ID is required for update');
-        }
-        
-        // Log changes for debugging
-        console.log('Updating employee with data:', {
-          status: formData.status,
-          email: formData.email,
-          statusChanged: originalData?.status !== formData.status,
-          isBeingDeactivated: formData.status === 'INACTIVE' && originalData?.status !== 'INACTIVE'
-        });
+      setSuccessMessage(getSuccessMessage(response));
+      setShowPassword(mode !== 'edit');
 
-        response = await ApiService.updateEmployee(employeeId, formData);
-        
-        // Use backend response flag for accurate credential deactivation status
-        let successMsg = '✓ ' + (response.message || 'Employee updated successfully');
-        if (response.credentialsDeactivated) {
-          successMsg += ' | 🔒 User credentials have been deactivated.';
-        }
-        setSuccessMessage(successMsg);
-        setShowPassword(false);
-        
-        console.log('Update response:', {
-          message: response.message,
-          credentialsDeactivated: response.credentialsDeactivated,
-          employeeStatus: response.employee?.status
-        });
-      } else {
-        response = await ApiService.createEmployee(formData);
-        setSuccessMessage(`✓ Employee created successfully! Password: ${response.password}`);
-        setShowPassword(true);
+      if (mode === 'create') {
+        setFormData(getResetFormData());
       }
 
       onSuccess(response);
-
-      if (mode === 'create') {
-        // Reset for create mode only
-        setFormData({
-          email: '',
-          firstName: '',
-          lastName: '',
-          empCode: '',
-          department: '',
-          designation: '',
-          role: 'EMPLOYEE',
-          isExperienced: false,
-          employmentType: 'FULL_TIME',
-          status: 'ACTIVE',
-          sourceOfHire: '',
-          dateOfJoining: '',
-          currentExperience: undefined,
-          reportingManager: '',
-          dateOfBirth: '',
-          age: undefined,
-          gender: 'MALE',
-          currentAddress: '',
-          permanentAddress: '',
-          pincode: '',
-          city: '',
-          maritalStatus: 'UNMARRIED',
-          phone: '',
-          personalMobile: '',
-          panNumber: '',
-          aadharNumber: '',
-          pfNumber: '',
-          uanNumber: '',
-          bankAccountNumber: '',
-          bankName: '',
-          ifscCode: '',
-          dateOfExit: '',
-        });
-      }
-
       setTimeout(() => {
         onClose();
         setSuccessMessage('');
         setShowPassword(false);
       }, 2000);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : `Failed to ${mode === 'edit' ? 'update' : 'create'} employee`);
+      const actionVerb = mode === 'edit' ? 'update' : 'create';
+      setErrorMessage(err instanceof Error ? err.message : `Failed to ${actionVerb} employee`);
     } finally {
       setIsSubmitting(false);
     }
@@ -310,10 +281,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="firstName" className="block text-xs font-medium text-slate-700 mb-1">
                       First Name *
                     </label>
                     <Input
+                      id="firstName"
                       type="text"
                       name="firstName"
                       value={formData.firstName}
@@ -324,10 +296,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="lastName" className="block text-xs font-medium text-slate-700 mb-1">
                       Last Name *
                     </label>
                     <Input
+                      id="lastName"
                       type="text"
                       name="lastName"
                       value={formData.lastName}
@@ -340,10 +313,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label htmlFor="email" className="block text-xs font-medium text-slate-700 mb-1">
                     Email Address *
                   </label>
                   <Input
+                    id="email"
                     type="email"
                     name="email"
                     value={formData.email}
@@ -362,10 +336,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="empCode" className="block text-xs font-medium text-slate-700 mb-1">
                       Employee Code *
                     </label>
                     <Input
+                      id="empCode"
                       type="text"
                       name="empCode"
                       value={formData.empCode}
@@ -376,10 +351,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="department" className="block text-xs font-medium text-slate-700 mb-1">
                       Department *
                     </label>
                     <Input
+                      id="department"
                       type="text"
                       name="department"
                       value={formData.department}
@@ -393,10 +369,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="designation" className="block text-xs font-medium text-slate-700 mb-1">
                       Designation *
                     </label>
                     <Input
+                      id="designation"
                       type="text"
                       name="designation"
                       value={formData.designation}
@@ -407,10 +384,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="role" className="block text-xs font-medium text-slate-700 mb-1">
                       Role *
                     </label>
                     <select
+                      id="role"
                       name="role"
                       value={formData.role}
                       onChange={handleChange}
@@ -448,10 +426,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="employmentType" className="block text-xs font-medium text-slate-700 mb-1">
                       Employment Type *
                     </label>
                     <select
+                      id="employmentType"
                       name="employmentType"
                       value={formData.employmentType}
                       onChange={handleChange}
@@ -465,10 +444,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="status" className="block text-xs font-medium text-slate-700 mb-1">
                       Status *
                     </label>
                     <select
+                      id="status"
                       name="status"
                       value={formData.status}
                       onChange={handleChange}
@@ -508,10 +488,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="dateOfJoining" className="block text-xs font-medium text-slate-700 mb-1">
                       Date of Joining *
                     </label>
                     <Input
+                      id="dateOfJoining"
                       type="date"
                       name="dateOfJoining"
                       value={formData.dateOfJoining}
@@ -521,10 +502,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="sourceOfHire" className="block text-xs font-medium text-slate-700 mb-1">
                       Source of Hire
                     </label>
                     <Input
+                      id="sourceOfHire"
                       type="text"
                       name="sourceOfHire"
                       value={formData.sourceOfHire}
@@ -538,10 +520,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="currentExperience" className="block text-xs font-medium text-slate-700 mb-1">
                       Current Experience (Years)
                     </label>
                     <Input
+                      id="currentExperience"
                       type="number"
                       name="currentExperience"
                       value={formData.currentExperience || ''}
@@ -552,10 +535,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="reportingManager" className="block text-xs font-medium text-slate-700 mb-1">
                       Reporting Manager
                     </label>
                     <Input
+                      id="reportingManager"
                       type="text"
                       name="reportingManager"
                       value={formData.reportingManager}
@@ -575,10 +559,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="dateOfBirth" className="block text-xs font-medium text-slate-700 mb-1">
                       Date of Birth
                     </label>
                     <Input
+                      id="dateOfBirth"
                       type="date"
                       name="dateOfBirth"
                       value={formData.dateOfBirth}
@@ -588,10 +573,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="age" className="block text-xs font-medium text-slate-700 mb-1">
                       Age
                     </label>
                     <Input
+                      id="age"
                       type="number"
                       name="age"
                       value={formData.age || ''}
@@ -605,10 +591,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="gender" className="block text-xs font-medium text-slate-700 mb-1">
                       Gender
                     </label>
                     <select
+                      id="gender"
                       name="gender"
                       value={formData.gender}
                       onChange={handleChange}
@@ -621,10 +608,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="maritalStatus" className="block text-xs font-medium text-slate-700 mb-1">
                       Marital Status
                     </label>
                     <select
+                      id="maritalStatus"
                       name="maritalStatus"
                       value={formData.maritalStatus}
                       onChange={handleChange}
@@ -645,10 +633,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="phone" className="block text-xs font-medium text-slate-700 mb-1">
                       Phone
                     </label>
                     <Input
+                      id="phone"
                       type="tel"
                       name="phone"
                       value={formData.phone}
@@ -659,10 +648,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="personalMobile" className="block text-xs font-medium text-slate-700 mb-1">
                       Personal Mobile
                     </label>
                     <Input
+                      id="personalMobile"
                       type="tel"
                       name="personalMobile"
                       value={formData.personalMobile}
@@ -675,10 +665,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label htmlFor="currentAddress" className="block text-xs font-medium text-slate-700 mb-1">
                     Current Address
                   </label>
                   <Input
+                    id="currentAddress"
                     type="text"
                     name="currentAddress"
                     value={formData.currentAddress}
@@ -690,10 +681,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label htmlFor="permanentAddress" className="block text-xs font-medium text-slate-700 mb-1">
                     Permanent Address
                   </label>
                   <Input
+                    id="permanentAddress"
                     type="text"
                     name="permanentAddress"
                     value={formData.permanentAddress}
@@ -706,10 +698,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
 
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="city" className="block text-xs font-medium text-slate-700 mb-1">
                       City
                     </label>
                     <Input
+                      id="city"
                       type="text"
                       name="city"
                       value={formData.city}
@@ -720,10 +713,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="pincode" className="block text-xs font-medium text-slate-700 mb-1">
                       Pincode
                     </label>
                     <Input
+                      id="pincode"
                       type="text"
                       name="pincode"
                       value={formData.pincode}
@@ -743,10 +737,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="panNumber" className="block text-xs font-medium text-slate-700 mb-1">
                       PAN Number
                     </label>
                     <Input
+                      id="panNumber"
                       type="text"
                       name="panNumber"
                       value={formData.panNumber}
@@ -757,10 +752,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="aadharNumber" className="block text-xs font-medium text-slate-700 mb-1">
                       Aadhar Number
                     </label>
                     <Input
+                      id="aadharNumber"
                       type="text"
                       name="aadharNumber"
                       value={formData.aadharNumber}
@@ -774,10 +770,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="pfNumber" className="block text-xs font-medium text-slate-700 mb-1">
                       PF Number
                     </label>
                     <Input
+                      id="pfNumber"
                       type="text"
                       name="pfNumber"
                       value={formData.pfNumber}
@@ -788,10 +785,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="uanNumber" className="block text-xs font-medium text-slate-700 mb-1">
                       UAN Number
                     </label>
                     <Input
+                      id="uanNumber"
                       type="text"
                       name="uanNumber"
                       value={formData.uanNumber}
@@ -805,10 +803,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="bankAccountNumber" className="block text-xs font-medium text-slate-700 mb-1">
                       Bank Account Number
                     </label>
                     <Input
+                      id="bankAccountNumber"
                       type="text"
                       name="bankAccountNumber"
                       value={formData.bankAccountNumber}
@@ -819,10 +818,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="bankName" className="block text-xs font-medium text-slate-700 mb-1">
                       Bank Name
                     </label>
                     <Input
+                      id="bankName"
                       type="text"
                       name="bankName"
                       value={formData.bankName}
@@ -836,10 +836,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="ifscCode" className="block text-xs font-medium text-slate-700 mb-1">
                       IFSC Code
                     </label>
                     <Input
+                      id="ifscCode"
                       type="text"
                       name="ifscCode"
                       value={formData.ifscCode}
@@ -850,10 +851,11 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="dateOfExit" className="block text-xs font-medium text-slate-700 mb-1">
                       Date of Exit
                     </label>
                     <Input
+                      id="dateOfExit"
                       type="date"
                       name="dateOfExit"
                       value={formData.dateOfExit}
@@ -876,10 +878,10 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                 {isSubmitting ? (
                   <>
                     <Loader size={18} className="animate-spin mr-2" />
-                    {mode === 'edit' ? 'Updating...' : 'Creating...'}
+                    {submittingText}
                   </>
                 ) : (
-                  mode === 'edit' ? 'Update Employee' : 'Create Employee'
+                  submitText
                 )}
               </Button>
               <Button

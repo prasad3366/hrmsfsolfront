@@ -5,7 +5,7 @@ import {
   Users, Layers, CheckCircle, Calendar, TrendingUp, ArrowUp, ArrowDown, Target, Clock
 } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { MOCK_EMPLOYEES } from '../../mock-data';
 import { useWfh } from '../../hooks/useWfh';
@@ -60,16 +60,106 @@ const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", de
   );
 };
 
-const ManagerDashboard = () => {
-  const navigate = useNavigate();
-  const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
-  // Filter out expired WFH requests (endDate before today)
+// Helper functions to reduce complexity
+const isEmployeeActive = (emp: any): boolean => {
+  const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
+  if (status === 'ACTIVE') return true;
+  if (status === 'INACTIVE' || status === 'TERMINATED') return false;
+  if (typeof emp.user?.isActive === 'boolean') return emp.user.isActive;
+  if (typeof emp.isActive === 'boolean') return emp.isActive;
+  return true;
+};
+
+const getEmployeeDisplayName = (record: any, employeeMap: Record<string, string>): string => {
+  if (!record) return 'Unknown';
+  if (record.employeeName) return record.employeeName;
+  if (record.employee?.firstName || record.employee?.lastName) {
+    const first = record.employee?.firstName || '';
+    const last = record.employee?.lastName || '';
+    return `${first} ${last}`.trim();
+  }
+  if (record.employee?.name) return record.employee.name;
+  if (record.employeeId && employeeMap[String(record.employeeId)]) {
+    return employeeMap[String(record.employeeId)];
+  }
+  if (record.employee?.empCode && employeeMap[record.employee.empCode]) {
+    return employeeMap[record.employee.empCode];
+  }
+  return 'Unknown';
+};
+
+const getLeaveReason = (leave: any): string => {
+  if (!leave) return 'No reason provided';
+  return leave.reason || leave.remarks || leave.comment || leave.description || leave.notes || 'No reason provided';
+};
+
+const buildEmployeeMap = (employees: any[]): Record<string, string> => {
+  const map: Record<string, string> = {};
+  employees.forEach((emp: any) => {
+    const id = emp.id ?? emp.employeeId ?? emp.user?.id;
+    const name = `${emp.firstName || emp.name || ''} ${emp.lastName || ''}`.trim() || emp.email || 'Unknown';
+    if (id !== undefined && id !== null) {
+      map[String(id)] = name;
+    }
+    if (emp.empCode) {
+      map[String(emp.empCode)] = name;
+    }
+  });
+  return map;
+};
+
+const buildRecentAttendance = (attendanceRecords: any[]) => {
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setDate(cutoff.getDate() - 31);
+
+  return attendanceRecords
+    .filter((record) => {
+      const recordDate = new Date(record.date);
+      return Number.isNaN(recordDate.getTime()) === false && recordDate >= cutoff && recordDate <= now;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+};
+
+const calculateTeamAttendance = (attendanceRecords: any[]) => {
+  if (attendanceRecords.length === 0) return 88;
+
+  const today = new Date().toDateString();
+  const todayRecords = attendanceRecords.filter(record => new Date(record.date).toDateString() === today);
+  if (todayRecords.length === 0) return 88;
+
+  const presentCount = todayRecords.filter(record => record.status === 'PRESENT' || (record.punchIn && !record.punchOut)).length;
+  return Math.round((presentCount / todayRecords.length) * 100);
+};
+
+const buildTaskData = (completedTasks: number, activeTasks: number) => {
+  const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+  return weeks.map((week, index) => ({
+    week,
+    completed: Math.floor(completedTasks * (0.2 + index * 0.1)),
+    pending: Math.floor(activeTasks * (0.3 - index * 0.05)),
+  }));
+};
+
+const buildPerformanceData = (employees: any[]) => {
+  const dataSource = employees.length > 0 ? employees : MOCK_EMPLOYEES;
+  return dataSource.slice(0, 5).map((emp, index) => ({
+    name: (emp.firstName || emp.name || 'Employee').split(' ')[0],
+    productivity: 75 + Math.floor(Math.random() * 25),
+  }));
+};
+
+const filterActiveWfhRequests = (requests: any[]): any[] => {
   const today = new Date();
-  const activeWfhRequests = wfhRequests.filter(req => {
+  return requests.filter(req => {
     const end = new Date(req.endDate);
-    // Only keep requests where endDate is today or in the future
     return end >= new Date(today.getFullYear(), today.getMonth(), today.getDate());
   });
+};
+
+const ManagerDashboard = () => {
+  const navigate = useNavigate();
+  const { wfhRequests, fetchAllWfhRequests } = useWfh();
   const { pendingLeaves, fetchPendingLeaves, approveLeave } = useLeave();
   const { records: attendanceRecords, isLoading: isAttendanceLoading } = useAttendance({ scope: 'all' });
   const [employees, setEmployees] = useState<any[]>([]);
@@ -77,83 +167,24 @@ const ManagerDashboard = () => {
   const [activeTasks, setActiveTasks] = useState<number>(34);
   const [completedTasks, setCompletedTasks] = useState<number>(128);
   const [employeeMap, setEmployeeMap] = useState<Record<string, string>>({});
-
-  const isEmployeeActive = (emp: any) => {
-    const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
-    if (status === 'ACTIVE') return true;
-    if (status === 'INACTIVE' || status === 'TERMINATED') return false;
-    if (typeof emp.user?.isActive === 'boolean') return emp.user.isActive;
-    if (typeof emp.isActive === 'boolean') return emp.isActive;
-    return true;
-  };
-
-  const getEmployeeDisplayName = (record: any) => {
-    if (!record) return 'Unknown';
-    if (record.employeeName) return record.employeeName;
-    if (record.employee?.firstName || record.employee?.lastName) {
-      const first = record.employee?.firstName || '';
-      const last = record.employee?.lastName || '';
-      return `${first} ${last}`.trim();
-    }
-    if (record.employee?.name) return record.employee.name;
-    if (record.employeeId) {
-      const idKey = String(record.employeeId);
-      if (employeeMap[idKey]) return employeeMap[idKey];
-    }
-    if (record.employee?.empCode && employeeMap[record.employee.empCode]) {
-      return employeeMap[record.employee.empCode];
-    }
-    return 'Unknown';
-  };
-
-  const getLeaveReason = (leave: any) => {
-    if (!leave) return 'No reason provided';
-    return (
-      leave.reason ||
-      leave.remarks ||
-      leave.comment ||
-      leave.description ||
-      leave.notes ||
-      'No reason provided'
-    );
-  };
   const [attendanceTab, setAttendanceTab] = useState<'inside' | 'outside' | 'wfh'>('inside');
 
   useEffect(() => {
     fetchAllWfhRequests();
     fetchPendingLeaves();
     
-    // Fetch team data from API
     ApiService.getAllEmployees()
       .then((data) => {
         const employeeList = data || [];
         setEmployees(employeeList);
         const activeEmployeeCount = employeeList.filter(isEmployeeActive).length;
         setTeamMembers(activeEmployeeCount);
-        
-        // Calculate active tasks (placeholder - would come from task management API)
         setActiveTasks(Math.floor(activeEmployeeCount * 2.8));
-        
-        // Calculate completed tasks (placeholder)
         setCompletedTasks(activeEmployeeCount * 10);
-
-        // Build employee name map for display
-        const map: Record<string, string> = {};
-        employeeList.forEach((emp: any) => {
-          const id = emp.id ?? emp.employeeId ?? emp.user?.id;
-          const name = `${emp.firstName || emp.name || ''} ${emp.lastName || ''}`.trim() || emp.email || 'Unknown';
-          if (id !== undefined && id !== null) {
-            map[String(id)] = name;
-          }
-          if (emp.empCode) {
-            map[String(emp.empCode)] = name;
-          }
-        });
-        setEmployeeMap(map);
+        setEmployeeMap(buildEmployeeMap(employeeList));
       })
       .catch((err) => {
         console.error('Failed to fetch team data', err);
-        // Fallback to mock data if API fails
         setEmployees(MOCK_EMPLOYEES);
         const activeEmployeeCount = MOCK_EMPLOYEES.filter(isEmployeeActive).length;
         setTeamMembers(activeEmployeeCount);
@@ -163,59 +194,20 @@ const ManagerDashboard = () => {
   }, [fetchAllWfhRequests, fetchPendingLeaves]);
 
   // Calculate team attendance percentage
-  const teamAttendance = useMemo(() => {
-    if (attendanceRecords.length === 0) return 88; // fallback
-    
-    const today = new Date().toDateString();
-    const todayRecords = attendanceRecords.filter(record => 
-      new Date(record.date).toDateString() === today
-    );
-    
-    if (todayRecords.length === 0) return 88; // fallback
-    
-    const presentCount = todayRecords.filter(record => 
-      record.status === 'PRESENT' || (record.punchIn && !record.punchOut)
-    ).length;
-    
-    return Math.round((presentCount / todayRecords.length) * 100);
-  }, [attendanceRecords]);
+  const teamAttendance = useMemo(() => calculateTeamAttendance(attendanceRecords), [attendanceRecords]);
 
   // Define the missing variables
   const insideOffice = attendanceRecords.filter(record => record.locationStatus === 'OFFICE');
   const outsideOffice = attendanceRecords.filter(record => record.locationStatus === 'OUTSIDE');
   const wfhEmployees = attendanceRecords.filter(record => record.locationStatus === 'WFH');
 
-  const recentAttendance = useMemo(() => {
-    const now = new Date();
-    const cutoff = new Date(now);
-    cutoff.setDate(cutoff.getDate() - 31);
-
-    return attendanceRecords
-      .filter((record) => {
-        const recordDate = new Date(record.date);
-        return !Number.isNaN(recordDate.getTime()) && recordDate >= cutoff && recordDate <= now;
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [attendanceRecords]);
+  const recentAttendance = useMemo(() => buildRecentAttendance(attendanceRecords), [attendanceRecords]);
 
   // Calculate dynamic task data
-  const taskData = useMemo(() => {
-    const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-    return weeks.map((week, index) => ({
-      week,
-      completed: Math.floor(completedTasks * (0.2 + index * 0.1)), // Distribute completed tasks
-      pending: Math.floor(activeTasks * (0.3 - index * 0.05)) // Distribute pending tasks
-    }));
-  }, [completedTasks, activeTasks]);
+  const taskData = useMemo(() => buildTaskData(completedTasks, activeTasks), [completedTasks, activeTasks]);
 
   // Dynamic performance data based on team members
-  const performanceData = useMemo(() => {
-    const dataSource = employees.length > 0 ? employees : MOCK_EMPLOYEES;
-    return dataSource.slice(0, 5).map((emp, index) => ({
-      name: (emp.firstName || emp.name || 'Employee').split(' ')[0], // First name only
-      productivity: 75 + Math.floor(Math.random() * 25) // Random productivity 75-100
-    }));
-  }, [employees]);
+  const performanceData = useMemo(() => buildPerformanceData(employees), [employees]);
 
   return (
   <div className="space-y-8">
@@ -368,7 +360,7 @@ const ManagerDashboard = () => {
                   <TableCell className="py-4">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-semibold text-slate-900">
-                        {getEmployeeDisplayName(leave)}
+                        {getEmployeeDisplayName(leave, employeeMap)}
                       </span>
                     </div>
                   </TableCell>
@@ -588,14 +580,22 @@ const ManagerDashboard = () => {
                     {record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
                   </TableCell>
                   <TableCell className="py-4">
-                    <span className={`text-xs px-3 py-1.5 rounded-full font-bold ${
-                      record.locationStatus === 'OFFICE' ? 'bg-blue-100 text-blue-700' :
-                      record.locationStatus === 'OUTSIDE' ? 'bg-orange-100 text-orange-700' :
-                      record.locationStatus === 'WFH' ? 'bg-purple-100 text-purple-700' :
-                      'bg-gray-100 text-gray-700'
-                    }`}>
-                      {record.locationStatus || 'Unknown'}
-                    </span>
+                    {(() => {
+                      const statusClasses =
+                        record.locationStatus === 'OFFICE'
+                          ? 'bg-blue-100 text-blue-700'
+                          : record.locationStatus === 'OUTSIDE'
+                          ? 'bg-orange-100 text-orange-700'
+                          : record.locationStatus === 'WFH'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-gray-100 text-gray-700';
+
+                      return (
+                        <span className={`text-xs px-3 py-1.5 rounded-full font-bold ${statusClasses}`}>
+                          {record.locationStatus || 'Unknown'}
+                        </span>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="py-4 text-sm font-semibold text-slate-900">
                     {record.totalHours ? `${record.totalHours.toFixed(2)}h` : '--'}

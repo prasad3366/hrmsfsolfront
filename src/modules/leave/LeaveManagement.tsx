@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
-import { Plus, Calendar, Clock, AlertCircle, FileText, Gift } from 'lucide-react';
+import { Plus, Calendar, AlertCircle, FileText, Gift } from 'lucide-react';
 import { useLeave } from '../../hooks/useLeave';
 import { useAuth } from '../../context/AuthContext';
 import ApplyLeaveModal from '../../components/leave/ApplyLeaveModal';
 import ApproveRejectLeaveModal from '../../components/leave/ApproveRejectLeaveModal';
 import MedicalCertificateModal from '../../components/leave/MedicalCertificateModal';
 import CarryForwardModal from '../../components/leave/CarryForwardModal';
-import ApiService from '../../services/api';
 import { CreateLeaveDto } from '../../services/api';
 
 const LeaveBalanceCard = ({ type, total, used, color, ...props }: { type: string, total: number, used: number, color: string, [key: string]: any }) => {
@@ -17,6 +16,12 @@ const LeaveBalanceCard = ({ type, total, used, color, ...props }: { type: string
         purple: "bg-purple-500",
         orange: "bg-amber-500",
         rose: "bg-rose-500"
+    };
+    
+    const getIconColor = () => {
+      if (color === 'blue') return 'text-blue-600';
+      if (color === 'purple') return 'text-purple-600';
+      return 'text-amber-600';
     };
     
     return (
@@ -29,7 +34,7 @@ const LeaveBalanceCard = ({ type, total, used, color, ...props }: { type: string
                         <h3 className="text-2xl font-bold text-slate-900">{total - used} <span className="text-sm font-normal text-slate-400">/ {total}</span></h3>
                     </div>
                     <div className={`p-2 rounded-lg ${colors[color]} bg-opacity-10 text-${color}-600`}>
-                        <Calendar size={18} className={color === 'blue' ? 'text-blue-600' : color === 'purple' ? 'text-purple-600' : 'text-amber-600'} />
+                        <Calendar size={18} className={getIconColor()} />
                     </div>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-1.5 mb-2">
@@ -83,8 +88,6 @@ const LeaveManagement = () => {
     dates: '',
   });
 
-  const [employeeMap, setEmployeeMap] = useState<Record<number | string, string >>({});
-
   const getEmployeeName = (leave: any) => {
     // Simple direct approach - backend now provides full employee data
     if (leave.employee?.firstName || leave.employee?.lastName) {
@@ -123,7 +126,7 @@ const LeaveManagement = () => {
       // Refresh leave balance after applying for leave
       fetchMyLeaveBalance(financialYearStart);
     } catch (err) {
-      // Error is handled by the hook
+      console.error('Failed to apply leave:', err);
     }
   };
 
@@ -136,7 +139,7 @@ const LeaveManagement = () => {
       // Refresh leave balance in case it affects the current user's balance
       fetchMyLeaveBalance(financialYearStart);
     } catch (err) {
-      // Error is handled by the hook
+      console.error('Failed to approve leave:', err);
     }
   };
 
@@ -149,7 +152,7 @@ const LeaveManagement = () => {
       // Refresh leave balance in case it affects the current user's balance
       fetchMyLeaveBalance(financialYearStart);
     } catch (err) {
-      // Error is handled by the hook
+      console.error('Failed to reject leave:', err);
     }
   };
 
@@ -255,7 +258,7 @@ const LeaveManagement = () => {
         {myLeaveBalance && myLeaveBalance.length > 0 ? (
           myLeaveBalance.map((balance, idx) => (
             <LeaveBalanceCard
-              key={idx}
+              key={`${balance.leaveType}-${idx}`}
               type={balance.leaveType}
               total={balance.allocated}
               used={balance.used}
@@ -361,8 +364,8 @@ const LeaveManagement = () => {
                       { name: "Thanksgiving", date: "24 Nov", day: "Thursday" },
                       { name: "Christmas", date: "25 Dec", day: "Sunday" },
                       { name: "New Year", date: "01 Jan", day: "Sunday" }
-                  ].map((h, i) => (
-                      <div key={i} className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  ].map((h) => (
+                      <div key={`${h.name}-${h.date}`} className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
                           <div className="w-12 h-12 bg-white rounded-lg flex flex-col items-center justify-center shadow-sm text-slate-800 border border-slate-100 font-bold leading-tight">
                               <span className="text-sm">{h.date.split(' ')[0]}</span>
                               <span className="text-[10px] uppercase text-slate-400">{h.date.split(' ')[1]}</span>
@@ -465,8 +468,8 @@ const LeaveManagement = () => {
             await requestCarryForward(leaveTypeId, yearStart);
             // Refresh leave balance after carry forward
             await fetchMyLeaveBalance(yearStart + 1);
-          } catch (err) {
-            // Error is handled by the hook
+          } catch (error) {
+            console.error('Carry forward request failed', error);
           }
         }}
         isSubmitting={isSubmitting}

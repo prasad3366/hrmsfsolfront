@@ -22,7 +22,7 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
   isLoading,
   onRefresh,
 }) => {
-  const { approveWfh, rejectWfh, isSubmitting, error, success, clearMessages } = useWfh();
+  const { approveWfh, rejectWfh, isSubmitting, error, success } = useWfh();
   const { addNotification } = useNotifications();
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
     isOpen: false,
@@ -118,6 +118,13 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
       month: 'short',
       day: 'numeric',
     });
+  };
+
+  const getButtonLabel = () => {
+    if (confirmDialog.action === 'approve') {
+      return 'Approve';
+    }
+    return 'Reject';
   };
 
   if (isLoading) {
@@ -266,7 +273,7 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
                     : 'bg-red-600 hover:bg-red-700 disabled:bg-red-400'
                 }`}
               >
-                {isSubmitting ? 'Processing...' : confirmDialog.action === 'approve' ? 'Approve' : 'Reject'}
+                {isSubmitting ? 'Processing...' : getButtonLabel()}
               </button>
             </div>
           </div>

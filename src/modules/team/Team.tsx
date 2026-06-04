@@ -21,7 +21,7 @@ import { Users, User, Crown, RefreshCw, Plus, AlertCircle } from 'lucide-react';
 
 const TeamManagement: React.FC = () => {
   const { user } = useAuth();
-  const { getAllMyTeams, getMyTeam, isLoading, error, team, teams, deleteTeam, removeTeamMember } = useTeam();
+  const { getAllMyTeams, isLoading, error, teams, deleteTeam } = useTeam();
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
 
@@ -127,7 +127,7 @@ const TeamManagement: React.FC = () => {
 
   const handleDeleteTeam = async (teamId: number | string) => {
     console.log('🗑️ [Team.tsx.handleDeleteTeam] Attempting to delete team with ID:', teamId, typeof teamId);
-    if (!window.confirm('Are you sure you want to delete this team? This will remove team assignment from all members.')) {
+    if (!globalThis.confirm('Are you sure you want to delete this team? This will remove team assignment from all members.')) {
       return;
     }
 
@@ -326,7 +326,7 @@ const TeamManagement: React.FC = () => {
                     <TableCell className="font-medium">{team.name}</TableCell>
                     <TableCell>{formatManagerName(team)}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">
+                      <Badge variant="default">
                         {getMembersCount(team)} members
                       </Badge>
                     </TableCell>
@@ -342,7 +342,7 @@ const TeamManagement: React.FC = () => {
                         Add Members
                       </Button>
                       <Button
-                        variant="destructive"
+                        variant="danger"
                         size="sm"
                         onClick={() => handleDeleteTeam(team.id)}
                       >

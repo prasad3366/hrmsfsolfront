@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
-import ApiService from '../services/api';
-import { Payroll, RunPayrollDto, PayrollAdjustment } from '../services/api';
+import ApiService, { Payroll, RunPayrollDto } from '../services/api';
 
 export const usePayroll = () => {
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
@@ -52,13 +51,13 @@ export const usePayroll = () => {
       try {
         const result = await ApiService.addPayrollAdjustment(payrollId, name, type, amount);
 
-        if (currentPayroll && currentPayroll.id === payrollId) {
+        if (currentPayroll?.id === payrollId) {
           const updatedPayroll = {
             ...currentPayroll,
             others: [...(currentPayroll.others || []), result],
-            grossSalary: (result as any).grossSalary ?? currentPayroll.grossSalary,
-            deductions: (result as any).deductions ?? currentPayroll.deductions,
-            netSalary: (result as any).netSalary ?? currentPayroll.netSalary,
+            grossSalary: (result as any)?.grossSalary ?? currentPayroll.grossSalary,
+            deductions: (result as any)?.deductions ?? currentPayroll.deductions,
+            netSalary: (result as any)?.netSalary ?? currentPayroll.netSalary,
           };
           setCurrentPayroll(updatedPayroll);
           setPayrolls((prev) => prev.map((p) => (p.id === payrollId ? { ...p, ...updatedPayroll } : p)));
