@@ -207,7 +207,12 @@ const HRDashboard = () => {
       'No reason provided'
     );
   };
-
+const normalizeHelpdeskStatus = (status?: string) => {
+  const normalized = status?.toString().toUpperCase() ?? '';
+  if (normalized === 'APPROVED') return 'Approved';
+  if (normalized === 'RESOLVED') return 'Resolved';
+  return 'Pending';
+};
   const workDurationData = useMemo(() => buildWorkDurationData(currentWeekStart, attendanceRecords), [currentWeekStart, attendanceRecords]);
 
   const handlePreviousWeek = () => {
@@ -233,19 +238,55 @@ const HRDashboard = () => {
   useEffect(() => {
     const loadHelpdeskTickets = async () => {
       try {
-        // Try to fetch from API first
+        // Check localStorage FIRST for local changes
+        const stored = localStorage.getItem('foodeez_helpdesk_tickets');
+        let localTickets: HelpdeskTicket[] = [];
+        
+        if (stored) {
+          try {
+            localTickets = JSON.parse(stored) as HelpdeskTicket[];
+            // Use localStorage data as primary source
+            setHelpdeskTickets(localTickets);
+          } catch (e) {
+            console.warn('Failed to parse localStorage:', e);
+          }
+        }
+
+        // Fetch from API in background and merge
         try {
           const tickets = await ApiService.getHelpdeskTickets();
-          setHelpdeskTickets(tickets || []);
-          // Sync with localStorage
-          localStorage.setItem('foodeez_helpdesk_tickets', JSON.stringify(tickets || []));
+          const normalizedTickets = (tickets || []).map((ticket: any) => ({
+            ...ticket,
+            id: String(ticket.id),
+            status: normalizeHelpdeskStatus(ticket.status),
+          }));
+
+          // Merge: prioritize localStorage Approved/Resolved statuses
+          const merged = normalizedTickets.map((apiTicket) => {
+            const localTicket = localTickets.find((t) => t.id === String(apiTicket.id));
+            // ALWAYS keep Approved/Resolved from localStorage (don't revert to Pending)
+            if (localTicket && 
+                (localTicket.status === 'Approved' || localTicket.status === 'Resolved')) {
+              return localTicket;
+            }
+            // For new tickets or pending tickets, use API data
+            return apiTicket;
+          });
+
+          // Add any tickets from localStorage that aren't in API (edge case)
+          localTickets.forEach((localTicket) => {
+            if (!merged.find((t) => t.id === localTicket.id)) {
+              merged.push(localTicket);
+            }
+          });
+
+          setHelpdeskTickets(merged);
+          localStorage.setItem('foodeez_helpdesk_tickets', JSON.stringify(merged));
         } catch (apiErr) {
-          console.warn('Failed to fetch helpdesk tickets from API, falling back to localStorage:', apiErr);
-          // Fallback to localStorage
-          const stored = localStorage.getItem('foodeez_helpdesk_tickets');
-          if (stored) {
-            const parsed = JSON.parse(stored) as HelpdeskTicket[];
-            setHelpdeskTickets(parsed);
+          console.warn('Failed to fetch from API, using localStorage only:', apiErr);
+          // If API fails, just use localStorage
+          if (localTickets.length === 0) {
+            setHelpdeskTickets([]);
           }
         }
       } catch (err) {
@@ -256,12 +297,20 @@ const HRDashboard = () => {
 
     loadHelpdeskTickets();
 
-    // Refresh helpdesk tickets every 5 seconds to reflect status changes
-    const interval = setInterval(loadHelpdeskTickets, 5000);
+    // Refresh helpdesk tickets every 15 seconds to reflect status changes
+    const interval = setInterval(loadHelpdeskTickets, 15000);
 
-    // Listen for helpdesk updates from other components (e.g., when a ticket is resolved in the Helpdesk page)
-    const handleHelpdeskUpdate = () => {
-      loadHelpdeskTickets();
+    // Listen for helpdesk updates from other components (e.g., when a ticket is updated in the Helpdesk page)
+    const handleHelpdeskUpdate = (event: any) => {
+      const { ticketId, status } = event.detail;
+      // Update the specific ticket without full reload
+      setHelpdeskTickets((prev) =>
+        prev.map((ticket) =>
+          ticket.id === ticketId
+            ? { ...ticket, status: normalizeHelpdeskStatus(status), updatedAt: new Date().toISOString() }
+            : ticket
+        )
+      );
     };
     window.addEventListener('helpdeskTicketsUpdated', handleHelpdeskUpdate);
 
@@ -355,8 +404,97 @@ const HRDashboard = () => {
     }
   };
 
+  const handleApproveTicket = async (ticketId: string) => {
+    try {
+      await ApiService.approveHelpdeskTicket(ticketId);
+      
+      // Calculate updated tickets ONCE to use for both state and localStorage
+      const updatedTickets = helpdeskTickets.map((ticket) =>
+        ticket.id === ticketId
+          ? { ...ticket, status: 'Approved' as const, updatedAt: new Date().toISOString() }
+          : ticket
+      );
+      
+      // Update both state and localStorage with the same data
+      setHelpdeskTickets(updatedTickets);
+      localStorage.setItem('foodeez_helpdesk_tickets', JSON.stringify(updatedTickets));
+      
+      // Dispatch event to notify Helpdesk module (requester) and other components
+      window.dispatchEvent(new CustomEvent('helpdeskTicketsUpdated', { detail: { ticketId, status: 'Approved' } }));
+      
+      addNotification({
+        type: 'other',
+        title: 'Ticket Approved',
+        message: `Helpdesk ticket has been approved successfully.`,
+      });
+    } catch (error) {
+      console.error('Failed to approve ticket:', error);
+      addNotification({
+        type: 'other',
+        title: 'Error',
+        message: 'Failed to approve helpdesk ticket.',
+      });
+    }
+  };
+
+  const handleResolveTicket = async (ticketId: string) => {
+    try {
+      await ApiService.resolveHelpdeskTicket(ticketId);
+      
+      // Calculate updated tickets ONCE to use for both state and localStorage
+      const updatedTickets = helpdeskTickets.map((ticket) =>
+        ticket.id === ticketId
+          ? { ...ticket, status: 'Resolved' as const, updatedAt: new Date().toISOString() }
+          : ticket
+      );
+      
+      // Update both state and localStorage with the same data
+      setHelpdeskTickets(updatedTickets);
+      localStorage.setItem('foodeez_helpdesk_tickets', JSON.stringify(updatedTickets));
+      
+      // Dispatch event to notify Helpdesk module (requester) and other components
+      window.dispatchEvent(new CustomEvent('helpdeskTicketsUpdated', { detail: { ticketId, status: 'Resolved' } }));
+      
+      addNotification({
+        type: 'other',
+        title: 'Ticket Resolved',
+        message: `Helpdesk ticket has been resolved successfully.`,
+      });
+    } catch (error) {
+      console.error('Failed to resolve ticket:', error);
+      addNotification({
+        type: 'other',
+        title: 'Error',
+        message: 'Failed to resolve helpdesk ticket.',
+      });
+    }
+  };
+
+  const getHelpdeskStatusVariant = (status: string) => {
+    const normalized = normalizeHelpdeskStatus(status);
+    switch (normalized) {
+      case 'Approved':
+        return 'success';
+      case 'Resolved':
+        return 'purple';
+      default:
+        return 'warning';
+    }
+  };
+
   // Get pending WFH requests
   const pendingWfhRequests = wfhRequests.filter((req) => req.status === 'PENDING');
+
+  // Get pending and approved helpdesk tickets
+  const pendingHelpdeskTickets = helpdeskTickets.filter(
+    (ticket) => normalizeHelpdeskStatus(ticket.status) === 'Pending'
+  );
+  const approvedHelpdeskTickets = helpdeskTickets.filter(
+    (ticket) => normalizeHelpdeskStatus(ticket.status) === 'Approved'
+  );
+  const resolvedHelpdeskTickets = helpdeskTickets.filter(
+    (ticket) => normalizeHelpdeskStatus(ticket.status) === 'Resolved'
+  );
 
   // Define the missing variables
   const insideOffice = attendanceRecords.filter(record => record.locationStatus === 'OFFICE');
@@ -397,7 +535,7 @@ const HRDashboard = () => {
       </button>
       <StatCard title="Active WFH Approvals" value={String(activeWfhRequests.length)} icon={Briefcase} trend="up" subtext="currently approved" color="purple" delay={100} />
       <StatCard title="Pending Leaves" value={pendingLeaves.length} icon={Clock} trend="down" subtext="awaiting review" color="orange" delay={200} />
-      <StatCard title="Pending Helpdesk Tickets" value={String(helpdeskTickets.filter((ticket) => ticket.status === 'Pending').length)} icon={AlertTriangle} trend="down" subtext="awaiting HR review" color="rose" delay={250} onClick={() => navigate('/helpdesk')} />
+      <StatCard title="Pending Helpdesk Tickets" value={String(helpdeskTickets.filter((ticket) => normalizeHelpdeskStatus(ticket.status) === 'Pending').length)} icon={AlertTriangle} trend="down" subtext="awaiting HR review" color="rose" delay={250} onClick={() => navigate('/helpdesk')} />
       <StatCard title="Attendance Today" value="92%" icon={CheckCircle} trend="up" subtext="8% up" color="green" delay={300} />
     </div>
 
@@ -583,6 +721,95 @@ const HRDashboard = () => {
           isLoading={isWfhLoading}
           onRefresh={fetchAllWfhRequests}
         />
+      </CardContent>
+    </Card>
+
+    {/* Helpdesk Tickets */}
+    <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+      <CardHeader className="pb-4 border-b flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-base">Helpdesk Tickets</CardTitle>
+          <p className="text-xs text-slate-500 mt-1">Manage employee support requests - {pendingHelpdeskTickets.length} pending, {approvedHelpdeskTickets.length} approved</p>
+        </div>
+        <Button size="sm" onClick={() => navigate('/helpdesk')} className="bg-blue-600 hover:bg-blue-700 text-white">View All</Button>
+      </CardHeader>
+      <CardContent className="pt-6">
+        {helpdeskTickets.length === 0 ? (
+          <div className="text-center py-8 text-slate-500">
+            <p>No helpdesk tickets found.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {helpdeskTickets.map((ticket) => {
+              const status = normalizeHelpdeskStatus(ticket.status);
+              return (
+                <div
+                  key={ticket.id}
+                  className="p-4 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="text-sm font-semibold text-slate-900">{ticket.issue}</h4>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          status === 'Resolved' ? 'bg-purple-100 text-purple-700' :
+                          status === 'Approved' ? 'bg-emerald-100 text-emerald-700' :
+                          'bg-amber-100 text-amber-700'
+                        }`}>
+                          {status}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600 mb-2">{ticket.reason}</p>
+                      <div className="flex items-center gap-4 text-xs text-slate-500">
+                        <span>
+                          <strong>Requested by:</strong> {ticket.requestedByName}
+                        </span>
+                        <span>
+                          <strong>Created:</strong> {new Date(ticket.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 flex-shrink-0">
+                      {status === 'Pending' && (
+                        <>
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                            onClick={() => handleApproveTicket(ticket.id)}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs"
+                            onClick={() => handleResolveTicket(ticket.id)}
+                          >
+                            Resolve
+                          </Button>
+                        </>
+                      )}
+                      {status === 'Approved' && (
+                        <Button
+                          size="sm"
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                          onClick={() => handleResolveTicket(ticket.id)}
+                        >
+                          Mark Resolved
+                        </Button>
+                      )}
+                      {status === 'Resolved' && (
+                        <div className="text-xs font-medium text-emerald-700 px-3 py-2 bg-emerald-50 rounded border border-emerald-200 text-center">
+                          Resolved
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
     </Card>
 

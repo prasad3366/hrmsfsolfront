@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { 
   Table, TableHeader, TableRow, TableHead, TableCell, 
   Badge, Card, CardHeader, CardTitle, CardContent, Button
@@ -8,16 +8,13 @@ import { PunchInOutModal } from '../../components/attendance/PunchInOutModal';
 import { Clock, MapPin } from 'lucide-react';
 
 const Attendance = () => {
-  const { records, todayRecord, isLoading, refresh } = useAttendance();
+  const { records, todayRecord, isLoading, refresh: attendanceRefresh } = useAttendance();
   const [isPunchOpen, setIsPunchOpen] = React.useState(false);
 
-  if (isLoading) {
-    return (
-      <div className="p-6 md:p-8 max-w-7xl mx-auto text-center text-slate-500">
-        Loading attendance records...
-      </div>
-    );
-  }
+  // ✅ Wrap refresh in useCallback to maintain stable reference across renders
+  const refresh = useCallback(async () => {
+    await attendanceRefresh();
+  }, [attendanceRefresh]);
 
   const hasPunchedIn = Boolean(todayRecord?.hasPunchedIn ?? todayRecord?.punchInTime);
   const hasPunchedOut = Boolean(todayRecord?.hasPunchedOut ?? todayRecord?.punchOutTime);
@@ -85,6 +82,15 @@ const Attendance = () => {
     return Object.values(grouped)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [records]);
+
+  if (isLoading) {
+    return (
+      <div className="p-6 md:p-8 max-w-7xl mx-auto text-center text-slate-500">
+        Loading attendance records...
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
       <div className="mb-8">

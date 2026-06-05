@@ -7,8 +7,15 @@ import api from '../../services/api';
 
 const STORAGE_KEY = 'foodeez_helpdesk_tickets';
 
+const normalizeStatus = (status?: string): HelpdeskTicket['status'] => {
+  const normalized = status?.toString().toUpperCase() ?? '';
+  if (normalized === 'APPROVED') return 'Approved';
+  if (normalized === 'RESOLVED') return 'Resolved';
+  return 'Pending';
+};
+
 const getStatusVariant = (status: HelpdeskTicket['status']) => {
-  switch (status) {
+  switch (normalizeStatus(status)) {
     case 'Approved':
       return 'success';
     case 'Resolved':
@@ -19,7 +26,7 @@ const getStatusVariant = (status: HelpdeskTicket['status']) => {
 };
 
 const getStatusText = (status: HelpdeskTicket['status']) => {
-  switch (status) {
+  switch (normalizeStatus(status)) {
     case 'Approved':
       return 'Approved';
     case 'Resolved':
@@ -27,6 +34,36 @@ const getStatusText = (status: HelpdeskTicket['status']) => {
     default:
       return 'Pending';
   }
+};
+
+const normalizeHelpdeskTicket = (ticket: any, currentUser?: any): HelpdeskTicket => {
+  const employee = ticket.employee ?? null;
+  const user = ticket.user ?? null;
+  const issue = ticket.issue ?? ticket.title ?? '';
+  const reason = ticket.reason ?? ticket.description ?? '';
+  const createdAt = ticket.createdAt ?? new Date().toISOString();
+  const updatedAt = ticket.updatedAt ?? createdAt;
+  const requestedById = Number(ticket.requestedById ?? ticket.employeeId ?? user?.id ?? currentUser?.employeeId ?? 0);
+  const requestedByEmail = ticket.requestedByEmail ?? user?.email ?? currentUser?.email ?? '';
+  const fallbackName = `${employee?.firstName ?? user?.name ?? currentUser?.name ?? ''} ${employee?.lastName ?? ''}`.trim();
+  const requestedByName =
+    ticket.requestedByName ??
+    (fallbackName || user?.email) ??
+    'Unknown';
+  const requestedByRole = ticket.requestedByRole ?? user?.role ?? currentUser?.role ?? 'EMPLOYEE';
+
+  return {
+    id: String(ticket.id ?? generateTicketId()),
+    requestedById,
+    requestedByName,
+    requestedByEmail,
+    requestedByRole,
+    issue,
+    reason,
+    status: normalizeStatus(ticket.status),
+    createdAt,
+    updatedAt,
+  };
 };
 
 const generateTicketId = () => `HD-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`;
@@ -47,35 +84,77 @@ const Helpdesk = () => {
   useEffect(() => {
     const loadTickets = async () => {
       setIsLoading(true);
-      try {
-        // Try to fetch from API first
-        let apiTickets = [];
+      let localTickets: HelpdeskTicket[] = [];
+
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
         try {
-          if (isHR) {
-            apiTickets = await api.getHelpdeskTickets();
-          } else {
-            apiTickets = await api.getMyHelpdeskTickets();
-          }
-          setTickets(apiTickets || []);
-          // Sync with localStorage
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(apiTickets || []));
-        } catch (apiErr) {
-          console.warn('Failed to fetch from API, falling back to localStorage:', apiErr);
-          // Fallback to localStorage
-          const stored = localStorage.getItem(STORAGE_KEY);
-          if (stored) {
-            setTickets(JSON.parse(stored));
-          }
+          localTickets = JSON.parse(stored) as HelpdeskTicket[];
+        } catch (parseErr) {
+          console.warn('Failed to parse helpdesk tickets from localStorage:', parseErr);
+          localTickets = [];
         }
-      } catch (err) {
-        console.error('Failed to load helpdesk tickets:', err);
+      }
+
+      try {
+        let apiTickets: any[] = [];
+        if (isHR) {
+          apiTickets = await api.getHelpdeskTickets();
+        } else {
+          apiTickets = await api.getMyHelpdeskTickets();
+        }
+
+        const normalizedTickets = (apiTickets || []).map((ticket: any) => normalizeHelpdeskTicket(ticket, user));
+
+        const merged = normalizedTickets.map((apiTicket) => {
+          const localTicket = localTickets.find((ticket) => ticket.id === apiTicket.id);
+          if (localTicket && (localTicket.status === 'Approved' || localTicket.status === 'Resolved')) {
+            return localTicket;
+          }
+          return apiTicket;
+        });
+
+        localTickets.forEach((localTicket) => {
+          if (!merged.find((ticket) => ticket.id === localTicket.id)) {
+            merged.push(localTicket);
+          }
+        });
+
+        setTickets(merged);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      } catch (apiErr) {
+        console.warn('Failed to fetch from API, falling back to localStorage:', apiErr);
+        if (localTickets.length > 0) {
+          setTickets(localTickets);
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
     loadTickets();
-  }, [user?.id, isHR]);
+
+    // Listen for helpdesk updates from HR Dashboard or other components
+    const handleHelpdeskUpdate = (event: any) => {
+      const { ticketId, status } = event.detail;
+      setTickets((prev) => {
+        const updated = prev.map((ticket) =>
+          ticket.id === ticketId
+            ? { ...ticket, status: normalizeStatus(status), updatedAt: new Date().toISOString() }
+            : ticket
+        );
+        // Also update localStorage to keep it in sync
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
+    };
+
+    window.addEventListener('helpdeskTicketsUpdated', handleHelpdeskUpdate);
+
+    return () => {
+      window.removeEventListener('helpdeskTicketsUpdated', handleHelpdeskUpdate);
+    };
+  }, [user?.id, isHR, user]);
 
   const visibleTickets = useMemo(() => {
     if (!user) return [];
@@ -111,21 +190,22 @@ const Helpdesk = () => {
     try {
       // Try to submit via API first
       try {
-        const newTicket = await api.createHelpdeskTicket({
+        const apiTicket = await api.createHelpdeskTicket({
           issue: subject.trim(),
           reason: reason.trim(),
         });
-        
-        setTickets((prev) => [newTicket, ...prev]);
-        // Sync with localStorage
-        const updated = [newTicket, ...tickets];
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        const newTicket = normalizeHelpdeskTicket(apiTicket, user);
+        setTickets((prev) => {
+          const updated = [newTicket, ...prev];
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
       } catch (apiErr) {
         console.warn('Failed to create via API, creating locally:', apiErr);
         // Create locally if API fails
         const newTicket: HelpdeskTicket = {
-          id: `HD-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`,
-          requestedById: user.employeeId ?? 0,
+          id: generateTicketId(),
+          requestedById: Number(user.employeeId ?? 0),
           requestedByName: user.name,
           requestedByEmail: user.email,
           requestedByRole: user.role,
@@ -135,10 +215,12 @@ const Helpdesk = () => {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        
-        setTickets((prev) => [newTicket, ...prev]);
-        const updated = [newTicket, ...tickets];
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+
+        setTickets((prev) => {
+          const updated = [newTicket, ...prev];
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
       }
       
       setSubject('');
@@ -164,22 +246,16 @@ const Helpdesk = () => {
         console.warn('Failed via API, updating locally:', apiErr);
       }
 
-      // Update local state
-      setTickets((prev) =>
-        prev.map((ticket) =>
+      // Update local state and sync storage in one step to avoid stale tickets
+      setTickets((prev) => {
+        const updated = prev.map((ticket) =>
           ticket.id === ticketId
-            ? { ...ticket, status: nextStatus, updatedAt: new Date().toISOString() }
+            ? { ...ticket, status: normalizeStatus(nextStatus), updatedAt: new Date().toISOString() }
             : ticket
-        )
-      );
-      
-      // Sync with localStorage
-      const updated = tickets.map((ticket) =>
-        ticket.id === ticketId
-          ? { ...ticket, status: nextStatus, updatedAt: new Date().toISOString() }
-          : ticket
-      );
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        );
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
       
       // Emit event to notify other components (e.g., HRDashboard) that tickets were updated
       window.dispatchEvent(new CustomEvent('helpdeskTicketsUpdated', { detail: { ticketId, status: nextStatus } }));

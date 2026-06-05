@@ -45,26 +45,15 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
 
   // Action handler defined later
 
-  // ✅ Reset + refresh on open
+  // ✅ Reset on close only (avoid immediate refresh on open to prevent flicker)
   useEffect(() => {
     if (!isOpen) {
       setLocalPunchedIn(undefined);
       setLocalPunchedOut(undefined);
       setErrorMessage('');
       setSuccessMessage('');
-      return;
     }
-
-    const refreshAttendance = async () => {
-      try {
-        await onSuccess();
-      } catch (err) {
-        console.error('Failed to refresh attendance on modal open:', err);
-      }
-    };
-
-    refreshAttendance();
-  }, [isOpen, onSuccess]);
+  }, [isOpen]);
 
   const handlePunchIn = async () => {
     try {
@@ -93,10 +82,11 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
         message: `You punched in at ${new Date().toLocaleTimeString()}`,
       });
 
-      // ✅ Refresh DB data
-      await onSuccess();
+      // ✅ Refresh DB data in background, don't await to avoid blocking the UI
+      onSuccess().catch(err => console.error('Failed to refresh after punch in:', err));
 
-      setTimeout(() => onClose(), 800);
+      // ✅ Close modal quickly to prevent flickering
+      setTimeout(() => onClose(), 600);
 
     } catch (err: any) {
       console.error('punchIn error:', err);
@@ -137,9 +127,11 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
         message: `You punched out at ${new Date().toLocaleTimeString()}`,
       });
 
-      await onSuccess();
+      // ✅ Refresh DB data in background, don't await to avoid blocking the UI
+      onSuccess().catch(err => console.error('Failed to refresh after punch out:', err));
 
-      setTimeout(() => onClose(), 800);
+      // ✅ Close modal quickly to prevent flickering
+      setTimeout(() => onClose(), 600);
 
     } catch (err: any) {
       console.error('punchOut error:', err);
