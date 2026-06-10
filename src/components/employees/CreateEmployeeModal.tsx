@@ -137,6 +137,9 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
     }));
   };
 
+  const submitText = mode === 'edit' ? 'Update Employee' : 'Create Employee';
+  const submittingText = mode === 'edit' ? 'Updating...' : 'Creating...';
+
   const credentialsWillBeDeactivated = useMemo(
     () => checkCredentialsDeactivation(mode, formData, originalData),
     [formData.status, formData.dateOfExit, originalData, mode]
