@@ -23,11 +23,14 @@ export const usePayroll = () => {
     }
   }, []);
 
-  const fetchPayroll = useCallback(async (employeeId: number) => {
+  // Always fetches the current user's own payroll (via /payroll/my) -
+  // every call site passes the logged-in user's own employeeId anyway,
+  // and /payroll/my works for any authenticated role.
+  const fetchPayroll = useCallback(async (_employeeId: number) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await ApiService.getPayroll(employeeId);
+      const result = await ApiService.getMyPayroll();
       setPayrolls(result);
       return result;
     } catch (err) {
@@ -79,6 +82,20 @@ export const usePayroll = () => {
     [currentPayroll, fetchPayroll]
   );
 
+  const generatePayslip = useCallback(async (data: RunPayrollDto) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await ApiService.generatePayslip(data);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate payslip';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -91,6 +108,7 @@ export const usePayroll = () => {
     runPayroll,
     addPayrollAdjustment,
     fetchPayroll,
+    generatePayslip,
     clearError,
     setCurrentPayroll,
   };

@@ -2,19 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, Button, Input, Label } from '../../components/ui/components';
 import ApiService from '../../services/api';
 import { usePayroll } from '../../hooks/usePayroll';
- 
-interface RunPayrollModalProps {
+
+interface GeneratePayslipModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
 }
- 
-export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
+
+export const GeneratePayslipModal: React.FC<GeneratePayslipModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
 }) => {
-  const { runPayroll, loading, error } = usePayroll();
+  const { generatePayslip, loading, error, clearError } = usePayroll();
   const [formData, setFormData] = useState({
     employeeIdentifier: '',
     month: new Date().getMonth() + 1,
@@ -23,26 +23,24 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
   const [employees, setEmployees] = useState<any[]>([]);
   const [empLoading, setEmpLoading] = useState(false);
   const [empError, setEmpError] = useState<string | null>(null);
+
   useEffect(() => {
+    if (!isOpen) return;
     let mounted = true;
     setEmpLoading(true);
     ApiService.getAllEmployees()
       .then((data) => {
         if (mounted === false) return;
-        // Once an employee has a first payroll record, the monthly scheduler
-        // takes over automatically - only show employees who haven't started yet.
-        const notStarted = (data || []).filter(
-          (emp: any) => emp.status === 'ACTIVE' && (!emp.payrolls || emp.payrolls.length === 0),
-        );
-        setEmployees(notStarted);
+        const active = (data || []).filter((emp: any) => emp.status === 'ACTIVE');
+        setEmployees(active);
       })
-      .catch((err) => {
+      .catch(() => {
         setEmpError('Failed to load employees');
       })
       .finally(() => setEmpLoading(false));
     return () => { mounted = false; };
-  }, []);
- 
+  }, [isOpen]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -50,15 +48,13 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
       [name]: name === 'month' || name === 'year' ? Number.parseInt(value, 10) : value,
     }));
   };
- 
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
- 
+
     const idValue = Number.parseInt(formData.employeeIdentifier, 10);
     const isNumericId = Number.isNaN(idValue) === false;
- 
- 
-    // Only include employeeId or empCode if defined, to match RunPayrollDto type
+
     let payload: any = {
       month: formData.month,
       year: formData.year,
@@ -68,35 +64,34 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
     } else if (formData.employeeIdentifier.trim()) {
       payload.empCode = formData.employeeIdentifier.trim();
     }
- 
+
     if (!payload.employeeId && !payload.empCode) {
-      alert('Please enter a valid employee ID or employee code.');
+      alert('Please select an employee.');
       return;
     }
- 
+
     try {
-      await runPayroll(payload);
- 
-      // Reset form
+      await generatePayslip(payload);
+
       setFormData({
         employeeIdentifier: '',
         month: new Date().getMonth() + 1,
         year: new Date().getFullYear(),
       });
- 
+
       onSuccess?.();
       onClose();
     } catch (err) {
-      console.error('Failed to run payroll:', err);
+      console.error('Failed to generate payslip:', err);
     }
   };
- 
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <div className="p-6 max-w-md w-full bg-white rounded-lg shadow-lg">
-        <h2 className="text-xl font-bold mb-1 text-slate-900">Run Payroll</h2>
+        <h2 className="text-xl font-bold mb-1 text-slate-900">Generate Payslip</h2>
         <p className="text-xs text-slate-500 mb-4">
-          For an employee's first payroll only. Once generated, their payroll runs automatically every month.
+          Manually generate and download a payslip for any employee and period.
         </p>
 
         {error && (
@@ -105,11 +100,11 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
             <p className="text-red-700 text-sm mt-1">{error}</p>
           </div>
         )}
- 
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="employeeIdentifier" className="block text-sm font-medium text-slate-700 mb-1">
-              Employee ID or Code
+              Employee
             </Label>
             <select
               id="employeeIdentifier"
@@ -123,7 +118,7 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
               {empLoading && <option>Loading...</option>}
               {empError && <option disabled>{empError}</option>}
               {!empLoading && !empError && employees.length === 0 && (
-                <option disabled>No employees pending their first payroll</option>
+                <option disabled>No active employees found</option>
               )}
               {employees.map((emp) => (
                 <option key={emp.id || emp.employeeId || emp.empCode}
@@ -134,7 +129,7 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
               ))}
             </select>
           </div>
- 
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="month" className="block text-sm font-medium text-slate-700 mb-1">
@@ -154,7 +149,7 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
                 ))}
               </select>
             </div>
- 
+
             <div>
               <Label htmlFor="year" className="block text-sm font-medium text-slate-700 mb-1">
                 Year
@@ -169,12 +164,12 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
               />
             </div>
           </div>
- 
+
           <div className="flex gap-2 pt-4">
             <Button
               type="button"
               variant="outline"
-              onClick={onClose}
+              onClick={() => { clearError(); onClose(); }}
               className="flex-1"
               disabled={loading}
             >
@@ -186,7 +181,7 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
               className="flex-1"
               disabled={loading}
             >
-              {loading ? 'Running...' : 'Run Payroll'}
+              {loading ? 'Generating...' : 'Generate Payslip'}
             </Button>
           </div>
         </form>
@@ -194,5 +189,3 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
     </Dialog>
   );
 };
- 
- 

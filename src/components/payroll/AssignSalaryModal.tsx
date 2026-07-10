@@ -7,16 +7,25 @@ interface AssignSalaryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  /** When set, skips the unassigned-only dropdown and targets this employee
+   * directly - used for giving an existing employee a raise (a new salary
+   * row) from their profile, since the dropdown only lists employees who
+   * have never had a salary. */
+  presetEmpCode?: string;
+  presetEmployeeName?: string;
 }
 
 export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  presetEmpCode,
+  presetEmployeeName,
 }) => {
+  const isRaiseMode = !!presetEmpCode;
   const { assignSalary, loading, error } = useSalary();
   const [formData, setFormData] = useState({
-    empCode: '',
+    empCode: presetEmpCode || '',
     annualCTC: '',
     structureId: '',
   });
@@ -24,19 +33,24 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
   const [empLoading, setEmpLoading] = useState(false);
   const [empError, setEmpError] = useState<string | null>(null);
     useEffect(() => {
+      if (isRaiseMode) return; // no dropdown to populate in raise mode
       let mounted = true;
       setEmpLoading(true);
       ApiService.getAllEmployees()
         .then((data) => {
           if (mounted === false) return;
-          setEmployees(data || []);
+          // Only show active employees who don't already have a salary assigned.
+          const unassigned = (data || []).filter(
+            (emp: any) => emp.status === 'ACTIVE' && (!emp.salaries || emp.salaries.length === 0),
+          );
+          setEmployees(unassigned);
         })
         .catch((err) => {
           setEmpError('Failed to load employees');
         })
         .finally(() => setEmpLoading(false));
       return () => { mounted = false; };
-    }, []);
+    }, [isRaiseMode]);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -44,8 +58,9 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
     if (isOpen) {
       setValidationError(null);
       setSuccessMessage(null);
+      setFormData((prev) => ({ ...prev, empCode: presetEmpCode || '' }));
     }
-  }, [isOpen]);
+  }, [isOpen, presetEmpCode]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -87,12 +102,12 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
       });
       
       // Show success message
-      setSuccessMessage('Salary assigned successfully!');
+      setSuccessMessage(isRaiseMode ? 'Raise assigned successfully!' : 'Salary assigned successfully!');
       setValidationError(null);
-      
+
       // Reset form
       setFormData({
-        empCode: '',
+        empCode: presetEmpCode || '',
         annualCTC: '',
         structureId: '',
       });
@@ -113,8 +128,15 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <div className="p-6 max-w-md w-full bg-white rounded-lg shadow-lg">
-        <h2 className="text-xl font-bold mb-4 text-slate-900">Assign Salary</h2>
-        
+        <h2 className="text-xl font-bold mb-1 text-slate-900">
+          {isRaiseMode ? `Give Raise${presetEmployeeName ? ` - ${presetEmployeeName}` : ''}` : 'Assign Salary'}
+        </h2>
+        <p className="text-xs text-slate-500 mb-4">
+          {isRaiseMode
+            ? 'This creates a new salary effective from today. Their previous salary and payroll history are kept.'
+            : "Only employees without a salary yet are listed. To give an existing employee a raise, use their profile."}
+        </p>
+
         {successMessage && (
           <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
             <p className="text-emerald-800 font-semibold text-sm">Success</p>
@@ -134,27 +156,41 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
             <Label htmlFor="empCode" className="block text-sm font-medium text-slate-700 mb-1">
               Employee
             </Label>
-            <select
-              id="empCode"
-              name="empCode"
-              value={formData.empCode}
-              onChange={handleChange}
-              required
-              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={loading || !!successMessage || empLoading}
-            >
-              <option value="">Select employee...</option>
-              {empLoading && <option>Loading...</option>}
-              {empError && <option disabled>{empError}</option>}
-              {employees.map((emp) => (
-                <option key={emp.id || emp.employeeId || emp.empCode}
-                  value={emp.empCode}
+            {isRaiseMode ? (
+              <Input
+                id="empCode"
+                value={`${presetEmployeeName || ''} (${presetEmpCode})`.trim()}
+                disabled
+                readOnly
+              />
+            ) : (
+              <>
+                <select
+                  id="empCode"
+                  name="empCode"
+                  value={formData.empCode}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={loading || !!successMessage || empLoading}
                 >
-                  {(emp.firstName || emp.name || '') + (emp.lastName ? ' ' + emp.lastName : '')} {emp.empCode ? `(${emp.empCode})` : ''}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-500 mt-1">Select employee by name or code</p>
+                  <option value="">Select employee...</option>
+                  {empLoading && <option>Loading...</option>}
+                  {empError && <option disabled>{empError}</option>}
+                  {!empLoading && !empError && employees.length === 0 && (
+                    <option disabled>No employees pending salary assignment</option>
+                  )}
+                  {employees.map((emp) => (
+                    <option key={emp.id || emp.employeeId || emp.empCode}
+                      value={emp.empCode}
+                    >
+                      {(emp.firstName || emp.name || '') + (emp.lastName ? ' ' + emp.lastName : '')} {emp.empCode ? `(${emp.empCode})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500 mt-1">Select employee by name or code</p>
+              </>
+            )}
           </div>
 
           <div>
@@ -210,7 +246,7 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
                 className="flex-1"
                 disabled={loading}
               >
-                {loading ? 'Assigning...' : 'Assign Salary'}
+                {loading ? 'Assigning...' : isRaiseMode ? 'Give Raise' : 'Assign Salary'}
               </Button>
             )}
           </div>

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
-import { 
-  Users, Briefcase, Calendar, CheckCircle, UserPlus, Clock, ArrowUp, ArrowDown, Trash2, DollarSign, ChevronLeft, ChevronRight, AlertTriangle
+import {
+  Users, Briefcase, Calendar, CheckCircle, UserPlus, Clock, ArrowUp, ArrowDown, Trash2, DollarSign, ChevronLeft, ChevronRight, AlertTriangle, FileText, Download
 } from 'lucide-react';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line
@@ -15,6 +15,8 @@ import { useHolidays } from '../../hooks/useHolidays';
 import { useNotifications } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import { WfhApprovalList } from '../../components/wfh/WfhApprovalList';
+import { GeneratePayslipModal } from '../../components/payroll/GeneratePayslipModal';
+import { ExportAttendanceModal } from '../../components/attendance/ExportAttendanceModal';
 import { useAttendance } from '../../hooks/useAttendance';
 import { useLeave } from '../../hooks/useLeave';
 import { HelpdeskTicket } from '../../types';
@@ -158,6 +160,8 @@ const WorkDurationTooltip = (props: any) => {
 
 const HRDashboard = () => {
   const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] = useState(false);
+  const [isGeneratePayslipOpen, setIsGeneratePayslipOpen] = useState(false);
+  const [isExportAttendanceOpen, setIsExportAttendanceOpen] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
   const [totalEmployees, setTotalEmployees] = useState<number | null>(null);
@@ -698,11 +702,25 @@ const normalizeHelpdeskStatus = (status?: string) => {
                 <Briefcase size={20} className="mb-2" strokeWidth={1.5} />
                 <span className="text-xs font-semibold text-center">Offer Generate</span>
             </button>
-            <button 
+            <button
               onClick={() => setIsCreateHolidayOpen(true)}
               className="flex flex-col items-center justify-center p-4 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 transition-colors border border-orange-200">
                 <Clock size={20} className="mb-2" strokeWidth={1.5} />
                 <span className="text-xs font-semibold text-center">Create Holidays</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsGeneratePayslipOpen(true)}
+              className="flex flex-col items-center justify-center p-4 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 transition-colors border border-teal-200">
+                <FileText size={20} className="mb-2" strokeWidth={1.5} />
+                <span className="text-xs font-semibold text-center">Generate Payslip</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsExportAttendanceOpen(true)}
+              className="flex flex-col items-center justify-center p-4 rounded-lg bg-cyan-50 hover:bg-cyan-100 text-cyan-700 transition-colors border border-cyan-200">
+                <Download size={20} className="mb-2" strokeWidth={1.5} />
+                <span className="text-xs font-semibold text-center">Export Attendance CSV</span>
             </button>
         </CardContent>
       </Card>
@@ -871,6 +889,18 @@ const normalizeHelpdeskStatus = (status?: string) => {
       onClose={() => setIsCreateHolidayOpen(false)}
       onSubmit={handleHolidayCreated}
       isSubmitting={isHolidaySubmitting}
+    />
+
+    {/* Generate Payslip Modal */}
+    <GeneratePayslipModal
+      isOpen={isGeneratePayslipOpen}
+      onClose={() => setIsGeneratePayslipOpen(false)}
+    />
+
+    {/* Export Attendance CSV Modal */}
+    <ExportAttendanceModal
+      isOpen={isExportAttendanceOpen}
+      onClose={() => setIsExportAttendanceOpen(false)}
     />
 
     <div className="lg:col-span-full">

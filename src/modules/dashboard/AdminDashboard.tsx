@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
-import { 
-  Users, DollarSign, Briefcase, Activity, UserPlus, 
-  Calendar, CheckCircle, Layers, ArrowUp, ArrowDown, Clock
+import {
+  Users, DollarSign, Briefcase, Activity, UserPlus,
+  Calendar, CheckCircle, Layers, ArrowUp, ArrowDown, Clock, FileText, Download
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -11,6 +11,8 @@ import {
 import ApiService from '../../services/api';
 import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeModal';
 import CreateHolidayModal from '../../components/holidays/CreateHolidayModal';
+import { GeneratePayslipModal } from '../../components/payroll/GeneratePayslipModal';
+import { ExportAttendanceModal } from '../../components/attendance/ExportAttendanceModal';
 import { useWfh } from '../../hooks/useWfh';
 import { useHolidays } from '../../hooks/useHolidays';
 import { useNotifications } from '../../context/NotificationContext';
@@ -67,6 +69,8 @@ const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", de
 const AdminDashboard = () => {
   const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] = useState(false);
   const [isCreateHolidayOpen, setIsCreateHolidayOpen] = useState(false);
+  const [isGeneratePayslipOpen, setIsGeneratePayslipOpen] = useState(false);
+  const [isExportAttendanceOpen, setIsExportAttendanceOpen] = useState(false);
   const navigate = useNavigate();
   const [recentJoiners, setRecentJoiners] = useState<any[]>([]);
   const [totalEmployees, setTotalEmployees] = useState<number | null>(null);
@@ -366,11 +370,25 @@ const AdminDashboard = () => {
                     <DollarSign size={20} className="mb-1" />
                     <span className="text-xs font-semibold">Run Payroll</span>
                 </button>
-                <button 
+                <button
                   onClick={() => setIsCreateHolidayOpen(true)}
                   className="flex flex-col items-center justify-center p-3 rounded-lg bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors border border-orange-200 text-center">
                     <Clock size={20} className="mb-1" />
                     <span className="text-xs font-semibold">Create Holidays</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsGeneratePayslipOpen(true)}
+                  className="flex flex-col items-center justify-center p-3 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors border border-teal-200 text-center">
+                    <FileText size={20} className="mb-1" />
+                    <span className="text-xs font-semibold">Generate Payslip</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsExportAttendanceOpen(true)}
+                  className="flex flex-col items-center justify-center p-3 rounded-lg bg-cyan-50 text-cyan-700 hover:bg-cyan-100 transition-colors border border-cyan-200 text-center">
+                    <Download size={20} className="mb-1" />
+                    <span className="text-xs font-semibold">Export Attendance CSV</span>
                 </button>
             </CardContent>
         </Card>
@@ -448,6 +466,18 @@ const AdminDashboard = () => {
       onClose={() => setIsCreateHolidayOpen(false)}
       onSubmit={handleHolidayCreated}
       isSubmitting={isHolidaySubmitting}
+    />
+
+    {/* Generate Payslip Modal */}
+    <GeneratePayslipModal
+      isOpen={isGeneratePayslipOpen}
+      onClose={() => setIsGeneratePayslipOpen(false)}
+    />
+
+    {/* Export Attendance CSV Modal */}
+    <ExportAttendanceModal
+      isOpen={isExportAttendanceOpen}
+      onClose={() => setIsExportAttendanceOpen(false)}
     />
   </div>
 );

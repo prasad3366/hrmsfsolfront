@@ -7,7 +7,7 @@ import {
   Table, TableHeader, TableRow, TableHead, TableCell, 
   Button, Input, Badge, Card, CardHeader, CardContent 
 } from '../../components/ui/components';
-import { Search, Plus, Filter, Download, MoreHorizontal } from 'lucide-react';
+import { Search, Plus, Filter, Download } from 'lucide-react';
 
 // Helper functions to reduce complexity
 const isEmployeeActive = (emp: any): boolean => {
@@ -21,6 +21,7 @@ const isEmployeeActive = (emp: any): boolean => {
 
 const mapEmployeeData = (emp: any): any => ({
   id: emp.id,
+  empCode: emp.empCode ?? '-',
   name: `${emp.firstName ?? ''} ${emp.lastName ?? ''}`.trim() || emp.empCode || 'Unknown',
   email: emp.user?.email ?? emp.email ?? '',
   designation: emp.designation ?? '',
@@ -133,12 +134,12 @@ const EmployeeList = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Employee</TableHead>
+                <TableHead>Emp Code</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Designation</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Join Date</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <tbody>
@@ -161,6 +162,7 @@ const EmployeeList = () => {
                       </div>
                     </div>
                   </TableCell>
+                  <TableCell>{emp.empCode}</TableCell>
                   <TableCell className="capitalize">{emp.role.toLowerCase()}</TableCell>
                   <TableCell>{emp.designation}</TableCell>
                   <TableCell>
@@ -174,20 +176,6 @@ const EmployeeList = () => {
                     </Badge>
                   </TableCell>
                   <TableCell>{emp.joinDate}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/employees/${emp.id}`);
-                      }}
-                      title={canManageEmployees ? 'View / edit employee' : 'View employee'}
-                    >
-                      <MoreHorizontal size={18} />
-                    </Button>
-                  </TableCell>
                 </TableRow>
               ))}
             </tbody>

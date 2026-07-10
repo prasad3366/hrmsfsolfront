@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
-import { 
-  Users, Layers, CheckCircle, Calendar, TrendingUp, ArrowUp, ArrowDown, Target, Clock
+import {
+  Users, Layers, CheckCircle, Calendar, TrendingUp, ArrowUp, ArrowDown, Target, Clock, FileText, Download
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -12,6 +12,8 @@ import { useWfh } from '../../hooks/useWfh';
 import { useLeave } from '../../hooks/useLeave';
 import { useAttendance } from '../../hooks/useAttendance';
 import ApiService from '../../services/api';
+import { GeneratePayslipModal } from '../../components/payroll/GeneratePayslipModal';
+import { ExportAttendanceModal } from '../../components/attendance/ExportAttendanceModal';
 
 const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", delay = 0 }: any) => {
   const colors: Record<string, string> = {
@@ -168,6 +170,8 @@ const ManagerDashboard = () => {
   const [completedTasks, setCompletedTasks] = useState<number>(128);
   const [employeeMap, setEmployeeMap] = useState<Record<string, string>>({});
   const [attendanceTab, setAttendanceTab] = useState<'inside' | 'outside' | 'wfh'>('inside');
+  const [isGeneratePayslipOpen, setIsGeneratePayslipOpen] = useState(false);
+  const [isExportAttendanceOpen, setIsExportAttendanceOpen] = useState(false);
 
   useEffect(() => {
     fetchAllWfhRequests();
@@ -326,6 +330,20 @@ const ManagerDashboard = () => {
             <button className="flex flex-col items-center justify-center p-4 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 transition-colors border border-orange-200">
                 <Calendar size={20} className="mb-2" strokeWidth={1.5} />
                 <span className="text-xs font-semibold text-center">Schedule</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsGeneratePayslipOpen(true)}
+              className="flex flex-col items-center justify-center p-4 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 transition-colors border border-teal-200">
+                <FileText size={20} className="mb-2" strokeWidth={1.5} />
+                <span className="text-xs font-semibold text-center">Generate Payslip</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsExportAttendanceOpen(true)}
+              className="flex flex-col items-center justify-center p-4 rounded-lg bg-cyan-50 hover:bg-cyan-100 text-cyan-700 transition-colors border border-cyan-200">
+                <Download size={20} className="mb-2" strokeWidth={1.5} />
+                <span className="text-xs font-semibold text-center">Export Attendance CSV</span>
             </button>
         </CardContent>
       </Card>
@@ -607,6 +625,18 @@ const ManagerDashboard = () => {
         </Table>
       </CardContent>
     </Card>
+
+    {/* Generate Payslip Modal */}
+    <GeneratePayslipModal
+      isOpen={isGeneratePayslipOpen}
+      onClose={() => setIsGeneratePayslipOpen(false)}
+    />
+
+    {/* Export Attendance CSV Modal */}
+    <ExportAttendanceModal
+      isOpen={isExportAttendanceOpen}
+      onClose={() => setIsExportAttendanceOpen(false)}
+    />
   </div>
   );
 };

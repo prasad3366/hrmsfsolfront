@@ -3,12 +3,13 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ApiService from '../../services/api';
 import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeModal';
-import { 
-  Card, CardContent, CardHeader, CardTitle, 
+import { AssignSalaryModal } from '../../components/payroll/AssignSalaryModal';
+import {
+  Card, CardContent, CardHeader, CardTitle,
   Button, Badge
 } from '../../components/ui/components';
-import { 
-  Edit, Briefcase, Package
+import {
+  Edit, Briefcase, Package, TrendingUp
 } from 'lucide-react';
 import { Employee } from '../../types';
 
@@ -68,9 +69,11 @@ const EmployeeProfile = () => {
     const [assetsLoading, setAssetsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isEditOpen, setIsEditOpen] = useState(false);
+    const [isRaiseOpen, setIsRaiseOpen] = useState(false);
 
     // Check if user can edit employees
     const canEditEmployees = user?.role === 'ADMIN' || user?.role === 'HR';
+    const canManagePayroll = user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER';
 
     useEffect(() => {
         let mounted = true;
@@ -174,6 +177,11 @@ const EmployeeProfile = () => {
                 </div>
              </div>
              <div className="flex gap-3 w-full md:w-auto">
+                 {canManagePayroll && (
+                   <Button variant="outline" className="flex-1 md:flex-none" onClick={() => setIsRaiseOpen(true)}>
+                      <TrendingUp size={16} className="mr-2" /> Give Raise
+                   </Button>
+                 )}
                  {canEditEmployees && (
                    <Button className="flex-1 md:flex-none" onClick={() => setIsEditOpen(true)}>
                       <Edit size={16} className="mr-2" /> Edit
@@ -393,6 +401,13 @@ const EmployeeProfile = () => {
         mode="edit"
         employeeId={employee?.id}
         initialData={profileInitialData}
+      />
+
+      <AssignSalaryModal
+        isOpen={isRaiseOpen}
+        onClose={() => setIsRaiseOpen(false)}
+        presetEmpCode={employee.empCode}
+        presetEmployeeName={`${employee.firstName || ''} ${employee.lastName || ''}`.trim()}
       />
 
     </div>

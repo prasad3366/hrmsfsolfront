@@ -160,23 +160,6 @@ const TeamManagement: React.FC = () => {
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button
-            onClick={async () => {
-              console.log('🔍 Testing API directly...');
-              try {
-                const response = await ApiService.getMyTeam();
-                console.log('🔍 Direct API response:', JSON.stringify(response, null, 2));
-                alert(`API Response:\n${JSON.stringify(response, null, 2)}`);
-              } catch (err) {
-                console.error('🔍 API test failed:', err);
-                alert(`API Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
-              }
-            }}
-            variant="outline"
-            size="sm"
-          >
-            Debug API
-          </Button>
         </div>
       </div>
 

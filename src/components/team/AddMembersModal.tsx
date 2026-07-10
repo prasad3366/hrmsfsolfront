@@ -146,8 +146,8 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-lg border-0 shadow-2xl max-h-[80vh] overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between">
+      <Card className="w-full max-w-lg border-0 shadow-2xl max-h-[80vh] overflow-hidden flex flex-col">
+        <CardHeader className="flex flex-row items-center justify-between shrink-0">
           <CardTitle>Add Members to {teamName}</CardTitle>
           <button
             onClick={handleClose}
@@ -158,8 +158,8 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
           </button>
         </CardHeader>
 
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <CardContent className="flex-1 overflow-y-auto space-y-4">
             <div className="space-y-2">
               <Label>Select employees to add to the team:</Label>
               <div className="max-h-64 overflow-y-auto border rounded-md p-4 space-y-3">
@@ -248,23 +248,23 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
                 </div>
               </div>
             )}
+          </CardContent>
 
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button type="button" variant="outline" onClick={handleClose}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={isLoading || selectedEmployeeIds.length === 0}
-                className="bg-[#2A4B9B] hover:bg-[#1e3a7b] text-white"
-              >
-                {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                <UserPlus className="w-4 h-4 mr-2" />
-                Add Members
-              </Button>
-            </div>
-          </form>
-        </CardContent>
+          <div className="flex justify-end space-x-2 p-5 pt-4 border-t border-slate-200 shrink-0">
+            <Button type="button" variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={isLoading || selectedEmployeeIds.length === 0}
+              className="bg-[#2A4B9B] hover:bg-[#1e3a7b] text-white"
+            >
+              {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              <UserPlus className="w-4 h-4 mr-2" />
+              Add Members
+            </Button>
+          </div>
+        </form>
       </Card>
     </div>
   );

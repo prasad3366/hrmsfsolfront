@@ -1282,6 +1282,66 @@ class ApiService {
     }
   }
 
+  /** Manual "Generate Payslip" action for HR/Admin/Manager - runs payroll
+   * for the given employee/period if it hasn't been run yet, then downloads
+   * the payslip PDF directly. */
+  async generatePayslip(data: RunPayrollDto): Promise<void> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/payroll/generate-payslip`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const err = await response.text().catch(() => '');
+        throw new Error(err || 'Failed to generate payslip');
+      }
+      const blob = await response.blob();
+      const url = globalThis.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `payslip-${data.month}-${data.year}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      globalThis.URL.revokeObjectURL(url);
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to generate payslip');
+    }
+  }
+
+  /** HR/Admin/Manager quick action - downloads the attendance CSV report
+   * (employee code, name, total days in month, present days, leave days)
+   * for the given month/year. Managers only receive their own team's rows,
+   * enforced server-side. */
+  async exportAttendance(month: number, year: number): Promise<void> {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(
+        `${API_BASE_URL}/dashboard/export-attendance?month=${month}&year=${year}`,
+        {
+          method: 'GET',
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        },
+      );
+      if (!response.ok) {
+        const err = await response.text().catch(() => '');
+        throw new Error(err || 'Failed to export attendance report');
+      }
+      const blob = await response.blob();
+      const url = globalThis.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance-report-${year}-${String(month).padStart(2, '0')}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      globalThis.URL.revokeObjectURL(url);
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to export attendance report');
+    }
+  }
+
   async getMyEmployeeDetails(): Promise<any> {
     try {
       const response = await fetch(`${API_BASE_URL}/employees/me`, { method: 'GET', headers: this.getAuthHeaders() });
@@ -1577,6 +1637,29 @@ class ApiService {
       return await response.json();
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to add payroll adjustment');
+    }
+  }
+
+  /** Fetches the logged-in user's own payroll history. Unlike getPayroll(),
+   * this needs no ADMIN/HR/MANAGER role - the server resolves the employee
+   * from the auth token. */
+  async getMyPayroll(): Promise<Payroll[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/payroll/my`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        console.warn(`Payroll/my endpoint returned ${response.status}`);
+        return [];
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.warn('Error fetching own payroll:', error);
+      return [];
     }
   }
 
