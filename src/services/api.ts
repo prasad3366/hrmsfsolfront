@@ -402,8 +402,8 @@ class ApiService {
     try {
       const url = `${API_BASE_URL}/auth/login`;
       console.log('Login request to:', url);
-      console.log('Payload:', { email, password });
-      
+      console.log('Payload:', { email, password: '[REDACTED]' });
+
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
