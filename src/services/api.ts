@@ -196,7 +196,7 @@ export interface Leave {
   durationType: 'FULL_DAY' | 'HALF_DAY' | 'HALF_DAY_FIRST' | 'HALF_DAY_SECOND';
   totalDays: number;
   reason: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
   remarks?: string;
   yearStart: number;
   medicalCertificate?: string | null;
@@ -213,6 +213,16 @@ export interface Leave {
   leaveType?: {
     id: number;
     name: string;
+  };
+}
+
+export interface LeaveHistoryResponse {
+  data: Leave[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
   };
 }
 
@@ -819,9 +829,9 @@ class ApiService {
     }
   }
 
-  async getLeaveHistory(): Promise<Leave[]> {
+  async getLeaveHistory(page = 1, limit = 10): Promise<LeaveHistoryResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/leaves/history`, {
+      const response = await fetch(`${API_BASE_URL}/leaves/history?page=${page}&limit=${limit}`, {
         method: 'GET',
         headers: this.getAuthHeaders(),
       });
@@ -830,9 +840,36 @@ class ApiService {
         throw new Error('Failed to fetch leave history');
       }
 
-      return await response.json();
+      const result = await response.json();
+      if (!result || !Array.isArray(result.data) || !result.pagination) {
+        throw new Error('Invalid leave history response');
+      }
+
+      return result as LeaveHistoryResponse;
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch leave history');
+    }
+  }
+
+  async getPaginatedLeaveHistory(page = 1, limit = 10): Promise<LeaveHistoryResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/leaves/history?page=${page}&limit=${limit}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch paginated leave history');
+      }
+
+      const result = await response.json();
+      if (!result || !Array.isArray(result.data) || !result.pagination) {
+        throw new Error('Invalid paginated leave history response');
+      }
+
+      return result as LeaveHistoryResponse;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch paginated leave history');
     }
   }
 
@@ -847,7 +884,12 @@ class ApiService {
         throw new Error('Failed to fetch pending leaves');
       }
 
-      return await response.json();
+      const result = await response.json();
+      if (!Array.isArray(result)) {
+        throw new Error('Invalid pending leaves response');
+      }
+
+      return result as Leave[];
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch pending leaves');
     }
