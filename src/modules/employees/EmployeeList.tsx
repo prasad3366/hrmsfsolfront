@@ -32,13 +32,38 @@ const mapEmployeeData = (emp: any): any => ({
   avatar: emp.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent((emp.firstName ?? '') + ' ' + (emp.lastName ?? ''))}`,
 });
 
+const normalizeEmpCode = (code: string): [string, number] => {
+  const match = code.match(/^([^\d]*)(\d+)?/);
+  if (!match) return [code.toLowerCase(), Number.MAX_SAFE_INTEGER];
+  const prefix = match[1].toLowerCase();
+  const suffix = match[2] ? parseInt(match[2], 10) : Number.MAX_SAFE_INTEGER;
+  return [prefix, suffix];
+};
+
+const sortEmployeesByEmpCode = (employees: any[]): any[] => {
+  return [...employees].sort((a, b) => {
+    const codeA = a.empCode === '-' ? '' : String(a.empCode ?? '').trim();
+    const codeB = b.empCode === '-' ? '' : String(b.empCode ?? '').trim();
+    if (!codeA) return codeB ? 1 : 0;
+    if (!codeB) return -1;
+
+    const [prefixA, suffixA] = normalizeEmpCode(codeA);
+    const [prefixB, suffixB] = normalizeEmpCode(codeB);
+    if (prefixA < prefixB) return -1;
+    if (prefixA > prefixB) return 1;
+    return suffixA - suffixB;
+  });
+};
+
 const filterEmployees = (employees: any[], searchTerm: string): any[] => {
   const mapped = employees.map(mapEmployeeData);
-  return mapped.filter((emp) =>
+  const filtered = mapped.filter((emp) =>
     emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.empCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
     emp.department.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  return sortEmployeesByEmpCode(filtered);
 };
 
 const EmployeeList = () => {

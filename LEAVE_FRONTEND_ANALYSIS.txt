@@ -1,0 +1,173 @@
+Frontend Leave-Management Analysis
+===================================
+
+No frontend files were modified during the analysis.
+
+1. Employee leave application page/component
+---------------------------------------------
+The shared page is:
+
+src/modules/leave/LeaveManagement.tsx
+
+It includes the Apply Leave button and renders:
+
+src/components/leave/ApplyLeaveModal.tsx
+
+2. Manager leave-management page/component
+-------------------------------------------
+Managers use the same page through the /leave route:
+
+src/modules/leave/LeaveManagement.tsx
+
+The manager dashboard also contains a separate pending-leave widget in:
+
+src/modules/dashboard/ManagerDashboard.tsx
+
+3. HR leave-management page/component
+--------------------------------------
+HR uses the same page through the /leave route:
+
+src/modules/leave/LeaveManagement.tsx
+
+The HR dashboard also contains a separate pending-leave widget in:
+
+src/modules/dashboard/HRDashboard.tsx
+
+4. Leave API calls
+------------------
+API methods are defined in:
+
+src/services/api.ts
+
+/api/leaves/history:
+- Implemented by getLeaveHistory() near line 822.
+- Called from src/hooks/useLeave.ts for general leave history.
+- Also called by fetchPendingLeaves().
+
+/api/leaves/pending:
+- Implemented by getPendingLeaves() near line 839.
+- Called by fetchPendingLeaves() in src/hooks/useLeave.ts.
+
+/api/leaves/all:
+- No frontend call or API method was found.
+
+Employee-specific history uses:
+
+/api/leaves/self/history
+
+This is implemented by getSelfLeaveHistory() in src/services/api.ts and called by fetchMyLeaveHistory() in src/hooks/useLeave.ts.
+
+5. Leave status display
+-----------------------
+Status badge selection is implemented in:
+
+src/modules/leave/LeaveManagement.tsx
+
+Current mappings:
+- APPROVED: success badge
+- PENDING: warning badge
+- REJECTED: danger badge
+- Any other status: default badge
+
+The raw status text is rendered directly in both the manager/HR table and the employee history table.
+
+CANCELLED is not included in the frontend Leave type in:
+
+src/services/api.ts
+
+There is no dedicated CANCELLED styling, cancellation action, or cancellation-specific handling in the frontend.
+
+6. Approve and reject actions
+-----------------------------
+API methods:
+
+src/services/api.ts
+
+- approveLeave() uses PATCH /leaves/approve/:id.
+- rejectLeave() uses PATCH /leaves/reject/:id and sends remarks.
+
+Hook wrappers:
+
+src/hooks/useLeave.ts
+
+- approveLeave() is implemented near line 36.
+- rejectLeave() is implemented near line 57.
+
+Main leave-page handlers:
+
+src/modules/leave/LeaveManagement.tsx
+
+- handleApproveLeave() calls approveLeave().
+- handleRejectLeave() calls rejectLeave().
+- Both refresh pending leaves afterward.
+
+The confirmation modal is:
+
+src/components/leave/ApproveRejectLeaveModal.tsx
+
+The shared leave page opens this modal for both approve and reject actions.
+
+Manager and HR dashboard actions:
+
+src/modules/dashboard/ManagerDashboard.tsx
+src/modules/dashboard/HRDashboard.tsx
+
+Both dashboards implement direct approve actions. HR also has an Approve All handler. Neither dashboard widget provides a reject action.
+
+7. Whether manager and HR use the same page/component
+------------------------------------------------------
+They use the same leave page/component.
+
+The /leave route in src/App.tsx renders:
+
+<LeaveManagement />
+
+for every authenticated role. Manager and HR have different dashboard components, but not different leave-management pages.
+
+8. Whether previous/historical leaves are displayed to manager and HR
+---------------------------------------------------------------------
+A complete historical list is not displayed to manager or HR.
+
+fetchPendingLeaves() in src/hooks/useLeave.ts calls both /leaves/pending and /leaves/history. It filters the history response to future-dated APPROVED or REJECTED records, then combines those with pending records.
+
+Consequently, the manager/HR review table can show:
+- Pending leaves
+- Future-dated approved leaves
+- Future-dated rejected leaves
+
+Past historical leaves are not shown in that table.
+
+The Your Leave History table in src/modules/leave/LeaveManagement.tsx uses /leaves/self/history, so it shows the logged-in manager/HR user's own history, not all employees' historical leaves.
+
+9. Pagination
+--------------
+No leave-specific pagination component or pagination logic was found.
+
+The leave lists render directly with .map():
+
+- Shared manager/HR table: src/modules/leave/LeaveManagement.tsx
+- Employee/self history table: src/modules/leave/LeaveManagement.tsx
+- Manager dashboard widget: src/modules/dashboard/ManagerDashboard.tsx
+- HR dashboard widget: src/modules/dashboard/HRDashboard.tsx
+
+10. Current frontend leave flow
+-------------------------------
+1. /leave renders the shared LeaveManagement page.
+2. The page loads the logged-in user's leave history and leave balance.
+3. ADMIN, HR, and MANAGER users additionally load pending leaves.
+4. Pending loading fetches /leaves/pending and /leaves/history, then adds future approved/rejected records.
+5. Employees can apply for leave through ApplyLeaveModal and see their own leave history.
+6. Managers and HR see the shared balance, application, own-history UI, and employee review table.
+7. Approve/reject from the shared page opens ApproveRejectLeaveModal and calls the relevant PATCH API.
+8. Manager and HR dashboards separately show a smaller pending-leave table with approve-only actions.
+
+Key entry points
+----------------
+- src/App.tsx: /leave route
+- src/modules/leave/LeaveManagement.tsx: shared leave page
+- src/hooks/useLeave.ts: leave data loading and action orchestration
+- src/services/api.ts: leave API methods
+- src/components/leave/ApplyLeaveModal.tsx: employee application modal
+- src/components/leave/ApproveRejectLeaveModal.tsx: approval/rejection modal
+- src/modules/dashboard/ManagerDashboard.tsx: manager dashboard leave widget
+- src/modules/dashboard/HRDashboard.tsx: HR dashboard leave widget

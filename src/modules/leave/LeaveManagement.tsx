@@ -62,7 +62,7 @@ const LeaveManagement = () => {
     requestCarryForward,
     fetchMyLeaveHistory,
     fetchMyLeaveBalance,
-    fetchPendingLeaves,
+    fetchManagerLeaveHistory,
   } = useLeave();
 
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
@@ -101,15 +101,25 @@ const LeaveManagement = () => {
 
   const currentYear = new Date().getFullYear();
   const financialYearStart = new Date().getMonth() >= 3 ? currentYear : currentYear - 1;
+  const managerLeaveLimit = 10;
+  const [managerLeavePage, setManagerLeavePage] = useState(1);
+  const [managerLeavePagination, setManagerLeavePagination] = useState({
+    page: 1,
+    limit: managerLeaveLimit,
+    total: 0,
+    totalPages: 1,
+  });
 
   // Initial data load
   useEffect(() => {
     fetchMyLeaveHistory();
     fetchMyLeaveBalance(financialYearStart);
     if (user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER') {
-      fetchPendingLeaves();
+      fetchManagerLeaveHistory(managerLeavePage, managerLeaveLimit)
+        .then((response) => setManagerLeavePagination(response.pagination))
+        .catch(() => undefined);
     }
-  }, [user?.role, fetchMyLeaveHistory, fetchMyLeaveBalance, fetchPendingLeaves, financialYearStart]);
+  }, [user?.role, fetchMyLeaveHistory, fetchMyLeaveBalance, fetchManagerLeaveHistory, financialYearStart, managerLeavePage]);
 
   // Show notifications
   useEffect(() => {
@@ -134,8 +144,9 @@ const LeaveManagement = () => {
     try {
       await approveLeave(leaveId);
       setApproveRejectModal({ ...approveRejectModal, isOpen: false });
-      // Refresh pending leaves
-      fetchPendingLeaves();
+      // Refresh the current Manager/HR table page
+      const response = await fetchManagerLeaveHistory(managerLeavePage, managerLeaveLimit);
+      setManagerLeavePagination(response.pagination);
       // Refresh leave balance in case it affects the current user's balance
       fetchMyLeaveBalance(financialYearStart);
     } catch (err) {
@@ -147,8 +158,9 @@ const LeaveManagement = () => {
     try {
       await rejectLeave(leaveId, remarks);
       setApproveRejectModal({ ...approveRejectModal, isOpen: false });
-      // Refresh pending leaves
-      fetchPendingLeaves();
+      // Refresh the current Manager/HR table page
+      const response = await fetchManagerLeaveHistory(managerLeavePage, managerLeaveLimit);
+      setManagerLeavePagination(response.pagination);
       // Refresh leave balance in case it affects the current user's balance
       fetchMyLeaveBalance(financialYearStart);
     } catch (err) {
@@ -276,7 +288,7 @@ const LeaveManagement = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2" hoverEffect>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-base">Pending Leave Requests</CardTitle>
+                  <CardTitle className="text-base">Leave Requests</CardTitle>
               </CardHeader>
               <CardContent className="p-0 overflow-x-auto">
                   {pendingLeaves.length > 0 ? (
@@ -351,9 +363,30 @@ const LeaveManagement = () => {
                     </div>
                   ) : (
                     <div className="p-6 text-center text-slate-500">
-                      {isLoading ? 'Loading pending leaves...' : 'No pending leave requests'}
+                      {isLoading ? 'Loading leaves...' : 'No leave requests'}
                     </div>
                   )}
+                  <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setManagerLeavePage((page) => page - 1)}
+                      disabled={managerLeavePage <= 1 || isLoading}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-slate-500">
+                      Page {managerLeavePagination.page} of {Math.max(managerLeavePagination.totalPages, 1)}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setManagerLeavePage((page) => page + 1)}
+                      disabled={managerLeavePage >= managerLeavePagination.totalPages || isLoading}
+                    >
+                      Next
+                    </Button>
+                  </div>
               </CardContent>
           </Card>
 

@@ -79,8 +79,8 @@ export const useLeave = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await api.getLeaveHistory();
-      setLeaves(data);
+      const response = await api.getLeaveHistory();
+      setLeaves(response.data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch leave history';
       setError(errorMessage);
@@ -110,10 +110,16 @@ export const useLeave = () => {
     setError(null);
     try {
       const pending = await api.getPendingLeaves();
-      const allLeaves = await api.getLeaveHistory();
+      const firstHistoryResponse = await api.getLeaveHistory();
+      const allLeaves = [...firstHistoryResponse.data];
+
+      for (let page = 2; page <= firstHistoryResponse.pagination.totalPages; page += 1) {
+        const historyResponse = await api.getLeaveHistory(page, firstHistoryResponse.pagination.limit);
+        allLeaves.push(...historyResponse.data);
+      }
       
       const today = new Date();
-      const activeResolved = (allLeaves || []).filter((leave: Leave) => {
+      const activeResolved = allLeaves.filter((leave: Leave) => {
         const endDate = new Date(leave.endDate);
         return (
           (leave.status === 'APPROVED' || leave.status === 'REJECTED') &&
@@ -137,6 +143,22 @@ export const useLeave = () => {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch pending leaves';
       setError(errorMessage);
       console.error('Error in fetchPendingLeaves:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const fetchManagerLeaveHistory = useCallback(async (page = 1, limit = 10) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await api.getPaginatedLeaveHistory(page, limit);
+      setPendingLeaves(response.data);
+      return response;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch leave history';
+      setError(errorMessage);
+      throw err;
     } finally {
       setIsLoading(false);
     }
@@ -248,6 +270,7 @@ export const useLeave = () => {
     fetchLeaveHistory,
     fetchMyLeaveHistory,
     fetchPendingLeaves,
+    fetchManagerLeaveHistory,
     fetchLeaveBalance,
     fetchMyLeaveBalance,
     fetchMonthlyLeaves,
