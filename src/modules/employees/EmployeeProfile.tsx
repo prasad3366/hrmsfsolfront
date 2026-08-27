@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import ApiService from '../../services/api';
+import ApiService, { type Asset, type CreateEmployeeDto } from '../../services/api';
 import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeModal';
 import { AssignSalaryModal } from '../../components/payroll/AssignSalaryModal';
 import {
@@ -11,11 +11,60 @@ import {
 import {
   Edit, Briefcase, Package, TrendingUp
 } from 'lucide-react';
-import { Employee } from '../../types';
+import type { Role } from '../../types';
+
+interface EmployeeProfileData {
+  id?: string | number;
+  employeeId?: string | number;
+  userId?: string | number;
+  name?: string;
+  avatar?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  empCode?: string;
+  department?: string;
+  designation?: string;
+  jobTitle?: string;
+  role?: Role;
+  status?: string;
+  employmentType?: string;
+  sourceOfHire?: string;
+  dateOfJoining?: string | Date | null;
+  currentExperience?: string | number;
+  reportingManager?: string | number | null;
+  dateOfBirth?: string | Date | null;
+  age?: string | number;
+  gender?: string;
+  currentAddress?: string;
+  permanentAddress?: string;
+  pincode?: string | number;
+  city?: string;
+  maritalStatus?: string;
+  phone?: string;
+  personalMobile?: string;
+  panNumber?: string;
+  aadharNumber?: string;
+  pfNumber?: string;
+  uanNumber?: string;
+  bankAccountNumber?: string;
+  bankName?: string;
+  ifscCode?: string;
+  dateOfExit?: string | Date | null;
+  isExperienced?: boolean;
+  user?: {
+    id?: string | number;
+    email?: string;
+    role?: Role;
+    status?: string;
+    isActive?: boolean;
+  };
+  isActive?: boolean;
+}
 
 const INACTIVE_STATUS = new Set(['INACTIVE', 'TERMINATED']);
 
-const isEmployeeActive = (emp: any): boolean => {
+const isEmployeeActive = (emp: EmployeeProfileData): boolean => {
   const status = String(emp?.status || emp?.user?.status || '').toUpperCase();
   if (status === 'ACTIVE') return true;
   if (INACTIVE_STATUS.has(status)) return false;
@@ -24,7 +73,7 @@ const isEmployeeActive = (emp: any): boolean => {
   return true;
 };
 
-const buildProfileInitialData = (employee: Employee) => ({
+const buildProfileInitialData = (employee: EmployeeProfileData) => ({
   email: employee.user?.email ?? employee.email,
   firstName: employee.firstName ?? '',
   lastName: employee.lastName ?? '',
@@ -63,8 +112,8 @@ const EmployeeProfile = () => {
     const { id } = useParams();
     const { user } = useAuth();
 
-    const [employee, setEmployee] = useState<Employee | null>(null);
-    const [assets, setAssets] = useState<any[]>([]);
+    const [employee, setEmployee] = useState<EmployeeProfileData | null>(null);
+    const [assets, setAssets] = useState<Asset[]>([]);
     const [loading, setLoading] = useState(true);
     const [assetsLoading, setAssetsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -87,7 +136,7 @@ const EmployeeProfile = () => {
             .then((data) => {
                 if (mounted === false) return;
                 console.log('Employee data loaded:', data);
-                setEmployee(data);
+                setEmployee(data as EmployeeProfileData);
             })
             .catch((err) => {
                 if (mounted === false) return;
@@ -111,7 +160,7 @@ const EmployeeProfile = () => {
         let mounted = true;
         setAssetsLoading(true);
 
-        ApiService.getMyAssetsByUserId(employee.id)
+        ApiService.getMyAssetsByUserId(Number(employee.id))
             .then((data) => {
                 if (mounted === false) return;
                 setAssets(data || []);
@@ -131,8 +180,8 @@ const EmployeeProfile = () => {
         };
     }, [employee?.id]);
 
-    const handleEmployeeUpdated = (updated: any) => {
-        setEmployee((prev) => ({ ...prev, ...updated }));
+    const handleEmployeeUpdated = (updated: Partial<CreateEmployeeDto> | EmployeeProfileData) => {
+        setEmployee((prev) => (prev ? { ...prev, ...updated } : prev));
         setIsEditOpen(false);
     };
 
@@ -399,8 +448,8 @@ const EmployeeProfile = () => {
         onClose={() => setIsEditOpen(false)}
         onSuccess={handleEmployeeUpdated}
         mode="edit"
-        employeeId={employee?.id}
-        initialData={profileInitialData}
+        employeeId={employee?.id !== undefined && employee?.id !== null ? Number(employee.id) : undefined}
+        initialData={profileInitialData as Partial<CreateEmployeeDto>}
       />
 
       <AssignSalaryModal

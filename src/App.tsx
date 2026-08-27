@@ -8,6 +8,7 @@ import Dashboard from './modules/dashboard/Dashboard';
 import EmployeeList from './modules/employees/EmployeeList';
 import EmployeeProfile from './modules/employees/EmployeeProfile';
 import Attendance from './modules/attendance/Attendance';
+import EmployeeAttendance from './modules/attendance/EmployeeAttendance';
 import LeaveManagement from './modules/leave/LeaveManagement';
 import Payroll from './modules/payroll/Payroll';
 import TeamManagement from './modules/team/Team';
@@ -73,6 +74,12 @@ const AppRoutes = () => {
         <Route path="attendance" element={
           <ProtectedRoute>
             <Attendance />
+          </ProtectedRoute>
+        } />
+
+        <Route path="employee-attendance" element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'HR', 'MANAGER']}>
+            <EmployeeAttendance />
           </ProtectedRoute>
         } />
 
