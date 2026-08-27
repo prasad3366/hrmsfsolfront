@@ -47,6 +47,18 @@ export interface AttendanceRecord {
   isCurrentUser?: boolean; // Indicates if the record belongs to the current user
 }
 
+export interface MonthlyAttendanceSummary {
+  employeeId: number;
+  month: string;
+  workingDays: number;
+  presentDays: number;
+  halfDays: number;
+  leaveDays: number;
+  absentDays: number;
+  presentEquivalentDays: number;
+  attendancePercentage: number;
+}
+
 export interface TodayAttendanceStatus {
   hasPunchedIn: boolean;
   hasPunchedOut: boolean;
@@ -390,8 +402,17 @@ export interface AddMembersDto {
 
 class ApiService {
   private static instance: ApiService;
+  private pendingRefresh: Promise<void> | null = null;
+  private originalFetch: typeof fetch;
+  private retriedRequests = new Map<string, number>();
 
-  private constructor() {}
+  private constructor() {
+    this.originalFetch = globalThis.fetch.bind(globalThis);
+    (globalThis as any).__apiServiceOriginalFetch ??= this.originalFetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      return this.fetchWithAutoRefresh(input, init ?? {});
+    }) as typeof fetch;
+  }
 
   static getInstance(): ApiService {
     if (!ApiService.instance) {
@@ -406,6 +427,109 @@ class ApiService {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
     };
+  }
+
+  private clearAuthTokens(): void {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+  }
+
+  private withFreshAuthHeaders(headers?: HeadersInit): HeadersInit {
+    const merged = new Headers(headers ?? {});
+    const authHeaders = new Headers(this.getAuthHeaders());
+
+    for (const [key, value] of authHeaders.entries()) {
+      merged.set(key, value);
+    }
+
+    return merged;
+  }
+
+  private getRequestRetryKey(input: RequestInfo | URL, init?: RequestInit): string {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const method = (init?.method || (typeof input !== 'string' && !(input instanceof URL) ? input.method : 'GET')).toUpperCase();
+    const body = typeof init?.body === 'string' ? init.body : '';
+    return `${method}|${url}|${body}`;
+  }
+
+  private async performRefresh(): Promise<void> {
+    const refreshTokenValue = localStorage.getItem('refreshToken');
+
+    if (!refreshTokenValue) {
+      this.clearAuthTokens();
+      throw new Error('No refresh token available');
+    }
+
+    try {
+      const response = await (globalThis as any).__apiServiceOriginalFetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: refreshTokenValue }),
+      });
+
+      if (!response.ok) {
+        this.clearAuthTokens();
+        throw new Error('Token refresh failed');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('refreshToken', data.refreshToken);
+    } catch (error) {
+      this.clearAuthTokens();
+      throw error instanceof Error ? error : new Error('Token refresh failed');
+    }
+  }
+
+  private async fetchWithAutoRefresh(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+    if (url.includes('/auth/refresh')) {
+      return this.originalFetch(input, init);
+    }
+
+    const retryKey = this.getRequestRetryKey(input, init);
+    const hasRetried = (this.retriedRequests.get(retryKey) ?? 0) >= 1;
+
+    if (hasRetried) {
+      return this.originalFetch(input, init);
+    }
+
+    const response = await this.originalFetch(input, init);
+
+    if (response.status !== 401) {
+      this.retriedRequests.delete(retryKey);
+      return response;
+    }
+
+    const refreshTokenValue = localStorage.getItem('refreshToken');
+    if (!refreshTokenValue) {
+      return response;
+    }
+
+    const refreshPromise = this.pendingRefresh ?? this.performRefresh();
+    this.pendingRefresh ??= refreshPromise;
+
+    try {
+      await refreshPromise;
+    } catch {
+      this.retriedRequests.delete(retryKey);
+      return response;
+    } finally {
+      if (this.pendingRefresh === refreshPromise) {
+        this.pendingRefresh = null;
+      }
+    }
+
+    this.retriedRequests.set(retryKey, (this.retriedRequests.get(retryKey) ?? 0) + 1);
+
+    const retryOptions: RequestInit = {
+      ...init,
+      headers: this.withFreshAuthHeaders(init.headers),
+      body: init.body,
+    };
+
+    return this.originalFetch(input, retryOptions);
   }
 
   async login(email: string, password: string): Promise<LoginResponse> {
@@ -625,6 +749,39 @@ class ApiService {
       return await response.json();
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch employee attendance');
+    }
+  }
+
+  async getEmployeeAttendanceSummary(
+    employeeId: number,
+    month: string,
+  ): Promise<MonthlyAttendanceSummary> {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/attendance/employee/${employeeId}/summary?month=${encodeURIComponent(month)}`,
+        {
+          method: 'GET',
+          headers: this.getAuthHeaders(),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch attendance summary');
+      }
+
+      const result = await response.json();
+      if (
+        !result ||
+        typeof result !== 'object' ||
+        result.employeeId !== employeeId ||
+        result.month !== month
+      ) {
+        throw new Error('Invalid attendance summary response');
+      }
+
+      return result as MonthlyAttendanceSummary;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch attendance summary');
     }
   }
 

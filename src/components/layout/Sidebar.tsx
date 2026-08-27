@@ -13,7 +13,12 @@ import { cn } from '../ui/components';
 // Extracted Brand Colors
 const BRAND_BLUE = '#2A4B9B';
 
-const Sidebar = () => {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   
@@ -41,7 +46,9 @@ const Sidebar = () => {
       return [
         ...common.slice(0, 1), // Dashboard
         { name: 'Employees', path: '/employees', icon: Users },
-        ...common.slice(1),
+        ...common.slice(1, 2),
+        { name: 'Employee Attendance', path: '/employee-attendance', icon: CalendarCheck },
+        ...common.slice(2),
         { name: 'Recruitment', path: '/recruitment', icon: Briefcase },
         { name: 'Performance', path: '/performance', icon: TrendingUp },
         { name: 'Assets', path: '/assets', icon: Monitor },
@@ -55,7 +62,9 @@ const Sidebar = () => {
       return [
         ...common.slice(0, 1), // Dashboard
         { name: 'Employees', path: '/employees', icon: Users },
-        ...common.slice(1),
+        ...common.slice(1, 2),
+        { name: 'Employee Attendance', path: '/employee-attendance', icon: CalendarCheck },
+        ...common.slice(2),
         { name: 'Performance', path: '/performance', icon: TrendingUp },
       ];
     }
@@ -70,7 +79,20 @@ const Sidebar = () => {
   const links = getLinks();
 
   return (
-    <div className="w-64 bg-white h-screen border-r border-slate-200 flex flex-col fixed left-0 top-0 z-20 hidden md:flex font-sans">
+    <>
+      {isOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          onClick={onClose}
+          className="fixed inset-0 z-20 bg-slate-900/30 lg:hidden"
+        />
+      )}
+      <div className={cn(
+        "w-64 bg-white h-screen border-r border-slate-200 flex flex-col fixed left-0 top-0 z-30 font-sans transition-transform duration-300",
+        isOpen ? "translate-x-0" : "-translate-x-full",
+        "lg:translate-x-0"
+      )}>
       {/* Branding */}
       <div className="h-20 flex items-center px-6 border-b border-slate-100">
         <img 
@@ -83,9 +105,10 @@ const Sidebar = () => {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1.5 scrollbar-hide">
         {links.map((link) => (
-          <NavLink
+            <NavLink
             key={link.name}
             to={link.path}
+              onClick={onClose}
             className={({ isActive }) =>
               cn(
                 "flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all group",
@@ -135,7 +158,8 @@ const Sidebar = () => {
             Sign Out
         </button>
       </div>
-    </div>
+      </div>
+    </>
   );
 };
 

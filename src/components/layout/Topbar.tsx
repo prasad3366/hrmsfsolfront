@@ -3,15 +3,24 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Search, Menu } from 'lucide-react';
 
-const Topbar = () => {
+interface TopbarProps {
+  onMenuClick: () => void;
+}
+
+const Topbar = ({ onMenuClick }: TopbarProps) => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-10 px-6 flex items-center justify-between md:ml-64">
+    <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-10 px-6 flex items-center justify-between">
       {/* Mobile Toggle & Search */}
       <div className="flex items-center flex-1">
-        <button className="md:hidden mr-4 text-slate-500">
+        <button
+          type="button"
+          onClick={onMenuClick}
+          aria-label="Open navigation"
+          className="lg:hidden mr-4 text-slate-500"
+        >
             <Menu size={24} />
         </button>
         <div className="relative w-64 hidden sm:block">
