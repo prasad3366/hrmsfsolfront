@@ -11,16 +11,20 @@ const DashboardRouter = () => {
   if (!user) return null;
 
   switch (user.role) {
-    case 'ADMIN':
+    case 'SUPER_ADMIN':
+    case 'CEO':
       return <AdminDashboard />;
     case 'HR':
       return <HRDashboard />;
-    case 'MANAGER':
+    case 'FINANCE_MANAGER':
+      return <EmployeeDashboard />;
+    case 'IT_MANAGER':
+    case 'SALES_MANAGER':
       return <ManagerDashboard />;
     case 'EMPLOYEE':
       return <EmployeeDashboard />;
     default:
-      return <EmployeeDashboard />;
+      return <div className="p-8 text-center text-slate-500">Access Denied. You do not have permission to view this page.</div>;
   }
 };
 

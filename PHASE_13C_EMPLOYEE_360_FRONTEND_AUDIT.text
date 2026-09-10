@@ -1,0 +1,190 @@
+PHASE 13C - EMPLOYEE 360 FRONTEND AUDIT
+
+Scope
+-----
+Read-only audit of the current frontend Employee 360/profile path and the supplied backend Employee 360 route definitions. Performance is intentionally skipped/deferred and is not treated as a defect.
+
+Current Employee 360 frontend structure
+---------------------------------------
+File: src/modules/employees/EmployeeProfile.tsx
+
+The profile is one card-based page; it has no tabs and no dedicated 360 section navigation.
+
+Existing UI sections:
+- Employee header: name, avatar, designation, department, Edit, Give Raise.
+- Personal Information: first name, last name, email, phone, date of birth, gender, marital status.
+- Employment Information: employee code, department, designation, role, employment type, status, date of joining.
+- Contact Information: current address, permanent address, city, pincode, personal mobile.
+- Banking & Identification: PAN, Aadhaar, PF, UAN, bank account number, bank name, IFSC code.
+- Assets Assigned: assigned/returned asset cards.
+- Existing modals: CreateEmployeeModal in edit mode and AssignSalaryModal for Give Raise.
+
+No frontend sections exist for:
+- Attendance
+- Leave history or leave balances
+- Hierarchy/team reporting
+- Documents
+- Payroll history or payslips
+- Performance (intentionally deferred)
+
+Endpoint-to-UI mapping
+----------------------
+GET /employees/:id/360
+- Frontend: NOT consumed.
+- Current profile call: ApiService.getEmployeeById(id).
+- getEmployeeById() tries /employees/me, then /employees/:id, then /employees/me again, and finally has a getAllEmployees() lookup for a matching record.
+- The backend controller declares /employees/:id/360 and the service has a role-aware projection method, but the frontend does not use it.
+
+GET /employees/:id/360/attendance
+- Frontend: NOT consumed.
+- The supplied backend source does not show this route in the attendance controller. Current attendance routes are /attendance/employee/:id and /attendance/employee/:id/summary, plus self routes. Therefore this exact 360 attendance endpoint is not connected in the frontend and is not evidenced in the inspected attendance controller.
+
+GET /employees/:id/360/leave
+- Frontend: NOT consumed.
+- No leave call is made by EmployeeProfile.tsx.
+
+GET /employees/:id/360/hierarchy
+- Frontend: NOT consumed.
+- No hierarchy/team call is made by EmployeeProfile.tsx.
+
+GET /employees/:id/360/assets
+- Frontend: NOT consumed.
+- Current asset call is ApiService.getMyAssetsByUserId(Number(employee.id)).
+- That method calls GET /assets, retrieves all assets, and filters client-side by asset.assignedTo. This is a broad/duplicate API path rather than the new target-employee 360 endpoint.
+
+GET /employees/:id/360/documents
+- Frontend: NOT consumed by EmployeeProfile.tsx.
+- Existing document methods elsewhere use /hrms/documents and /hrms/file/:id; the profile has no document section or call.
+
+GET /employees/:id/360/payroll
+- Frontend: NOT consumed by EmployeeProfile.tsx.
+- Give Raise opens AssignSalaryModal; this is an edit/action flow, not a payroll 360 read. No payroll history or payslip section is rendered in the profile.
+
+Confirmed duplicate/broad API usage
+-----------------------------------
+1. Employee profile uses the legacy broad employee detail flow rather than /employees/:id/360.
+   Backend EmployeesService.getEmployeeDetailsById() includes user, attendances, leaves, leaveBalances, wfhRequests, documents, salaries, and payrolls. The frontend profile does not render most of these fields, but the response still transfers them.
+
+2. Assets use GET /assets and client-side filtering through getMyAssetsByUserId(). This retrieves a broad asset collection instead of consuming /employees/:id/360/assets. The asset assignment field is assignedTo and the current frontend passes employee.id into a method named ByUserId; this identity mapping is not resolved by the frontend.
+
+3. No frontend 360 service methods exist for the listed endpoint family.
+
+Role-based visibility and routing
+--------------------------------
+File: src/App.tsx
+
+- /employees directory: SUPER_ADMIN, CEO, HR, FINANCE_MANAGER, IT_MANAGER, SALES_MANAGER.
+- /employees/:id profile: SUPER_ADMIN, CEO, HR, FINANCE_MANAGER, IT_MANAGER, SALES_MANAGER, EMPLOYEE.
+
+File: src/modules/employees/EmployeeProfile.tsx
+
+- Edit button: SUPER_ADMIN, CEO, HR only.
+- Give Raise button: SUPER_ADMIN, CEO, HR, FINANCE_MANAGER.
+- Profile fields and assets are rendered without frontend role-based field/section redaction after the route admits the user.
+
+The route itself passes the client-supplied :id to the API. Backend EmployeeSelfOrAdminGuard is the controlling authorization boundary in the supplied controller, so the frontend must not be considered an authorization mechanism. The client-supplied ID is therefore a confirmed route input, but no frontend bypass is established from this code alone; backend authorization must remain authoritative.
+
+Sensitive-data risks
+--------------------
+Confirmed frontend exposure risk:
+- EmployeeProfile.tsx renders PAN, Aadhaar, PF, UAN, bank account number, bank name, IFSC, full current/permanent addresses, pincode, and personal mobile for every role that reaches the profile route.
+- The frontend obtains the profile through the legacy /employees/:id path. The backend legacy detail service includes sensitive and broad relation data, including salaries and payrolls, even though the profile does not visibly render those relation arrays.
+- Because IT_MANAGER and SALES_MANAGER can reach the profile route, uniform rendering of banking, identification, address, and personal contact fields is broader than a least-privilege Employee 360 presentation. The backend audit identifies these roles as team-scoped, not broadly entitled to sensitive fields.
+- FINANCE_MANAGER can reach the profile route and sees the same banking/identification/contact fields, although the intended finance scope is payroll-related rather than unrestricted personal data.
+- Document file content is not currently rendered or downloaded by EmployeeProfile.tsx, so no profile-side document-file exposure is confirmed. Existing document file functionality elsewhere remains separate.
+- Attendance location data is not currently rendered or fetched by EmployeeProfile.tsx, so no profile-side attendance-location exposure is confirmed.
+
+Profile loading, empty, and error states
+----------------------------------------
+Base profile:
+- Loading: distinct loading state (Loading employee details...).
+- Error/not found: distinct error state after getEmployeeById() rejects or no employee is present.
+- Success empty: no separate empty profile payload state beyond the not-found branch.
+
+Assets:
+- Loading: distinct Loading assets... state.
+- Successful empty: No assets assigned yet.
+- API failure: separate assetsError state and Unable to load assigned assets message. This correctly avoids treating an API failure as an empty asset response.
+- Asset states are implemented, but they belong to the legacy broad /assets client-filter flow, not /employees/:id/360/assets.
+
+Unimplemented 360 sections have no loading, empty, error, authorization-denied, or stale-request state because they are not connected.
+
+Self profile and target employee behavior
+-----------------------------------------
+- Sidebar self-profile navigation uses user.employeeId and routes to /employees/{user.employeeId}.
+- The profile route accepts a client-supplied :id and calls getEmployeeById(id).
+- getEmployeeById() first checks /employees/me and only accepts it when a returned ID matches the requested ID; otherwise it tries /employees/:id. This is not a 360 endpoint and includes extra fallback behavior.
+- Backend EmployeeSelfOrAdminGuard is responsible for enforcing self/team/org access. No frontend authorization bypass is proven, but the frontend must continue relying on that server-side check and must not use broad fallback data for sensitive sections.
+- The current frontend does not independently verify that each future section response belongs to the displayed employee. This is a gap for any future section integration, not a confirmed current data mix-up in the unimplemented sections.
+
+Edit, asset, and document behavior
+----------------------------------
+- Existing edit behavior uses CreateEmployeeModal and should remain unchanged.
+- Existing Give Raise behavior uses AssignSalaryModal and should remain unchanged.
+- Existing asset display and asset assignment/return functionality should remain unchanged unless a later implementation explicitly migrates the read path to the safe 360 asset endpoint.
+- No employee-profile document functionality currently exists to preserve inside this page; document module functionality elsewhere must remain unchanged.
+
+Confirmed gaps/issues only
+--------------------------
+1. No listed Employee 360 endpoint is consumed by EmployeeProfile.tsx.
+2. The profile uses the legacy broad employee detail endpoint path, which transfers relation data beyond the fields rendered by the profile.
+3. The profile uses GET /assets plus client-side filtering instead of the target-employee 360 assets endpoint.
+4. Attendance, leave, hierarchy, documents, and payroll 360 sections are absent from the UI.
+5. Banking, identification, full address, and personal mobile fields are rendered uniformly for all roles allowed into the profile route; role-aware frontend redaction is absent.
+6. The supplied backend source declares base/hierarchy/assets/documents/payroll 360 routes, but the exact /employees/:id/360/attendance route is not evidenced in the inspected attendance controller. This backend route availability mismatch should be resolved before frontend wiring; no frontend change is recommended based solely on this audit.
+7. There is no per-section state handling for the unconnected 360 sections.
+
+Not confirmed and therefore not reported as defects
+----------------------------------------------------
+- No current document-file or attendance-location exposure from EmployeeProfile.tsx: those calls are absent.
+- No confirmed client-side authorization bypass: the route ID is client supplied, but the backend guard is the enforcement boundary and must be tested.
+- No Performance defect: Performance is intentionally skipped/deferred.
+
+Recommended minimal implementation order
+----------------------------------------
+1. Confirm the backend route contract, especially the missing/evidenced attendance 360 path and response shapes.
+2. Add frontend ApiService methods for the confirmed 360 endpoints only, preserving server-side authorization.
+3. Switch the base profile read to /employees/:id/360 and use its safe projection.
+4. Add independent, role-aware sections for hierarchy and assets first; preserve existing edit and asset actions.
+5. Add attendance and leave sections with independent loading, empty, error, and denied states using only confirmed safe responses.
+6. Add documents metadata only, keeping document file download separate and authorization-protected.
+7. Add payroll only as a separately authorized section; do not expose payroll through the base profile.
+8. Add focused self/target/role and sensitive-field tests before enabling each section.
+9. Keep Performance deferred.
+
+Exact files likely requiring modification
+----------------------------------------
+Frontend:
+- src/modules/employees/EmployeeProfile.tsx
+- src/services/api.ts
+
+Potential backend contract/implementation follow-up (not modified in this audit):
+- src/employees/employees.controller.ts
+- src/employees/employees.service.ts
+- src/attendance/attendance.controller.ts or the actual owner of the confirmed attendance 360 route
+- src/assets/assets.service.ts / controller as needed for the confirmed 360 contract
+- src/documents/documents.service.ts / controller as needed for metadata contract
+- src/payroll/payroll.service.ts as needed for the confirmed restricted summary contract
+- Authorization implementation only if backend tests demonstrate a policy defect
+
+No frontend component refactor or source modification is required merely to record this audit.
+
+Tests/build checks required before implementation is accepted
+--------------------------------------------------------------
+Frontend:
+- API service tests for exact 360 URLs, methods, response parsing, and error handling.
+- Profile tests for independent loading, empty, error, and authorization-denied states per section.
+- Self profile vs target profile tests using the route ID and server responses.
+- Role visibility tests for SUPER_ADMIN, CEO, HR, FINANCE_MANAGER, IT_MANAGER, SALES_MANAGER, and EMPLOYEE.
+- Sensitive-field tests proving banking, identification, payroll, document-file, and location data are not rendered for unauthorized roles.
+- Regression tests proving edit, Give Raise, existing asset behavior, and existing document module behavior remain unchanged.
+- TypeScript check and production build.
+
+Backend/integration:
+- Verify every listed 360 route exists and returns the documented response shape.
+- Verify EmployeeSelfOrAdminGuard and section-specific authorization for self, target, team, and org-wide roles.
+- Verify safe projections exclude payroll/salary, banking/identity, document file bytes, and raw attendance coordinates unless explicitly authorized.
+
+Audit modification status
+-------------------------
+No application source files were modified. This report file was created at the user's request; no backend files, schema files, API implementation files, or unrelated frontend files were changed.

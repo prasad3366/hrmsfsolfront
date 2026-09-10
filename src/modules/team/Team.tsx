@@ -56,8 +56,8 @@ const TeamManagement: React.FC = () => {
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const canManageTeams = user?.role === 'ADMIN' || user?.role === 'HR';
-  const isManager = user?.role === 'MANAGER';
+  const canManageTeams = ['SUPER_ADMIN', 'CEO', 'HR'].includes(user?.role ?? '');
+  const isManager = ['IT_MANAGER', 'SALES_MANAGER'].includes(user?.role ?? '');
 
   const refreshManagerTeams = async () => {
     if (!user?.employeeId) {

@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Table, TableHe
 import { AlertTriangle, CheckCircle2, Send } from 'lucide-react';
 import api from '../../services/api';
 
-const STORAGE_KEY = 'foodeez_helpdesk_tickets';
+const STORAGE_KEY = 'foodeez_helpdesk_storage';
 
 const normalizeStatus = (status?: string): HelpdeskTicket['status'] => {
   const normalized = status?.toString().toUpperCase() ?? '';
@@ -53,7 +53,7 @@ const normalizeHelpdeskTicket = (ticket: any, currentUser?: any): HelpdeskTicket
   const requestedByRole = ticket.requestedByRole ?? user?.role ?? currentUser?.role ?? 'EMPLOYEE';
 
   return {
-    id: String(ticket.id ?? generateTicketId()),
+    id: String(ticket.id),
     requestedById,
     requestedByName,
     requestedByEmail,
@@ -66,8 +66,6 @@ const normalizeHelpdeskTicket = (ticket: any, currentUser?: any): HelpdeskTicket
   };
 };
 
-const generateTicketId = () => `HD-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`;
-
 const Helpdesk = () => {
   const { user } = useAuth();
   const [subject, setSubject] = useState('');
@@ -78,23 +76,11 @@ const Helpdesk = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isHR = user?.role === 'HR';
+  const isHR = ['SUPER_ADMIN', 'CEO', 'HR'].includes(user?.role ?? '');
 
-  // Load tickets from API (with fallback to localStorage)
   useEffect(() => {
     const loadTickets = async () => {
       setIsLoading(true);
-      let localTickets: HelpdeskTicket[] = [];
-
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        try {
-          localTickets = JSON.parse(stored) as HelpdeskTicket[];
-        } catch (parseErr) {
-          console.warn('Failed to parse helpdesk tickets from localStorage:', parseErr);
-          localTickets = [];
-        }
-      }
 
       try {
         let apiTickets: any[] = [];
@@ -105,28 +91,11 @@ const Helpdesk = () => {
         }
 
         const normalizedTickets = (apiTickets || []).map((ticket: any) => normalizeHelpdeskTicket(ticket, user));
-
-        const merged = normalizedTickets.map((apiTicket) => {
-          const localTicket = localTickets.find((ticket) => ticket.id === apiTicket.id);
-          if (localTicket && (localTicket.status === 'Approved' || localTicket.status === 'Resolved')) {
-            return localTicket;
-          }
-          return apiTicket;
-        });
-
-        localTickets.forEach((localTicket) => {
-          if (!merged.find((ticket) => ticket.id === localTicket.id)) {
-            merged.push(localTicket);
-          }
-        });
-
-        setTickets(merged);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        setTickets(normalizedTickets);
       } catch (apiErr) {
-        console.warn('Failed to fetch from API, falling back to localStorage:', apiErr);
-        if (localTickets.length > 0) {
-          setTickets(localTickets);
-        }
+        console.warn('Failed to fetch Helpdesk tickets:', apiErr);
+        setTickets([]);
+        setError(apiErr instanceof Error ? apiErr.message : 'Failed to fetch Helpdesk tickets');
       } finally {
         setIsLoading(false);
       }
@@ -138,14 +107,11 @@ const Helpdesk = () => {
     const handleHelpdeskUpdate = (event: any) => {
       const { ticketId, status } = event.detail;
       setTickets((prev) => {
-        const updated = prev.map((ticket) =>
+        return prev.map((ticket) =>
           ticket.id === ticketId
             ? { ...ticket, status: normalizeStatus(status), updatedAt: new Date().toISOString() }
             : ticket
         );
-        // Also update localStorage to keep it in sync
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-        return updated;
       });
     };
 
@@ -188,40 +154,12 @@ const Helpdesk = () => {
 
     setIsSubmitting(true);
     try {
-      // Try to submit via API first
-      try {
-        const apiTicket = await api.createHelpdeskTicket({
-          issue: subject.trim(),
-          reason: reason.trim(),
-        });
-        const newTicket = normalizeHelpdeskTicket(apiTicket, user);
-        setTickets((prev) => {
-          const updated = [newTicket, ...prev];
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-          return updated;
-        });
-      } catch (apiErr) {
-        console.warn('Failed to create via API, creating locally:', apiErr);
-        // Create locally if API fails
-        const newTicket: HelpdeskTicket = {
-          id: generateTicketId(),
-          requestedById: Number(user.employeeId ?? 0),
-          requestedByName: user.name,
-          requestedByEmail: user.email,
-          requestedByRole: user.role,
-          issue: subject.trim(),
-          reason: reason.trim(),
-          status: 'Pending',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        setTickets((prev) => {
-          const updated = [newTicket, ...prev];
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-          return updated;
-        });
-      }
+      const apiTicket = await api.createHelpdeskTicket({
+        issue: subject.trim(),
+        reason: reason.trim(),
+      });
+      const newTicket = normalizeHelpdeskTicket(apiTicket, user);
+      setTickets((prev) => [newTicket, ...prev]);
       
       setSubject('');
       setReason('');
@@ -235,18 +173,13 @@ const Helpdesk = () => {
 
   const updateTicketStatus = async (ticketId: string, nextStatus: HelpdeskTicket['status']) => {
     try {
-      // Try API first
-      try {
-        if (nextStatus === 'Approved') {
-          await api.approveHelpdeskTicket(ticketId);
-        } else if (nextStatus === 'Resolved') {
-          await api.resolveHelpdeskTicket(ticketId);
-        }
-      } catch (apiErr) {
-        console.warn('Failed via API, updating locally:', apiErr);
+      if (nextStatus === 'Approved') {
+        await api.approveHelpdeskTicket(ticketId);
+      } else if (nextStatus === 'Resolved') {
+        await api.resolveHelpdeskTicket(ticketId);
       }
 
-      // Update local state and sync storage in one step to avoid stale tickets
+      // Update local state only after the server mutation succeeds.
       setTickets((prev) => {
         const updated = prev.map((ticket) =>
           ticket.id === ticketId
@@ -392,7 +325,7 @@ const Helpdesk = () => {
                           Approve
                         </Button>
                       )}
-                      {isHR && ticket.status !== 'Resolved' && (
+                      {isHR && ticket.status === 'Approved' && (
                         <Button size="sm" variant="primary" onClick={() => handleResolve(ticket.id)}>
                           Resolve
                         </Button>

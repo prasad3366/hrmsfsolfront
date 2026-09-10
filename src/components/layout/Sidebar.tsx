@@ -9,6 +9,7 @@ import {
   BarChart2, Settings, LogOut, UserCheck
 } from 'lucide-react';
 import { cn } from '../ui/components';
+import { canAccessReports } from '../../modules/reports/reports-roles';
 
 // Extracted Brand Colors
 const BRAND_BLUE = '#2A4B9B';
@@ -30,50 +31,40 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   };
 
   const getLinks = () => {
-    const common = [
+    const employeeAttendanceRoles = [
+      'SUPER_ADMIN',
+      'CEO',
+      'HR',
+      'IT_MANAGER',
+      'SALES_MANAGER',
+      'FINANCE_MANAGER',
+    ];
+
+    const links = [
       { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+      { name: 'Employees', path: '/employees', icon: Users },
       { name: 'Attendance', path: '/attendance', icon: CalendarCheck },
+      ...(employeeAttendanceRoles.includes(user.role)
+        ? [{ name: 'Employee Attendance', path: '/employee-attendance', icon: CalendarCheck }]
+        : []),
       { name: 'Leave', path: '/leave', icon: FileText },
-      { name: 'Payroll', path: '/payroll', icon: DollarSign },
-      { name: 'Team', path: '/team', icon: UserCheck },
       { name: 'Documents', path: '/documents', icon: File },
       { name: 'Helpdesk', path: '/helpdesk', icon: HelpCircle },
       { name: 'Training', path: '/training', icon: GraduationCap },
       { name: 'Announcements', path: '/announcements', icon: Megaphone },
+      { name: 'Team', path: '/team', icon: UserCheck },
+      { name: 'Payroll', path: '/payroll', icon: DollarSign },
+      { name: 'Recruitment', path: '/recruitment', icon: Briefcase },
+      { name: 'Performance', path: '/performance', icon: TrendingUp },
+      ...(['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER', 'FINANCE_MANAGER', 'EMPLOYEE'].includes(user.role)
+        ? [{ name: 'Assets', path: '/assets', icon: Monitor }]
+        : []),
+      { name: 'Holidays', path: '/holidays', icon: CalendarCheck },
+      ...(canAccessReports(user.role) ? [{ name: 'Reports', path: '/reports', icon: BarChart2 }] : []),
+      { name: 'Settings', path: '/settings', icon: Settings },
     ];
 
-    if (user.role === 'ADMIN' || user.role === 'HR') {
-      return [
-        ...common.slice(0, 1), // Dashboard
-        { name: 'Employees', path: '/employees', icon: Users },
-        ...common.slice(1, 2),
-        { name: 'Employee Attendance', path: '/employee-attendance', icon: CalendarCheck },
-        ...common.slice(2),
-        { name: 'Recruitment', path: '/recruitment', icon: Briefcase },
-        { name: 'Performance', path: '/performance', icon: TrendingUp },
-        { name: 'Assets', path: '/assets', icon: Monitor },
-        { name: 'Reports', path: '/reports', icon: BarChart2 },
-        { name: 'Settings', path: '/settings', icon: Settings },
-      ];
-    }
-    
-    // Manager view - includes Employees
-    if (user.role === 'MANAGER') {
-      return [
-        ...common.slice(0, 1), // Dashboard
-        { name: 'Employees', path: '/employees', icon: Users },
-        ...common.slice(1, 2),
-        { name: 'Employee Attendance', path: '/employee-attendance', icon: CalendarCheck },
-        ...common.slice(2),
-        { name: 'Performance', path: '/performance', icon: TrendingUp },
-      ];
-    }
-    
-    // Employee view
-    return [
-        ...common,
-        { name: 'Performance', path: '/performance', icon: TrendingUp },
-    ]
+    return links;
   };
 
   const links = getLinks();

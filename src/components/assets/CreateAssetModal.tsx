@@ -26,7 +26,7 @@ export const CreateAssetModal = ({ isOpen, isLoading, onClose, onSubmit }: Creat
       ApiService.getAllEmployees()
         .then((data) => {
           // Filter to show only ACTIVE employees
-          const activeEmployees = (data || []).filter(
+          const activeEmployees = (data?.data || []).filter(
             (emp) => emp.status?.toUpperCase() === 'ACTIVE'
           );
           setEmployees(activeEmployees);
@@ -134,8 +134,8 @@ export const CreateAssetModal = ({ isOpen, isLoading, onClose, onSubmit }: Creat
                 >
                   <option value="">-- Select Employee --</option>
                   {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.firstName ? `${emp.firstName} ${emp.lastName}` : emp.name} ({emp.email})
+                    <option key={emp.user?.id || emp.id} value={emp.user?.id || emp.id}>
+                      {emp.firstName ? `${emp.firstName} ${emp.lastName}` : emp.name}
                     </option>
                   ))}
                 </select>

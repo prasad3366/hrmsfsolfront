@@ -1,0 +1,785 @@
+HRMS Frontend Read-Only Architecture and Behavior Audit
+
+This audit is based on the current implementation in src/App.tsx, src/context/AuthContext.tsx, src/services/api.ts, and the feature modules under src/modules.
+
+1) Architecture: actual data flow
+
+Route → Page → Component → Auth → ApiService → Backend
+
+- Route protection and role gating live in src/App.tsx.
+  - ProtectedRoute waits on isLoading, redirects unauthenticated users to /login, and blocks pages when allowedRoles does not include the user role.
+  - /login redirects authenticated users to /dashboard.
+  - Most feature routes are nested under the main layout in src/components/layout/Layout.tsx.
+
+- Layout shell is in src/components/layout/Layout.tsx.
+  - It renders the sidebar and topbar, then the current route view in <Outlet />.
+
+- Sidebar navigation and role-specific menu visibility are in src/components/layout/Sidebar.tsx.
+  - ADMIN/HR get employee, attendance, recruitment, assets, reports, settings.
+  - MANAGER gets employees, employee attendance, performance, and fewer HR/admin entries.
+  - EMPLOYEE gets common modules plus performance.
+
+- Authentication state is centralized in src/context/AuthContext.tsx.
+  - initializeAuth reads accessToken and foodeez_user from localStorage.
+  - It decodes JWT claims, builds a user object by email, role, name, and employeeId.
+  - On load it tries api.getEmployeeIdByUserId() to resolve employee linkage.
+  - login calls api.login, decodes the returned access token, stores the user and tokens, then refreshes employeeId.
+
+- Shared API logic is in src/services/api.ts.
+  - This file is a singleton ApiService and wraps global fetch with a refresh-on-401 mechanism.
+  - Headers are built with getAuthHeaders(), which includes Authorization: Bearer <accessToken> and Content-Type: application/json.
+  - A global fetch override replays failed requests after token refresh.
+  - This affects every feature, including document uploads.
+
+- Notification and temporary local persistence are supported in src/context/NotificationContext.tsx and in some modules via localStorage fallback, especially helpdesk tickets.
+
+2) Feature-by-feature audit
+
+A. Login
+Files:
+- src/components/auth/Login.tsx
+- src/context/AuthContext.tsx
+
+1. UI behavior
+- Shows email/password form with password visibility toggle and Forgot password modal.
+- Submits login via handleSubmit and navigates to /dashboard on success.
+- Displays inline validation and login failure messaging.
+
+2. API calls
+- AuthContext.login(...) → api.login(email, password)
+- POST call to ${API_BASE_URL}/auth/login in src/services/api.ts.
+
+3. State management
+- Local component state for email, password, showPassword, error, loading, isForgotPasswordOpen, successMessage.
+- AuthContext stores user, role, isLoading.
+
+4. Authentication handling
+- Stores accessToken and refreshToken in localStorage.
+- Decodes JWT payload to build user.
+- Redirects to /dashboard when authenticated.
+
+5. Role-based access
+- Role is derived from JWT claims and stored in user.role.
+- App routes then determine page access.
+
+6. Error handling
+- Empty field validation in the form.
+- API failure surfaces result.message.
+- Catch block converts errors to user-visible messages.
+
+7. Loading states
+- loading state disables submit and shows UI text.
+- App-level isLoading during auth bootstrap.
+
+8. Fallback logic
+- If JWT decode fails, it falls back to email-based user creation.
+- If foodeez_user is present, it can bootstrap from localStorage.
+
+9. Data mapping
+- buildUserFromJwt maps JWT claims to the app user object.
+- employeeId is derived from jwt.employeeId when present.
+
+10. Dependencies on other features
+- Login creates the app-wide auth state used by all pages.
+- Layout, Sidebar, and route guard rely on that state.
+
+11. Current problems
+- Remember me is visual-only and does not affect auth behavior.
+- There is an artificial 100ms UI delay before login.
+- The app assumes role information is always present in the token; otherwise fallback is partial.
+
+12. Must be preserved
+- Auth redirects to dashboard on valid login.
+- Tokens are persisted and reused across the session.
+- Route guard continues to block unauthorized pages.
+
+B. Dashboard
+Files:
+- src/modules/dashboard/Dashboard.tsx
+- src/modules/dashboard/DashboardRouter.tsx
+- src/modules/dashboard/AdminDashboard.tsx
+- src/modules/dashboard/HRDashboard.tsx
+- src/modules/dashboard/ManagerDashboard.tsx
+- src/modules/dashboard/EmployeeDashboard.tsx
+
+1. UI behavior
+- Dashboard is a role-based switchboard.
+- DashboardRouter selects the dashboard component by user.role.
+
+2. API calls
+- Each dashboard fetches its own data via ApiService and hooks.
+- Examples include employee lists, helpdesk ticket summaries, attendance summary, payroll summary, and leave summary.
+
+3. State management
+- Dashboard-level state is localized per dashboard and uses useState/useEffect.
+- Shared user info comes from useAuth.
+
+4. Authentication handling
+- Requires valid user in AuthContext.
+- ProtectedRoute ensures only authenticated users can access it.
+
+5. Role-based access
+- ADMIN → AdminDashboard
+- HR → HRDashboard
+- MANAGER → ManagerDashboard
+- EMPLOYEE → EmployeeDashboard
+
+6. Error handling
+- Some dashboard sections catch fetch failures and show fallback UI.
+- Others quietly log warnings and continue with empty state.
+
+7. Loading states
+- Most cards and tables render Loading states before data arrives.
+
+8. Fallback logic
+- Several components swallow fetch errors and use empty arrays or default values.
+- Some summary cards use static placeholder strings.
+
+9. Data mapping
+- Dashboard display logic maps raw backend objects into stat cards, tables, and counts.
+- Some calculations are derived in the component rather than in the API.
+
+10. Dependencies on other features
+- Dashboard depends on attendance, leave, helpdesk, payroll, and employee data.
+- Some widgets navigate to those modules.
+
+11. Current problems
+- Dashboard behavior is fragmented across several large role-specific dashboards.
+- Not all dashboard cards are fully backed by dedicated backend endpoints.
+- Some widgets are static or hard-coded when live data is unavailable.
+
+12. Must be preserved
+- Same role-based dashboard routing.
+- Same landing destination after login.
+- Protected access from /dashboard.
+
+C. Employees
+Files:
+- src/modules/employees/EmployeeList.tsx
+- src/services/api.ts
+
+1. UI behavior
+- Shows a searchable employee table with name, employee code, role, designation, department, status, and join date.
+- Uses filterEmployees and sortEmployeesByEmpCode to local-sort visible rows.
+- Click row to navigate to /employees/:id.
+
+2. API calls
+- On mount: ApiService.getAllEmployees()
+- Resolves to GET ${API_BASE_URL}/employees
+
+3. State management
+- employees, searchTerm, isLoading, isCreateEmployeeOpen
+- filteredEmployees is a memoized derived value
+
+4. Authentication handling
+- Auth user is only used to compute canManageEmployees.
+- The API request itself uses this.getAuthHeaders().
+
+5. Role-based access
+- Route access: ADMIN/HR/MANAGER
+- UI action: Add Employee only for ADMIN/HR
+
+6. Error handling
+- catch logs error and sets isLoading(false)
+- No user-facing error banner in this component
+
+7. Loading states
+- Shows Loading employees...
+
+8. Fallback logic
+- setEmployees(data || [])
+- mapEmployeeData makes best-effort mappings when nested user fields are missing
+
+9. Data mapping
+- mapEmployeeData builds name, email, designation, department, status, joinDate, avatar.
+- Sorting is done by employee code prefix/suffix.
+
+10. Dependencies on other features
+- Employee creation modal triggers refetch on success.
+- Row click links to employee profile.
+- Team, payroll, and asset flows also use getAllEmployees().
+
+11. Current problems
+- The page trusts getAllEmployees() as a direct source of truth and does not validate record count beyond the raw array.
+- No pagination or backend-scope guard is implemented.
+
+12. Must be preserved
+- Search and sort behavior.
+- Role-based access to the employees list.
+- Row navigation to employee profile.
+
+D. Employee Profile
+Files:
+- src/modules/employees/EmployeeProfile.tsx
+- src/services/api.ts
+
+1. UI behavior
+- Shows profile header, personal info, employment info, contact info, and banking information.
+- Renders avatar, name, designation, department, status badge.
+- Can edit employee (ADMIN/HR) and raise payroll adjustments (ADMIN/HR/MANAGER).
+
+2. API calls
+- ApiService.getEmployeeById(id)
+- Fallback chain:
+  1. GET /employees/me
+  2. GET /employees/:id
+  3. fallback via getAllEmployees()
+- Then ApiService.getMyAssetsByUserId(Number(employee.id)) to fetch assets
+
+3. State management
+- employee, assets, loading, assetsLoading, error, modal states
+
+4. Authentication handling
+- Reads authenticated user for user.role and employeeId.
+- Uses auth token in API headers.
+
+5. Role-based access
+- canEditEmployees = ADMIN or HR
+- canManagePayroll = ADMIN, HR, or MANAGER
+- Route itself allows ADMIN, HR, MANAGER, EMPLOYEE
+
+6. Error handling
+- If employee lookup fails, shows error block with route id and role.
+- Asset load errors log and reset assets to []
+
+7. Loading states
+- Loading employee details...
+- Separate asset loading state
+
+8. Fallback logic
+- Multi-step employee lookup with multiple endpoint attempts.
+- Salary fallback logic exists in the API layer and in UI assumptions.
+
+9. Data mapping
+- buildProfileInitialData normalizes backend objects into editable DTO fields.
+- isEmployeeActive normalizes status from multiple fields.
+
+10. Dependencies on other features
+- Depends on asset assignment flows and payroll actions.
+- Sidebar profile shortcut navigates to /employees/:user.employeeId.
+
+11. Current problems
+- Fallback logic is broad and can return the wrong employee in ambiguous cases.
+- The UI assumes a very flexible backend schema and normalizes aggressively.
+- Asset fetch is keyed off employee.id, but backend identity relationship is not always consistent.
+
+12. Must be preserved
+- Multi-endpoint employee lookup fallback.
+- Role-based edit/raise actions.
+- Active/inactive status normalization.
+
+E. Attendance
+Files:
+- src/modules/attendance/Attendance.tsx
+- src/hooks/useAttendance.ts
+
+1. UI behavior
+- Employee self-attendance page.
+- Shows Today’s Action punch button and a table of grouped attendance rows by day.
+- punchActionLabel changes between Check In, Check Out, and View based on current record status.
+
+2. API calls
+- useAttendance calls:
+  - ApiService.getMyAttendance()
+  - ApiService.getTodayStatus()
+  - ApiService.punchIn(...)
+  - ApiService.punchOut(...)
+
+3. State management
+- records, todayRecord, isLoading, error
+- PunchInOutModal is controlled by local state
+
+4. Authentication handling
+- Uses authenticated user token in API headers
+- scope defaults to me
+
+5. Role-based access
+- Route is protected for all authenticated users
+
+6. Error handling
+- Errors are set in hook state and surfaced by the page
+- Punch-in/out exceptions are caught and displayed
+
+7. Loading states
+- Hook sets isLoading before fetches and during punch actions
+
+8. Fallback logic
+- If getTodayStatus fails, it logs a warning and keeps previous state
+- Attendance page groups all records by day in the UI
+
+9. Data mapping
+- Records are transformed in the page:
+  - date grouping
+  - earliest punch-in/last punch-out per day
+  - totals aggregated from multiple records
+
+10. Dependencies on other features
+- Depends on punch-in/out modal
+- Employee attendance summary page depends on the same API family
+
+11. Current problems
+- UI hard-codes Remote - IP 192.168.1.1 in the Today card.
+- Grouping logic sums totalHours across grouped records if backend already returns per-record totals.
+- “View” state is not a distinct view action; it opens the same modal.
+
+12. Must be preserved
+- Grouped daily attendance view.
+- Check-in/check-out behavior.
+- Current-user scope for attendance.
+
+F. Employee Attendance
+Files:
+- src/modules/attendance/EmployeeAttendance.tsx
+- src/services/api.ts
+
+1. UI behavior
+- HR/manager search-based employee lookup.
+- After selecting an employee, it displays attendance records, monthly summary, and leave information.
+- Search results are local-filtered and selected via click.
+
+2. API calls
+- ApiService.getAllEmployees()
+- ApiService.getEmployeeAttendance(id)
+- ApiService.getEmployeeAttendanceSummary(id, selectedMonth)
+- ApiService.getEmployeeById(id) to get data.leaves
+
+3. State management
+- employees, selectedEmployee, attendanceRecords, summary, leaveRecords, searchTerm, loading/error states.
+
+4. Authentication handling
+- Uses auth-protected routes and token injection via ApiService.
+- This page expects HR/manager permissions at route level.
+
+5. Role-based access
+- Route access: ADMIN/HR/MANAGER.
+- Search and summary logic assumes higher privileges.
+
+6. Error handling
+- Each fetch has its own error state.
+- Invalid employee ID or missing month gets a specific message.
+
+7. Loading states
+- isLoading, isAttendanceLoading, isSummaryLoading, isLeaveLoading
+
+8. Fallback logic
+- If employee ID invalid, page sets error and clears data.
+- leaveRecords are filtered from data.leaves if present.
+
+9. Data mapping
+- getEmployeeName builds a display name from firstName, lastName, name, or empCode.
+- filteredAttendanceRecords keeps only rows matching the selected month.
+
+10. Dependencies on other features
+- Depends on the employees directory and leave records from the same employee object.
+
+11. Current problems
+- Leave records are derived from getEmployeeById(id) rather than a dedicated leave-by-employee endpoint.
+- The summary and leave sections are separate fetches and can become stale if backend data changes mid-page.
+
+12. Must be preserved
+- Search-and-select employee flow.
+- Monthly summary plus attendance detail split.
+- Leave section tied to selected employee.
+
+G. Leave
+Files:
+- src/modules/leave/LeaveManagement.tsx
+- src/hooks/useLeave.ts
+
+1. UI behavior
+- Employee sees leave balance cards and history.
+- HR/manager/admin sees pending requests table with approve/reject actions.
+- Includes apply leave, carry-forward, and medical certificate modal flows.
+
+2. API calls
+- api.getSelfLeaveHistory()
+- api.getSelfLeaveBalance(yearStart)
+- api.getPaginatedLeaveHistory(page, limit)
+- api.getPendingLeaves()
+- api.getLeaveHistory()
+- api.applyLeave(...), approveLeave(...), rejectLeave(...), requestCarryForward(...)
+
+3. State management
+- Centralized in useLeave hook.
+- myLeaves, pendingLeaves, myLeaveBalance, error, success, isSubmitting, isLoading
+
+4. Authentication handling
+- All calls use the auth token via ApiService.getAuthHeaders().
+- Manager/admin flows call history endpoints as higher-role users.
+
+5. Role-based access
+- Route is protected for any authenticated user.
+- HR/Admin/Manager can see pending requests and action buttons.
+- Employee sees their own leave history and balance.
+
+6. Error handling
+- Global error banner and success banner.
+
+7. Loading states
+- isLoading shown in leave balance cards and pending leave table.
+- isSubmitting disables action buttons.
+
+8. Fallback logic
+- fetchPendingLeaves merges pending items with active historical leaves and deduplicates by ID.
+- normalizeLeaveAllocations normalizes default leave allocation values.
+
+9. Data mapping
+- getEmployeeName maps nested employee data into display names.
+- LeaveBalanceCard visualizes allocated vs used.
+
+10. Dependencies on other features
+- Displays employee details from nested API payloads.
+- Uses carry-forward and medical certificate workflows.
+
+11. Current problems
+- Upcoming Holidays cards are static hard-coded data rather than API-backed.
+- Leave request tables mix pending and historical active leaves into a single list.
+- Balance normalization may mask backend values if raw backend differs.
+
+12. Must be preserved
+- Employee-only leave summary.
+- HR/Admin/Manager pending request workflow.
+- Approval/rejection and carry-forward flows.
+
+H. Payroll
+Files:
+- src/modules/payroll/Payroll.tsx
+- src/hooks/usePayroll.ts
+- src/services/api.ts
+
+1. UI behavior
+- Displays digital salary card, monthly salary stats, payroll details, and adjustments.
+- HR/Admin/Manager can run payroll and assign salary.
+- Downloading payslip is supported.
+
+2. API calls
+- ApiService.getMyPayroll()
+- ApiService.getMyEmployeeDetails()
+- ApiService.runPayroll(...)
+- ApiService.assignSalary(...)
+- ApiService.generatePayslip(...)
+- ApiService.downloadPayslip(...)
+
+3. State management
+- payrolls, currentPayroll, employeeDetails, employeeSalaries, loading, loadingDetails
+
+4. Authentication handling
+- Uses bearer token from ApiService.getAuthHeaders()
+- Payroll is fetched using /payroll/my rather than a passed employee ID
+
+5. Role-based access
+- Management actions are shown for HR/ADMIN/MANAGER
+- Employee view still sees their own salary data
+
+6. Error handling
+- Errors are surfaced as alert for payslip download or shown in a red panel for payroll fetch.
+
+7. Loading states
+- loading and loadingDetails show Loading placeholders.
+
+8. Fallback logic
+- If no current payroll exists, it falls back to salaryInfo and default salary structure.
+- Several salary values default to Not Assigned, ₹0, or default structure values.
+
+9. Data mapping
+- buildSalarySummary, getFormattedSalaryValue, calculateSalaryComponents transform backend values into UI summary.
+- salaryInfo chooses employee salary from employeeSalaries[0] or nested salary entry.
+
+10. Dependencies on other features
+- Uses employee details and salary assignment flows.
+- Depends on employee profile and assignment modals.
+
+11. Current problems
+- usePayroll.fetchPayroll() ignores the passed employeeId and always calls /payroll/my.
+- The page mixes current-user payroll and passed employeeId semantics in ways that can confuse role logic.
+
+12. Must be preserved
+- Employee personal payroll view.
+- HR/Admin/Manager payroll actions.
+- Payslip download flow.
+
+I. Documents
+Files:
+- src/modules/documents/Documents.tsx
+- src/services/api.ts
+
+1. UI behavior
+- Shows required documents for the selected employee.
+- File input for each required document.
+- Upload button triggers multi-document upload.
+- HR/Admin can choose an employee from a dropdown; employee view uses current user employeeId.
+
+2. API calls
+- api.getRequiredDocuments(employeeId)
+- api.getDocuments(employeeId, role)
+- api.uploadDocuments(employeeId, docIds, files)
+- api.updateDocumentStatus(documentId, status, role)
+
+3. State management
+- files is a dictionary keyed by docTypeId storing selected File objects.
+- required, docs, employeeList, selectedEmployeeId, error, loading
+
+4. Authentication handling
+- Uses bearer token through ApiService.getAuthHeaders().
+- Upload uses the token explicitly in the headers on the form request.
+
+5. Role-based access
+- HR/Admin can select any employee.
+- Employee sees their own document requirements.
+- Route access is protected as a general authenticated route.
+
+6. Error handling
+- Error banner and per-action alerts.
+- Validation before upload triggers Please choose files to upload.
+
+7. Loading states
+- loading toggled during upload and bulk actions.
+- There are fetch states for required docs and docs list.
+
+8. Fallback logic
+- If employee is experienced and backend does not list Relieving Letter, a virtual fallback doc is inserted.
+- There are fallback URL attempts for /api base variants in ApiService.
+
+9. Data mapping
+- Required document metadata is normalized from backend responses.
+- File selection is keyed by document type ID.
+
+10. Dependencies on other features
+- Depends on employee identity resolution from AuthContext and employee list.
+- Uploads are tied to required document definitions.
+
+11. Current problems
+- Validation can trigger before the actual API request when no file has been selected, which is expected UI validation but not the root cause of upload failure in the refresh path.
+- Document upload request is sensitive to the shared fetch refresh logic because the global fetch wrapper replays requests with JSON headers even when the body is FormData.
+
+12. Must be preserved
+- Required document list by employee.
+- Multi-file upload semantics.
+- HR/Admin employee selection and employee self-view.
+
+J. Assets
+Files:
+- src/modules/assets/Assets.tsx
+- src/hooks/useAssets.ts
+- src/services/api.ts
+
+1. UI behavior
+- Lists assets in a searchable table with status badges and assignment actions.
+- Create-asset modal and assign-asset modal are used.
+- Return asset action updates status after re-fetch.
+
+2. API calls
+- ApiService.getAllAssets()
+- ApiService.getMyAssets()
+- ApiService.createAsset()
+- ApiService.assignAsset()
+- ApiService.returnAsset()
+
+3. State management
+- assets, isLoading, selectedAssetId, modal open states
+
+4. Authentication handling
+- Uses bearer token in API headers.
+- Policy enforced by route-level permissions.
+
+5. Role-based access
+- Route access is ADMIN/HR only.
+- Employee profile fetches assigned assets via getMyAssetsByUserId.
+
+6. Error handling
+- Asset actions show notifications with error messages.
+
+7. Loading states
+- isLoading while fetching or mutating assets.
+
+8. Fallback logic
+- getMyAssetsByUserId fetches all assets and filters on the frontend.
+- UI handles assignedTo and nested user fields flexibly.
+
+9. Data mapping
+- Asset assigned label is derived from asset.user or asset.assignedTo.
+- Status badge mapping is local to the page.
+
+10. Dependencies on other features
+- Asset assignment is tied to employee profile pages.
+- Assets are used in employee profile and asset management.
+
+11. Current problems
+- getMyAssetsByUserId is a frontend filter on all assets, not a direct backend query.
+- Some UI actions rely on consistent assignedTo values across backend payloads.
+
+12. Must be preserved
+- Asset list, assign, and return flows.
+- Role gating to admin/HR pages.
+- Navigation from asset actions to employee profile.
+
+K. Helpdesk
+Files:
+- src/modules/helpdesk/Helpdesk.tsx
+- src/services/api.ts
+
+1. UI behavior
+- Employees can raise issues; HR can review all tickets.
+- Tickets display status badge, requested-by information, and action buttons.
+- HR approval and resolution flows are built into the ticket table.
+
+2. API calls
+- api.createHelpdeskTicket()
+- api.getHelpdeskTickets()
+- api.getMyHelpdeskTickets()
+- api.approveHelpdeskTicket()
+- api.resolveHelpdeskTicket()
+
+3. State management
+- tickets, subject, reason, message, error, isLoading, isSubmitting
+- localStorage fallback key is foodeez_helpdesk_tickets
+
+4. Authentication handling
+- User is used to decide HR or self-view.
+- API uses bearer token.
+
+5. Role-based access
+- HR gets all tickets.
+- Employees see only their own tickets based on requestedById or email match.
+
+6. Error handling
+- Local fallback if API fetch fails.
+- API failure during submit falls back to a locally created ticket.
+
+7. Loading states
+- isLoading while fetching tickets.
+- isSubmitting while creating or updating.
+
+8. Fallback logic
+- LocalStorage is used as a backup data store.
+- The module merges API results with local tickets and prefers local approved/resolved entries.
+- If API calls fail, ticket creation still works locally.
+
+9. Data mapping
+- normalizeHelpdeskTicket transforms raw backend fields into the app HelpdeskTicket model.
+- normalizeStatus converts backend statuses to the UI enum.
+
+10. Dependencies on other features
+- HR dashboard listens for helpdeskTicketsUpdated custom events.
+- Ticket updates propagate to dashboard summaries.
+
+11. Current problems
+- The localStorage merge strategy can preserve stale or duplicated records across sessions.
+- The app uses both local fallback and API path, which can cause data divergence.
+- requestedById relies on user.employeeId and email matching, which is brittle if identity linkage is missing.
+
+12. Must be preserved
+- Employee ticket creation.
+- HR ticket approval/resolution flow.
+- Event-driven sync for dashboard updates.
+
+L. Team
+Files:
+- src/modules/team/Team.tsx
+- src/hooks/useTeam.ts
+- src/services/api.ts
+
+1. UI behavior
+- ADMIN/HR: view all teams, create team, add members, delete team.
+- MANAGER: view own assigned teams.
+- Team cards list manager and member roster.
+
+2. API calls
+- ApiService.getAllTeams()
+- ApiService.createTeam()
+- ApiService.addMembers()
+- ApiService.deleteTeam()
+- ApiService.getMyTeam()
+
+3. State management
+- teams, allTeams, loadingTeams, fetchError, selectedTeam, modal states
+- Hook-level teams and team state
+
+4. Authentication handling
+- Manager view depends on user.employeeId.
+- Auth token is included in all requests.
+
+5. Role-based access
+- ADMIN/HR can manage all teams.
+- MANAGER accesses only their own teams.
+- Route access restricted to ADMIN/HR/MANAGER in App routes.
+
+6. Error handling
+- Team fetch failures show an error block.
+- Delete action confirms first and catches errors.
+
+7. Loading states
+- loadingTeams, isLoading
+
+8. Fallback logic
+- useTeam.getAllMyTeams supports both array and single-object backend responses.
+- TeamManagement uses the manager route when user.employeeId exists.
+
+9. Data mapping
+- formatManagerName and formatMemberName derive names from nested objects or built-in name fields.
+- getMembersCount normalizes array-or-count semantics.
+
+10. Dependencies on other features
+- Team membership relies on employee records from getAllEmployees().
+- Team creation and add-members modal depend on employee selection data.
+
+11. Current problems
+- Manager-only team fetch and admin team fetch are different code paths, creating a split model for team data.
+- Some team member names are generated from multiple fields, which can be inconsistent by backend response shape.
+- keys for rendered member rows include Math.random(), which is not stable and can cause unnecessary re-renders.
+
+12. Must be preserved
+- Separate manager/admin behaviors.
+- Team creation, member add, and delete flows.
+- My Teams manager view.
+
+3) Other visible modules
+
+Recruitment, Performance, Training, Announcements, Reports, Settings
+Routes exist in src/App.tsx, but they are placeholders:
+- They render a PlaceholderModule with the Construction icon and static messaging.
+- No API calls are wired.
+- They are protected by ProtectedRoute.
+- They are role-selected by route, not by backend.
+
+This is part of the current frontend behavior and must be preserved as-is until real modules are implemented.
+
+4) Shared request/response layer and auth behavior
+
+This is the most important shared system-level fact:
+
+- All API requests in src/services/api.ts pass through a custom global fetch override.
+- The refresh flow is centralized here:
+  - If a response status is 401, it tries POST /auth/refresh with refreshToken.
+  - If refresh succeeds, it retries the original request.
+  - It reuses withFreshAuthHeaders to add updated auth headers.
+
+This means:
+- The refresh wrapper is global and affects every feature, not just auth.
+- Any request mutated or rebuilt incorrectly inside this layer can break unrelated features.
+- Multipart requests are especially sensitive because the wrapper creates JSON headers for the retried request and may override multipart boundaries unless the request is treated specially.
+
+5) Current problems visible across the frontend
+
+Across the app, the current frontend behavior shows several recurring realities:
+
+- The app frequently falls back to localStorage or best-effort normalization rather than strict backend contract validation.
+- Some modules silently swallow backend failures and continue with empty arrays.
+- Several pages assume nested backend shapes like user.email, employee.user.role, employee.leaves, salaries[0] and normalize around those assumptions.
+- Route-level permission enforcement exists, but not every page enforces finer-grained UI controls.
+- The app has a broad multi-fallback API strategy, which makes it resilient but also makes root-cause analysis harder when a failure is not clearly owned by one endpoint.
+
+6) What must be preserved by design
+
+The current frontend is intentionally shaped around these behaviors and should remain stable unless the product explicitly changes them:
+
+- Authenticated bootstrap from JWT + localStorage.
+- Route-based role gating.
+- Separate employee, manager, and HR/admin views.
+- Global token refresh and retry across all API calls.
+- Multi-endpoint fallback logic for employee lookup and several data models.
+- LocalStorage fallback behavior in helpdesk and user bootstrapping.
+- Feature-local loading/error states and alert banners.
+- Current dashboard role switch and page navigation flow.
+
+This audit establishes the actual implementation behavior without modifying any code.

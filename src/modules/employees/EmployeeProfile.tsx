@@ -1,7 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import ApiService, { type Asset, type CreateEmployeeDto } from '../../services/api';
+import ApiService, {
+  type CreateEmployeeDto,
+  type Employee360Attendance,
+  type Employee360Document,
+  type Employee360Hierarchy,
+  type Employee360Leave,
+  type Employee360Payroll,
+  type EmployeeSalary,
+  type Asset,
+} from '../../services/api';
 import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeModal';
 import { AssignSalaryModal } from '../../components/payroll/AssignSalaryModal';
 import {
@@ -9,7 +18,7 @@ import {
   Button, Badge
 } from '../../components/ui/components';
 import {
-  Edit, Briefcase, Package, TrendingUp
+  Edit, Briefcase, TrendingUp, Download, Eye
 } from 'lucide-react';
 import type { Role } from '../../types';
 
@@ -59,6 +68,10 @@ interface EmployeeProfileData {
     status?: string;
     isActive?: boolean;
   };
+  team?: {
+    id?: string | number;
+    name?: string;
+  } | null;
   isActive?: boolean;
 }
 
@@ -71,6 +84,15 @@ const isEmployeeActive = (emp: EmployeeProfileData): boolean => {
   if (typeof emp?.user?.isActive === 'boolean') return emp.user.isActive;
   if (typeof emp?.isActive === 'boolean') return emp.isActive;
   return true;
+};
+
+const getEmployeeStatusLabel = (emp: EmployeeProfileData): string => {
+  const status = String(emp?.status || emp?.user?.status || '').toUpperCase();
+  if (status === 'ACTIVE') return 'Active';
+  if (status === 'INACTIVE') return 'Inactive';
+  if (status === 'ON_LEAVE') return 'On Leave';
+  if (status === 'TERMINATED') return 'Terminated';
+  return isEmployeeActive(emp) ? 'Active' : 'Inactive';
 };
 
 const buildProfileInitialData = (employee: EmployeeProfileData) => ({
@@ -113,16 +135,36 @@ const EmployeeProfile = () => {
     const { user } = useAuth();
 
     const [employee, setEmployee] = useState<EmployeeProfileData | null>(null);
-    const [assets, setAssets] = useState<Asset[]>([]);
+    const [editEmployee, setEditEmployee] = useState<EmployeeProfileData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [assetsLoading, setAssetsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [isRaiseOpen, setIsRaiseOpen] = useState(false);
+    const [activeSection, setActiveSection] = useState<'personal' | 'employment' | 'contact' | 'attendance' | 'leave' | 'hierarchy' | 'assets' | 'documents' | 'payroll'>('personal');
+    const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
+    const [attendance, setAttendance] = useState<Employee360Attendance | null>(null);
+    const [attendanceLoading, setAttendanceLoading] = useState(false);
+    const [attendanceError, setAttendanceError] = useState<string | null>(null);
+    const [leave, setLeave] = useState<Employee360Leave | null>(null);
+    const [leaveLoading, setLeaveLoading] = useState(false);
+    const [leaveError, setLeaveError] = useState<string | null>(null);
+    const [hierarchy, setHierarchy] = useState<Employee360Hierarchy | null>(null);
+    const [hierarchyLoading, setHierarchyLoading] = useState(false);
+    const [hierarchyError, setHierarchyError] = useState<string | null>(null);
+    const [assets, setAssets] = useState<Asset[] | null>(null);
+    const [assetsLoading, setAssetsLoading] = useState(false);
+    const [assetsError, setAssetsError] = useState<string | null>(null);
+    const [documents, setDocuments] = useState<Employee360Document[] | null>(null);
+    const [documentsLoading, setDocumentsLoading] = useState(false);
+    const [documentsError, setDocumentsError] = useState<string | null>(null);
+    const [payroll, setPayroll] = useState<Employee360Payroll[] | null>(null);
+    const [assignedSalary, setAssignedSalary] = useState<EmployeeSalary | null>(null);
+    const [payrollLoading, setPayrollLoading] = useState(false);
+    const [payrollError, setPayrollError] = useState<string | null>(null);
 
     // Check if user can edit employees
-    const canEditEmployees = user?.role === 'ADMIN' || user?.role === 'HR';
-    const canManagePayroll = user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER';
+    const canEditEmployees = ['SUPER_ADMIN', 'CEO', 'HR'].includes(user?.role ?? '');
+    const canManagePayroll = ['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER'].includes(user?.role ?? '');
 
     useEffect(() => {
         let mounted = true;
@@ -132,7 +174,7 @@ const EmployeeProfile = () => {
 
         console.log('Loading employee profile:', empId, 'Current user:', user?.id, user?.employeeId, user?.role);
 
-        ApiService.getEmployeeById(empId as string)
+        ApiService.getEmployee360(Number(empId))
             .then((data) => {
                 if (mounted === false) return;
                 console.log('Employee data loaded:', data);
@@ -153,39 +195,215 @@ const EmployeeProfile = () => {
         };
     }, [id, user]);
 
-    // Fetch assets for the employee
     useEffect(() => {
-        if (!employee?.id) return;
-        
-        let mounted = true;
-        setAssetsLoading(true);
+      if (!employee?.id || activeSection !== 'attendance') return;
 
-        ApiService.getMyAssetsByUserId(Number(employee.id))
-            .then((data) => {
-                if (mounted === false) return;
-                setAssets(data || []);
-            })
-            .catch((err) => {
-                if (mounted === false) return;
-                console.error('Failed to load assets for employee:', err);
-                setAssets([]);
-            })
-            .finally(() => {
-                if (mounted === false) return;
-                setAssetsLoading(false);
-            });
+      let mounted = true;
+      setAttendanceLoading(true);
+      setAttendanceError(null);
+      ApiService.getEmployee360Attendance(Number(employee.id), selectedMonth)
+        .then((data) => {
+          if (mounted) setAttendance(data);
+        })
+        .catch((err) => {
+          if (!mounted) return;
+          setAttendance(null);
+          setAttendanceError(err instanceof Error ? err.message : 'Failed to load attendance');
+        })
+        .finally(() => {
+          if (mounted) setAttendanceLoading(false);
+        });
 
-        return () => {
-            mounted = false;
-        };
-    }, [employee?.id]);
+      return () => {
+        mounted = false;
+      };
+    }, [activeSection, employee?.id, selectedMonth]);
 
-    const handleEmployeeUpdated = (updated: Partial<CreateEmployeeDto> | EmployeeProfileData) => {
-        setEmployee((prev) => (prev ? { ...prev, ...updated } : prev));
+    useEffect(() => {
+      if (!employee?.id || activeSection !== 'leave') return;
+
+      let mounted = true;
+      setLeaveLoading(true);
+      setLeaveError(null);
+      ApiService.getEmployee360Leave(Number(employee.id))
+        .then((data) => {
+          if (mounted) setLeave(data);
+        })
+        .catch((err) => {
+          if (!mounted) return;
+          setLeave(null);
+          setLeaveError(err instanceof Error ? err.message : 'Failed to load leave');
+        })
+        .finally(() => {
+          if (mounted) setLeaveLoading(false);
+        });
+
+      return () => {
+        mounted = false;
+      };
+    }, [activeSection, employee?.id]);
+
+    const fetchSalaryData = useCallback(async (employeeId: number) => {
+      setPayrollLoading(true);
+      setPayrollError(null);
+      setAssignedSalary(null);
+      try {
+        const [payrollRecords, salaryRecords] = await Promise.all([
+        ApiService.getEmployee360Payroll(employeeId).catch((err) => {
+          setPayrollError(err instanceof Error ? err.message : 'Failed to load payroll');
+          return [] as Employee360Payroll[];
+        }),
+        ApiService.getEmployeeSalaries(employeeId),
+        ]);
+        setPayroll(payrollRecords);
+        setAssignedSalary(salaryRecords.length > 0 ? salaryRecords[0] : null);
+      } catch (err) {
+        setPayroll([]);
+        setAssignedSalary(null);
+        setPayrollError(err instanceof Error ? err.message : 'Failed to load salary details');
+      } finally {
+        setPayrollLoading(false);
+      }
+    }, []);
+
+    useEffect(() => {
+      if (!employee?.id || activeSection !== 'payroll') return;
+      void fetchSalaryData(Number(employee.id));
+    }, [activeSection, employee?.id, fetchSalaryData]);
+
+    useEffect(() => {
+      if (!employee?.id || activeSection !== 'payroll') return;
+      const handleSalaryAssigned = () => {
+        void fetchSalaryData(Number(employee.id));
+      };
+      window.addEventListener('salary-assigned', handleSalaryAssigned);
+      return () => {
+        window.removeEventListener('salary-assigned', handleSalaryAssigned);
+      };
+    }, [activeSection, employee?.id, fetchSalaryData]);
+
+    useEffect(() => {
+      if (!employee?.id || activeSection !== 'hierarchy') return;
+
+      let mounted = true;
+      setHierarchyLoading(true);
+      setHierarchyError(null);
+      ApiService.getEmployee360Hierarchy(Number(employee.id))
+        .then((data) => {
+          if (mounted) setHierarchy(data);
+        })
+        .catch((err) => {
+          if (!mounted) return;
+          setHierarchy(null);
+          setHierarchyError(err instanceof Error ? err.message : 'Failed to load hierarchy');
+        })
+        .finally(() => {
+          if (mounted) setHierarchyLoading(false);
+        });
+
+      return () => {
+        mounted = false;
+      };
+    }, [activeSection, employee?.id]);
+
+    useEffect(() => {
+      if (!employee?.id || activeSection !== 'assets') return;
+
+      let mounted = true;
+      setAssetsLoading(true);
+      setAssetsError(null);
+      ApiService.getEmployee360Assets(Number(employee.id))
+        .then((data) => {
+          if (mounted) setAssets(data || []);
+        })
+        .catch((err) => {
+          if (!mounted) return;
+          setAssets(null);
+          setAssetsError(err instanceof Error ? err.message : 'Failed to load assets');
+        })
+        .finally(() => {
+          if (mounted) setAssetsLoading(false);
+        });
+
+      return () => {
+        mounted = false;
+      };
+    }, [activeSection, employee?.id]);
+
+    useEffect(() => {
+      if (!employee?.id || activeSection !== 'documents') return;
+
+      let mounted = true;
+      setDocumentsLoading(true);
+      setDocumentsError(null);
+      ApiService.getEmployee360Documents(Number(employee.id))
+        .then((data) => {
+          if (mounted) setDocuments(data || []);
+        })
+        .catch((err) => {
+          if (!mounted) return;
+          setDocuments(null);
+          setDocumentsError(err instanceof Error ? err.message : 'Failed to load documents');
+        })
+        .finally(() => {
+          if (mounted) setDocumentsLoading(false);
+        });
+
+      return () => {
+        mounted = false;
+      };
+    }, [activeSection, employee?.id]);
+
+    const handleEmployeeUpdated = async () => {
+      if (!employee?.id) return;
+
+      const refreshedEmployee = await ApiService.getEmployeeById(Number(employee.id));
+      setEmployee(refreshedEmployee as EmployeeProfileData);
+      setEditEmployee(refreshedEmployee as EmployeeProfileData);
         setIsEditOpen(false);
     };
 
-    const profileInitialData = employee ? buildProfileInitialData(employee) : undefined;
+    const salary = assignedSalary;
+    const hasSalary = Boolean(
+      salary && ((salary as any)?.annualCTC || (salary as any)?.annualCtc || (salary as any)?.ctc),
+    );
+    const hasPayrollHistory = Boolean(payroll && payroll.length > 0);
+
+    const profileInitialData = editEmployee ? buildProfileInitialData(editEmployee) : undefined;
+
+    const handleEditEmployee = async () => {
+      if (!employee?.id) return;
+
+      try {
+        const detailedEmployee = await ApiService.getEmployeeById(Number(employee.id));
+        setEditEmployee(detailedEmployee as EmployeeProfileData);
+        setIsEditOpen(true);
+      } catch (editError) {
+        console.error('Error loading employee details for edit:', editError);
+      }
+    };
+
+    const handleDocumentFile = async (documentId: number, fileName: string | null | undefined, download: boolean) => {
+      try {
+        const { blob, fileName: responseFileName } = await ApiService.downloadDocumentFile(documentId);
+        const url = URL.createObjectURL(blob);
+        if (download) {
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = responseFileName || fileName || `document-${documentId}`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+          return;
+        }
+
+        window.open(url, '_blank', 'noopener,noreferrer');
+        window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+      } catch (documentError) {
+        setDocumentsError(documentError instanceof Error ? documentError.message : 'Failed to fetch document');
+      }
+    };
 
     if (loading) {
         return (
@@ -232,7 +450,7 @@ const EmployeeProfile = () => {
                    </Button>
                  )}
                  {canEditEmployees && (
-                   <Button className="flex-1 md:flex-none" onClick={() => setIsEditOpen(true)}>
+                   <Button className="flex-1 md:flex-none" onClick={handleEditEmployee}>
                       <Edit size={16} className="mr-2" /> Edit
                    </Button>
                  )}
@@ -240,204 +458,247 @@ const EmployeeProfile = () => {
         </div>
       </div>
 
-      {/* Employee Details */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Personal Information */}
-        <Card>
-          <CardHeader><CardTitle>Personal Information</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs text-slate-500 font-medium">First Name</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.firstName || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Last Name</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.lastName || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Email Address</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{(employee.user?.email ?? employee.email) || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Phone</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.phone || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Date of Birth</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.dateOfBirth ? new Date(employee.dateOfBirth).toLocaleDateString() : '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Gender</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.gender || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Marital Status</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.maritalStatus || '-'}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Employment Information */}
-        <Card>
-          <CardHeader><CardTitle>Employment Information</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Employee Code</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.empCode || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Department</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.department || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Designation</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.designation || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Role</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{(employee.user?.role ?? employee.role) || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Employment Type</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.employmentType || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Status</p>
-              <Badge variant={isEmployeeActive(employee) ? 'success' : 'danger'} className="mt-1">
-                {isEmployeeActive(employee) ? 'Active' : 'Inactive'}
-              </Badge>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Date of Joining</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.dateOfJoining ? new Date(employee.dateOfJoining).toLocaleDateString() : '-'}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Contact Information */}
-        <Card>
-          <CardHeader><CardTitle>Contact Information</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Current Address</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.currentAddress || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Permanent Address</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.permanentAddress || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">City</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.city || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Pincode</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.pincode || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Personal Mobile</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.personalMobile || '-'}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Banking & Identification */}
-        <Card>
-          <CardHeader><CardTitle>Banking & Identification</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs text-slate-500 font-medium">PAN Number</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.panNumber || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Aadhar Number</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.aadharNumber || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">PF Number</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.pfNumber || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">UAN Number</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.uanNumber || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Bank Account Number</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.bankAccountNumber || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Bank Name</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.bankName || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">IFSC Code</p>
-              <p className="text-sm font-medium text-slate-900 mt-1">{employee.ifscCode || '-'}</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="border-b border-slate-200">
+        <div className="flex gap-2 overflow-x-auto" role="tablist" aria-label="Employee 360 sections">
+          {[
+            ['personal', 'Personal'],
+            ['employment', 'Employment'],
+            ['contact', 'Contact'],
+            ['attendance', 'Attendance'],
+            ['leave', 'Leave'],
+            ['hierarchy', 'Hierarchy'],
+            ['assets', 'Assets'],
+            ['documents', 'Documents'],
+            ['payroll', 'Payroll'],
+          ].map(([section, label]) => (
+            <button
+              key={section}
+              type="button"
+              role="tab"
+              aria-selected={activeSection === section}
+              onClick={() => setActiveSection(section as 'personal' | 'employment' | 'contact' | 'attendance' | 'leave' | 'hierarchy' | 'assets' | 'documents' | 'payroll')}
+              className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                activeSection === section
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Assets Assigned */}
       <Card>
-        <CardHeader className="bg-slate-50/70 border-b">
-          <CardTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-slate-600" />
-            Assets Assigned
+        <CardHeader>
+          <CardTitle>
+            {activeSection === 'personal' ? 'Personal Information' : activeSection === 'employment' ? 'Employment Information' : activeSection === 'contact' ? 'Contact Information' : activeSection === 'attendance' ? 'Attendance' : activeSection === 'leave' ? 'Leave' : activeSection === 'hierarchy' ? 'Team / Reporting Hierarchy' : activeSection === 'assets' ? 'Assets' : activeSection === 'documents' ? 'Documents' : 'Payroll'}
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-6">
-          {assetsLoading ? (
-            <div className="py-12 text-center text-slate-500">Loading assets...</div>
-          ) : assets.length === 0 ? (
-            <div className="py-12 text-center text-slate-500">No assets assigned yet</div>
-          ) : (
-            <div className="space-y-4">
-              {assets.map((asset) => (
-                <div
-                  key={asset.id}
-                  className="p-4 bg-slate-50 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors"
-                >
-                  <div className="flex justify-between items-start gap-4">
-                    <div className="flex-1">
-                      <p className="font-medium text-slate-900">{asset.name}</p>
-                      {asset.description && (
-                        <p className="text-sm text-slate-600 mt-1">{asset.description}</p>
-                      )}
-                      <p className="text-xs text-slate-500 mt-2">
-                        {(() => {
-                          if (asset.status === 'RETURNED' && asset.returnedAt) {
-                            return `Returned: ${new Date(asset.returnedAt).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}`;
-                          }
-
-                          if (asset.assignedAt) {
-                            return `Assigned: ${new Date(asset.assignedAt).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}`;
-                          }
-
-                          return 'Assigned: N/A';
-                        })()}
-                      </p>
-                    </div>
-                    {asset.status === 'RETURNED' ? (
-                      <Badge variant="default" className="bg-gray-200 text-gray-800 border-none whitespace-nowrap">
-                        Returned
-                      </Badge>
-                    ) : (
-                      <Badge variant="default" className="bg-emerald-100 text-emerald-800 border-none inline-flex items-center whitespace-nowrap">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5 inline-block" />
-                        <span>Assigned</span>
-                      </Badge>
-                    )}
-                  </div>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          {activeSection === 'personal' && (
+            <>
+              <div><p className="text-xs text-slate-500 font-medium">First Name</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.firstName || '-'}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium">Last Name</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.lastName || '-'}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium">Email Address</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.user?.email || '-'}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium">Phone</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.phone || '-'}</p></div>
+            </>
+          )}
+          {activeSection === 'employment' && (
+            <>
+              <div><p className="text-xs text-slate-500 font-medium">Employee Code</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.empCode || '-'}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium">Department</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.department || '-'}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium">Designation</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.designation || '-'}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium">Team</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.team?.name || '-'}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium">Role</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.user?.role || '-'}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium">Employment Type</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.employmentType || '-'}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium">Status</p><Badge variant={isEmployeeActive(employee) ? 'success' : 'danger'} className="mt-1">{getEmployeeStatusLabel(employee)}</Badge></div>
+              <div><p className="text-xs text-slate-500 font-medium">Date of Joining</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.dateOfJoining ? new Date(employee.dateOfJoining).toLocaleDateString() : '-'}</p></div>
+            </>
+          )}
+          {activeSection === 'contact' && (
+            <>
+              <div><p className="text-xs text-slate-500 font-medium">City</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.city || '-'}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium">Phone</p><p className="text-sm font-medium text-slate-900 mt-1">{employee.phone || '-'}</p></div>
+            </>
+          )}
+          {activeSection === 'attendance' && (
+            <div className="sm:col-span-2 space-y-5">
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+                <span>Month</span>
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(event) => setSelectedMonth(event.target.value)}
+                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  aria-label="Select attendance month"
+                />
+              </label>
+              {attendanceLoading ? (
+                <p className="py-8 text-center text-sm text-slate-500">Loading attendance...</p>
+              ) : attendanceError ? (
+                <p className="py-8 text-center text-sm text-slate-500">Unable to load attendance: {attendanceError}</p>
+              ) : !attendance ? (
+                <p className="py-8 text-center text-sm text-slate-500">No attendance summary available.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  {[
+                    ['Month', attendance.month],
+                    ['Working Days', attendance.workingDays],
+                    ['Present Days', attendance.presentDays],
+                    ['Half Days', attendance.halfDays],
+                    ['Leave Days', attendance.leaveDays],
+                    ['Absent Days', attendance.absentDays],
+                    ['Present Equivalent Days', attendance.presentEquivalentDays],
+                    ['Attendance Percentage', `${attendance.attendancePercentage}%`],
+                  ].map(([label, value]) => (
+                    <div key={label as string}><p className="text-xs text-slate-500 font-medium">{label}</p><p className="text-sm font-medium text-slate-900 mt-1">{value}</p></div>
+                  ))}
                 </div>
-              ))}
+              )}
+            </div>
+          )}
+          {activeSection === 'leave' && (
+            <div className="sm:col-span-2 space-y-5">
+              {leaveLoading ? (
+                <p className="py-8 text-center text-sm text-slate-500">Loading leave information...</p>
+              ) : leaveError ? (
+                <p className="py-8 text-center text-sm text-slate-500">Unable to load leave information: {leaveError}</p>
+              ) : !leave ? (
+                <p className="py-8 text-center text-sm text-slate-500">No leave information available.</p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div><p className="text-xs text-slate-500 font-medium">Current Status</p><p className="text-sm font-medium text-slate-900 mt-1">{leave.currentLeaveStatus.status}</p></div>
+                    <div><p className="text-xs text-slate-500 font-medium">Total Requests</p><p className="text-sm font-medium text-slate-900 mt-1">{leave.leaveCounts.total}</p></div>
+                    <div><p className="text-xs text-slate-500 font-medium">Pending</p><p className="text-sm font-medium text-slate-900 mt-1">{leave.leaveCounts.pending}</p></div>
+                    <div><p className="text-xs text-slate-500 font-medium">Approved</p><p className="text-sm font-medium text-slate-900 mt-1">{leave.leaveCounts.approved}</p></div>
+                    <div><p className="text-xs text-slate-500 font-medium">Rejected</p><p className="text-sm font-medium text-slate-900 mt-1">{leave.leaveCounts.rejected}</p></div>
+                  </div>
+                  {leave.balanceSummary.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm text-left">
+                        <thead><tr className="border-b border-slate-200 text-xs text-slate-500"><th className="py-2 pr-4">Leave Type</th><th className="py-2 pr-4">Allocated</th><th className="py-2 pr-4">Used</th><th className="py-2 pr-4">Remaining</th></tr></thead>
+                        <tbody>{leave.balanceSummary.map((balance) => <tr key={balance.leaveType} className="border-b border-slate-100"><td className="py-2 pr-4">{balance.leaveType}</td><td className="py-2 pr-4">{balance.allocated}</td><td className="py-2 pr-4">{balance.used}</td><td className="py-2 pr-4">{balance.remaining}</td></tr>)}</tbody>
+                      </table>
+                    </div>
+                  )}
+                  {leave.recentHistory.length > 0 && (
+                    <div className="space-y-2"><h3 className="text-sm font-semibold text-slate-800">Recent Leave</h3>{leave.recentHistory.map((item) => <div key={item.id} className="flex flex-wrap justify-between gap-2 border-b border-slate-100 py-2 text-sm"><span>{item.leaveType}</span><span className="text-slate-500">{item.status} · {item.totalDays} days</span></div>)}</div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          {activeSection === 'hierarchy' && (
+            <div className="sm:col-span-2">
+              {hierarchyLoading ? (
+                <p className="py-8 text-center text-sm text-slate-500">Loading hierarchy...</p>
+              ) : hierarchyError ? (
+                <p className="py-8 text-center text-sm text-slate-500">Unable to load hierarchy: {hierarchyError}</p>
+              ) : !hierarchy || (!hierarchy.team && !hierarchy.manager && !hierarchy.reportingRelationship) ? (
+                <p className="py-8 text-center text-sm text-slate-500">No hierarchy information available.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div><p className="text-xs text-slate-500 font-medium">Team</p><p className="text-sm font-medium text-slate-900 mt-1">{hierarchy.team?.name || '-'}</p></div>
+                  <div><p className="text-xs text-slate-500 font-medium">Manager</p><p className="text-sm font-medium text-slate-900 mt-1">{hierarchy.manager?.name || '-'}</p></div>
+                  <div><p className="text-xs text-slate-500 font-medium">Manager Designation</p><p className="text-sm font-medium text-slate-900 mt-1">{hierarchy.manager?.designation || '-'}</p></div>
+                  <div><p className="text-xs text-slate-500 font-medium">Reporting Relationship</p><p className="text-sm font-medium text-slate-900 mt-1">{hierarchy.reportingRelationship?.type || '-'}</p></div>
+                </div>
+              )}
+            </div>
+          )}
+          {activeSection === 'assets' && (
+            <div className="sm:col-span-2">
+              {assetsLoading ? (
+                <p className="py-8 text-center text-sm text-slate-500">Loading assets...</p>
+              ) : assetsError ? (
+                <p className="py-8 text-center text-sm text-slate-500">Unable to load assets: {assetsError}</p>
+              ) : !assets || assets.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-500">No assets assigned yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {assets.map((asset) => (
+                    <div key={asset.id} className="border-b border-slate-100 pb-3 last:border-b-0">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                        <div><span className="text-xs font-medium text-slate-500">Asset ID</span><p className="font-medium text-slate-900">{asset.id}</p></div>
+                        <div><span className="text-xs font-medium text-slate-500">Name</span><p className="font-medium text-slate-900">{asset.name}</p></div>
+                        <div><span className="text-xs font-medium text-slate-500">Description</span><p className="text-slate-700">{asset.description || '-'}</p></div>
+                        <div><span className="text-xs font-medium text-slate-500">Assigned Date</span><p className="text-slate-700">{asset.assignedAt ? new Date(asset.assignedAt).toLocaleDateString() : '-'}</p></div>
+                        <div><span className="text-xs font-medium text-slate-500">Status</span><p className="text-slate-700">{asset.status}</p></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {activeSection === 'documents' && (
+            <div className="sm:col-span-2">
+              {documentsLoading ? (
+                <p className="py-8 text-center text-sm text-slate-500">Loading documents...</p>
+              ) : documentsError ? (
+                <p className="py-8 text-center text-sm text-slate-500">Unable to load documents: {documentsError}</p>
+              ) : !documents || documents.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-500">No documents available.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-slate-200 text-xs text-slate-500">
+                      <tr><th className="py-2 pr-4">Document</th><th className="py-2 pr-4">Type</th><th className="py-2 pr-4">Status</th><th className="py-2 pr-4">Uploaded</th><th className="py-2">Actions</th></tr>
+                    </thead>
+                    <tbody>
+                      {documents.map((document) => (
+                        <tr key={document.id} className="border-b border-slate-100 last:border-b-0">
+                          <td className="py-3 pr-4 font-medium text-slate-900">{document.fileName || '-'}</td>
+                          <td className="py-3 pr-4 text-slate-700">{document.documentType?.name || document.mimeType || '-'}</td>
+                          <td className="py-3 pr-4"><Badge variant={document.status === 'APPROVED' ? 'success' : document.status === 'REJECTED' ? 'danger' : 'warning'}>{document.status || 'PENDING'}</Badge></td>
+                          <td className="py-3 pr-4 text-slate-700">{document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString() : '-'}</td>
+                          <td className="py-3"><div className="flex flex-wrap gap-2"><Button size="xs" variant="outline" onClick={() => handleDocumentFile(document.id, document.fileName, false)}><Eye size={14} className="mr-1" />Preview</Button><Button size="xs" variant="outline" onClick={() => handleDocumentFile(document.id, document.fileName, true)}><Download size={14} className="mr-1" />Download</Button></div></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+          {activeSection === 'payroll' && (
+            <div className="sm:col-span-2">
+              {payrollLoading ? (
+                <p className="py-8 text-center text-sm text-slate-500">Loading payroll...</p>
+              ) : payrollError && !hasSalary && !hasPayrollHistory ? (
+                <p className="py-8 text-center text-sm text-slate-500">Unable to load payroll: {payrollError}</p>
+              ) : (
+                <div className="space-y-5">
+                  {hasSalary && salary && (
+                    <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Assigned Salary</p>
+                      <div className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                        <div><span className="text-xs font-medium text-slate-500">Annual CTC</span><p className="font-semibold text-slate-900">{Number((assignedSalary as any)?.annualCTC ?? (assignedSalary as any)?.annualCtc ?? (assignedSalary as any)?.ctc ?? 0).toLocaleString()}</p></div>
+                        <div><span className="text-xs font-medium text-slate-500">Monthly CTC</span><p className="font-semibold text-slate-900">{Number((assignedSalary as any)?.monthlyCTC ?? (assignedSalary as any)?.monthlyCtc ?? (assignedSalary as any)?.monthlySalary ?? 0).toLocaleString()}</p></div>
+                        <div><span className="text-xs font-medium text-slate-500">Salary Structure</span><p className="text-slate-700">{assignedSalary.structure?.name || `Structure #${assignedSalary.structureId}`}</p></div>
+                        <div><span className="text-xs font-medium text-slate-500">Effective From</span><p className="text-slate-700">{assignedSalary.effectiveFrom ? new Date(assignedSalary.effectiveFrom).toLocaleDateString() : '-'}</p></div>
+                      </div>
+                    </div>
+                  )}
+                  {payroll && payroll.length > 0 ? payroll.map((record) => (
+                    <div key={`${record.year}-${record.month}`} className="grid grid-cols-1 sm:grid-cols-2 gap-2 border-b border-slate-100 pb-3 text-sm last:border-b-0">
+                      <div><span className="text-xs font-medium text-slate-500">Month</span><p className="font-medium text-slate-900">{record.month}</p></div>
+                      <div><span className="text-xs font-medium text-slate-500">Year</span><p className="font-medium text-slate-900">{record.year}</p></div>
+                      <div><span className="text-xs font-medium text-slate-500">Status</span><p className="text-slate-700">{record.status}</p></div>
+                      <div><span className="text-xs font-medium text-slate-500">Gross</span><p className="text-slate-700">{record.grossSalary}</p></div>
+                      <div><span className="text-xs font-medium text-slate-500">Deductions</span><p className="text-slate-700">{record.deductions}</p></div>
+                      <div><span className="text-xs font-medium text-slate-500">Net</span><p className="text-slate-700">{record.netSalary}</p></div>
+                      {record.latestSalaryEffectiveDate && (
+                        <div><span className="text-xs font-medium text-slate-500">Salary Effective Date</span><p className="text-slate-700">{new Date(record.latestSalaryEffectiveDate).toLocaleDateString()}</p></div>
+                      )}
+                    </div>
+                  )) : !hasSalary && !hasPayrollHistory ? (
+                    <p className="py-8 text-center text-sm text-slate-500">No salary assignment or payroll records available.</p>
+                  ) : null}
+                </div>
+              )}
             </div>
           )}
         </CardContent>

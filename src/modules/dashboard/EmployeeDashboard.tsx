@@ -277,11 +277,9 @@ export default function EmployeeDashboard() {
 
           <MetricCard
             title="Goals Progress"
-            value="72%"
-            subtext="Q1 objectives on track"
+            value="Not available"
+            subtext="Not provided by the API"
             icon={Target}
-            trend="+8%"
-            trendUp={true}
           />
 
           <MetricCard

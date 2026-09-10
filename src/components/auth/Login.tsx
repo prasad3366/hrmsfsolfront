@@ -57,6 +57,10 @@ const Login = () => {
     }
   };
 
+  const togglePasswordVisibility = () => {
+    setShowPassword((visible) => !visible);
+  };
+
   return (
     <>
       <div className="min-h-screen bg-slate-50 font-sans overflow-x-hidden flex flex-col relative">
@@ -181,7 +185,7 @@ const Login = () => {
                             />
                             <button
                                 type="button"
-                                onClick={() => setShowPassword(!showPassword)}
+                                onClick={togglePasswordVisibility}
                                 className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-1"
                             >
                                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -233,7 +237,7 @@ const Login = () => {
             </div>
 
             {/* 3D Character Illustration */}
-            <div className="hidden md:block w-[250px] lg:w-[300px] relative z-30 flex-shrink-0 p-0 md:-ml-24">
+            <div className="hidden md:block w-[250px] lg:w-[300px] relative z-30 flex-shrink-0 p-0 md:-ml-24 pointer-events-none">
                  <img 
                     src={LOGIN_CHAR_IMG} 
                     alt="3D Character" 

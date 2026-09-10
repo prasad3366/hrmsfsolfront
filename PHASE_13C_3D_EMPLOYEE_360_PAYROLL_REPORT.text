@@ -1,0 +1,81 @@
+PHASE 13C-3D - EMPLOYEE 360 PAYROLL REPORT
+
+Scope
+-----
+Added only the Payroll tab/section to the existing EmployeeProfile Employee 360 UI. Existing Personal, Employment, Contact, Attendance, Leave, Hierarchy, Assets, Documents, Edit, Give Raise, and routing behavior remain in place. Performance was not added.
+
+Exact files changed for this phase
+-----------------------------------
+- src/modules/employees/EmployeeProfile.tsx
+- src/services/api.ts
+- src/services/api.test.ts
+- PHASE_13C_3D_EMPLOYEE_360_PAYROLL_REPORT.text
+
+API used
+--------
+- ApiService.getEmployee360Payroll(Number(employee.id))
+- GET /employees/:id/360/payroll
+
+The Payroll tab is lazy-loaded only when opened. It does not call /payroll, /payroll/my, salary target endpoints, payslip endpoints, or any broad payroll API.
+
+Safe fields displayed
+---------------------
+For each safe 360 payroll record:
+- Month (backend field: month)
+- Year (backend field: year)
+- Status (backend field: status)
+- Gross (backend field: grossSalary)
+- Deductions (backend field: deductions)
+- Net (backend field: netSalary)
+- Salary Effective Date, when present (backend field: latestSalaryEffectiveDate)
+
+Sensitive fields excluded
+-------------------------
+The Payroll 360 section does not request, derive, or render:
+- Bank account details
+- PAN
+- Aadhaar/government IDs
+- UAN
+- PF details
+- Full salary structure
+- Basic, HRA, allowance, or other salary breakdown fields
+- Payslip PDF/file content
+- Payslip download URLs
+- Any broad payroll response fields
+
+Loading, empty, and error behavior
+----------------------------------
+- Independent loading state: Loading payroll...
+- Independent API error state: Unable to load payroll: <error>
+- Independent empty state: No payroll records available.
+- A failed request sets payroll data to null, so an API failure cannot render the empty-record message.
+
+Preserved behavior
+------------------
+- Existing Employee 360 tabs remain available.
+- Personal, Employment, Contact, Attendance, Leave, Hierarchy, Assets, and Documents behavior was not otherwise changed.
+- Existing detailed employee loading still occurs only when Edit is opened.
+- Existing Edit and Give Raise actions remain unchanged.
+- Existing routing and backend-controlled authorization behavior remain unchanged.
+- No frontend-only authorization rule, role, teamId, or managerId decision was added.
+- No backend, schema, migration, payroll service/controller, or unrelated module was changed.
+
+Tests and validation
+--------------------
+- Focused frontend tests: passed, 11/11.
+- Updated payroll API test to verify the safe array response is returned from the Employee 360 path.
+- Modified EmployeeProfile.tsx, api.ts, and api.test.ts diagnostics: no errors.
+- Production build: passed successfully with Vite.
+- Full TypeScript check: three pre-existing unrelated errors remain:
+  1. src/components/ui/components.tsx: onKeyDown handler element type mismatch.
+  2. src/modules/leave/LeaveManagement.tsx: LeaveType has no type property at two usages.
+- Existing build warnings remain for missing /index.css and a chunk larger than 500 kB.
+
+Change-scope confirmation
+-------------------------
+- No backend files changed.
+- No Prisma/schema/migration files changed.
+- No payroll services/controllers changed.
+- No new dependencies or endpoints were added.
+- No unrelated frontend source files were changed for this phase.
+- Existing unrelated worktree modifications were left untouched.

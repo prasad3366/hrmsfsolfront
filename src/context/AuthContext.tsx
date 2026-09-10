@@ -12,6 +12,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+export const hasAccessToken = (accessToken: string | null): boolean => Boolean(accessToken);
+
 // Helper functions to reduce complexity
 const decodeJwt = (token: string | null): Record<string, any> | null => {
   if (!token) return null;
@@ -69,9 +71,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const initializeAuth = async () => {
       const accessToken = localStorage.getItem('accessToken');
-      const storedUser = localStorage.getItem('foodeez_user');
 
-      if (accessToken) {
+      if (hasAccessToken(accessToken)) {
         const jwt = decodeJwt(accessToken);
         if (jwt) {
           const userObj = buildUserFromJwt(jwt);
@@ -82,23 +83,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (err) {
             console.warn('Unable to persist user to localStorage:', err);
           }
-          fetchEmployeeId(userObj, setUser);
+          if (userObj.role === 'EMPLOYEE') {
+            fetchEmployeeId(userObj, setUser);
+          }
           return;
-        }
-      }
-
-      if (storedUser) {
-        try {
-          const parsed = JSON.parse(storedUser);
-          setUser(parsed);
-          setRole(parsed.role);
-          fetchEmployeeId(parsed, setUser);
-          return;
-        } catch (err) {
-          console.warn('Failed to parse stored user from localStorage:', err);
-          localStorage.removeItem('foodeez_user');
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
         }
       }
 
@@ -131,7 +119,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setRole((userObj.role || response.role || 'EMPLOYEE') as Role);
       localStorage.setItem('foodeez_user', JSON.stringify(userObj));
       
-      await fetchEmployeeId(userObj, setUser);
+      if (userObj.role === 'EMPLOYEE') {
+        await fetchEmployeeId(userObj, setUser);
+      }
       
       return {
         success: true,

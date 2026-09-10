@@ -1,0 +1,113 @@
+PHASE D3 - DASHBOARD STATIC PLACEHOLDER/DEFAULT VALUES
+IMPLEMENTATION REPORT
+
+Date
+----
+2026-09-04
+
+Exact files changed
+-------------------
+
+- src/modules/dashboard/AdminDashboard.tsx
+- src/modules/dashboard/HRDashboard.tsx
+- src/modules/dashboard/ManagerDashboard.tsx
+- src/modules/dashboard/EmployeeDashboard.tsx
+- PHASE_D3_DASHBOARD_STATIC_PLACEHOLDER_IMPLEMENTATION_REPORT.text
+
+No backend, API service, authorization, routing, Leave, Attendance, Employees,
+Employee 360, schema, migration, or unrelated module files were changed.
+
+Changes made
+------------
+
+AdminDashboard:
+- Removed simulated financial chart generation based on employee count and
+  Math.random(). The existing chart area now clearly displays that financial
+  history is not available because no supported historical financial API data
+  is loaded by this Dashboard.
+- Removed the calculated attrition approximation and its fabricated trend. The
+  card now shows Not available / Not provided.
+- Kept the real employee count and new-hire count from the existing employee
+  API request.
+- Renamed the WFH-derived Active Projects card to Active WFH Arrangements,
+  accurately reflecting the existing API-backed data without inventing project
+  data.
+- Payroll Cost now shows actual calculated payroll data only when the existing
+  payroll collection is populated; otherwise it shows Not available. Existing
+  payroll API error handling remains visible through the D2 banner.
+
+HRDashboard:
+- Replaced hardcoded Attendance Today 92% and 8% up text with a percentage
+  derived from the existing attendance API records for the current day.
+- Shows Not available when no current-day records exist and Error when the
+  attendance API reports an error.
+- All existing employee, WFH, leave, helpdesk, and attendance loading/error
+  behavior remains in place.
+
+ManagerDashboard:
+- Removed the fallback 88% team-attendance value. The card now shows actual
+  attendance-derived data or Not available.
+- Removed hardcoded task metric defaults and fabricated task chart values;
+  Active Tasks, Completed Tasks, and Task Progress now show Not available when
+  the backend provides no task data.
+- Removed random productivity scores and mock employee fallback from the
+  performance section; unsupported performance data now shows Not available.
+- Replaced the hardcoded 7/10 task value in the team table with Not provided.
+- Existing API-backed team member counts remain unchanged.
+
+EmployeeDashboard:
+- Replaced hardcoded Goals Progress 72% and Q1 objective text with Not
+  available / Not provided by the API because no goals endpoint/data is used.
+
+Successful behavior and loading
+-------------------------------
+
+- Existing API-backed successful values remain unchanged.
+- Existing loading states remain unchanged.
+- Existing D2 error banners and error-state behavior remain unchanged.
+- D1 role-based Dashboard routing and visibility remain unchanged.
+- No new calculations were introduced for unsupported metrics. The only new
+  calculation is the HR current-day attendance percentage from already-loaded
+  attendance API records.
+
+Tests
+-----
+
+Command:
+- npx.cmd vitest run src/modules/dashboard/DashboardRouter.test.tsx
+- Result: PASS, 1 test file and 9 tests passed.
+
+The existing focused Dashboard test confirms SUPER_ADMIN, CEO, HR,
+FINANCE_MANAGER, IT_MANAGER, SALES_MANAGER, and EMPLOYEE routing, plus unknown
+role and unauthenticated behavior. No Dashboard component test harness exists,
+so no new testing framework or rendering harness was added.
+
+Build
+-----
+
+- npm.cmd run build
+- Result: PASS.
+
+Existing warnings were not changed:
+- /index.css does not exist at build time.
+- The generated JavaScript chunk is larger than 500 kB.
+
+Diagnostics
+-----------
+
+No diagnostics were reported for:
+- AdminDashboard.tsx
+- HRDashboard.tsx
+- ManagerDashboard.tsx
+- EmployeeDashboard.tsx
+
+Non-impact confirmation
+-----------------------
+
+- Backend APIs were untouched.
+- Authorization and JWT behavior were untouched.
+- D1 routing and role-specific Dashboard behavior were preserved.
+- Leave, Attendance APIs, Employees, Employee 360, and business logic were
+  untouched.
+- No new endpoint or fake metric was introduced.
+- Existing unrelated dirty-worktree changes were preserved.

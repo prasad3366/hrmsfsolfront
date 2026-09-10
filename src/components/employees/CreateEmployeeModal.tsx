@@ -6,7 +6,7 @@ import ApiService, { CreateEmployeeDto } from '../../services/api';
 interface CreateEmployeeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (employee: any) => void;
+  onSuccess: (employee: any) => void | Promise<void>;
   mode?: 'create' | 'edit';
   initialData?: Partial<CreateEmployeeDto>;
   employeeId?: number;
@@ -100,7 +100,28 @@ const getStatusBadgeClass = (status: string): string => {
   return 'bg-blue-100 text-blue-700 border border-blue-300';
 };
 
+const formatStatusLabel = (status?: string): string => {
+  if (status === 'ACTIVE') return 'Active';
+  if (status === 'INACTIVE') return 'Inactive';
+  if (status === 'ON_LEAVE') return 'On Leave';
+  return status ?? '';
+};
+
 const getResetFormData = (): CreateEmployeeDto => normalizeDto();
+
+const normalizeOptionalNumber = (value: number | string | undefined): number | null => {
+  if (value === '' || value == null) return null;
+  return Number(value);
+};
+
+const normalizeUpdatePayload = (data: CreateEmployeeDto): Partial<CreateEmployeeDto> => ({
+  ...data,
+  currentExperience: normalizeOptionalNumber(data.currentExperience),
+  age: normalizeOptionalNumber(data.age),
+  dateOfJoining: data.dateOfJoining || null as any,
+  dateOfBirth: data.dateOfBirth || null as any,
+  dateOfExit: data.dateOfExit || null as any,
+});
 
 export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
   isOpen,
@@ -148,7 +169,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
   const submitEmployee = async () => {
     if (mode === 'edit') {
       if (!employeeId) throw new Error('Employee ID is required for update');
-      return ApiService.updateEmployee(employeeId, formData);
+      return ApiService.updateEmployee(employeeId, normalizeUpdatePayload(formData));
     }
     return ApiService.createEmployee(formData);
   };
@@ -184,7 +205,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
         setFormData(getResetFormData());
       }
 
-      onSuccess(response);
+      await onSuccess(response);
       setTimeout(() => {
         onClose();
         setSuccessMessage('');
@@ -398,10 +419,13 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                       disabled={isSubmitting}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     >
-                      <option value="EMPLOYEE">Employee</option>
-                      <option value="MANAGER">Manager</option>
+                      <option value="SUPER_ADMIN">Super Admin</option>
+                      <option value="CEO">CEO</option>
                       <option value="HR">HR</option>
-                      <option value="ADMIN">Admin</option>
+                      <option value="FINANCE_MANAGER">Finance Manager</option>
+                      <option value="IT_MANAGER">IT Manager</option>
+                      <option value="SALES_MANAGER">Sales Manager</option>
+                      <option value="EMPLOYEE">Employee</option>
                     </select>
                   </div>
                 </div>
@@ -471,7 +495,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-xs font-semibold text-blue-700 mb-2">Status Change:</p>
                     <div className="flex items-center gap-2 text-xs text-blue-600">
-                      <span className="px-2 py-1 bg-white border border-blue-200 rounded">{originalData.status}</span>
+                      <span className="px-2 py-1 bg-white border border-blue-200 rounded">{formatStatusLabel(originalData.status)}</span>
                       <span className="text-blue-700">→</span>
                       <span className={`px-2 py-1 rounded font-semibold ${
                         formData.status === 'INACTIVE' 
@@ -480,7 +504,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                           ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
                           : 'bg-blue-100 text-blue-700 border border-blue-300'
                       }`}>
-                        {formData.status}
+                        {formatStatusLabel(formData.status)}
                       </span>
                     </div>
                     {formData.status === 'INACTIVE' && (

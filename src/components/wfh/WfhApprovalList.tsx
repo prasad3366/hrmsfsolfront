@@ -8,6 +8,11 @@ interface WfhApprovalListProps {
   requests: WfhRequest[];
   isLoading: boolean;
   onRefresh: () => void;
+  approveWfh?: ReturnType<typeof useWfh>['approveWfh'];
+  rejectWfh?: ReturnType<typeof useWfh>['rejectWfh'];
+  isSubmitting?: boolean;
+  error?: string | null;
+  success?: string | null;
 }
 
 interface ConfirmDialogState {
@@ -21,8 +26,18 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
   requests,
   isLoading,
   onRefresh,
+  approveWfh,
+  rejectWfh,
+  isSubmitting,
+  error,
+  success,
 }) => {
-  const { approveWfh, rejectWfh, isSubmitting, error, success } = useWfh();
+  const hook = useWfh();
+  const approveRequest = approveWfh ?? hook.approveWfh;
+  const rejectRequest = rejectWfh ?? hook.rejectWfh;
+  const submitting = isSubmitting ?? hook.isSubmitting;
+  const mutationError = error ?? hook.error;
+  const mutationSuccess = success ?? hook.success;
   const { addNotification } = useNotifications();
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
     isOpen: false,
@@ -63,14 +78,14 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
 
     try {
       if (confirmDialog.action === 'approve') {
-        await approveWfh(confirmDialog.requestId);
+        await approveRequest(confirmDialog.requestId);
         addNotification({
           type: 'wfh_approved',
           title: 'WFH Request Approved',
           message: `${confirmDialog.employeeName}'s work from home request has been approved.`,
         });
       } else {
-        await rejectWfh(confirmDialog.requestId);
+        await rejectRequest(confirmDialog.requestId);
         addNotification({
           type: 'wfh_rejected',
           title: 'WFH Request Rejected',
@@ -120,6 +135,10 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
     });
   };
 
+  const getEmployeeName = (request: WfhRequest) => request.employee
+    ? `${request.employee.firstName} ${request.employee.lastName}`.trim()
+    : (request as WfhRequest & { employeeName?: string }).employeeName || 'Unknown';
+
   const getButtonLabel = () => {
     if (confirmDialog.action === 'approve') {
       return 'Approve';
@@ -146,15 +165,15 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
   return (
     <>
       {/* Messages */}
-      {error && (
+      {mutationError && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-          {error}
+          {mutationError}
         </div>
       )}
 
-      {success && (
+      {mutationSuccess && (
         <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
-          {success}
+          {mutationSuccess}
         </div>
       )}
 
@@ -190,9 +209,7 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
                 className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
               >
                 <td className="px-6 py-4 text-sm text-gray-900 font-medium">
-                  {request.employee
-                    ? `${request.employee.firstName} ${request.employee.lastName}`
-                    : 'Unknown'}
+                  {getEmployeeName(request)}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-600">
                   {request.employee?.department || '-'}
@@ -209,11 +226,11 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
                   {getStatusBadge(request.status)}
                 </td>
                 <td className="px-6 py-4 text-sm">
-                  {request.status === 'PENDING' ? (
+                  {request.status?.toUpperCase() === 'PENDING' ? (
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleApproveClick(request)}
-                        disabled={isSubmitting}
+                        disabled={submitting}
                         className="inline-flex items-center gap-1 px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100 disabled:opacity-50 transition-colors text-sm font-medium"
                       >
                         <CheckCircle size={14} />
@@ -221,7 +238,7 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
                       </button>
                       <button
                         onClick={() => handleRejectClick(request)}
-                        disabled={isSubmitting}
+                        disabled={submitting}
                         className="inline-flex items-center gap-1 px-3 py-1 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors text-sm font-medium"
                       >
                         <XCircle size={14} />
@@ -259,21 +276,21 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
                 onClick={() =>
                   setConfirmDialog({ isOpen: false, action: null, requestId: null, employeeName: '' })
                 }
-                disabled={isSubmitting}
+                disabled={submitting}
                 className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:bg-gray-100 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmAction}
-                disabled={isSubmitting}
+                disabled={submitting}
                 className={`flex-1 px-4 py-2 text-white rounded-lg transition-colors ${
                   confirmDialog.action === 'approve'
                     ? 'bg-green-600 hover:bg-green-700 disabled:bg-green-400'
                     : 'bg-red-600 hover:bg-red-700 disabled:bg-red-400'
                 }`}
               >
-                {isSubmitting ? 'Processing...' : getButtonLabel()}
+                {submitting ? 'Processing...' : getButtonLabel()}
               </button>
             </div>
           </div>

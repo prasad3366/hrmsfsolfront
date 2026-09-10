@@ -16,10 +16,20 @@ import Recruitment from './modules/recruitment/Recruitment';
 import Assets from './modules/assets/Assets';
 import Documents from './modules/documents/Documents';
 import Helpdesk from './modules/helpdesk/Helpdesk';
+import Wfh from './modules/wfh/Wfh';
+import { WFH_ROLES } from './modules/wfh/wfh-roles';
+import Holidays from './modules/holidays/Holidays';
+import { HOLIDAY_MANAGEMENT_ROLES } from './modules/holidays/holidays-roles';
+import Training from './modules/training/Training';
+import PerformanceManagement from './modules/performance/PerformanceManagement';
+import AnnouncementsPage from './pages/AnnouncementsPage';
+import ReportsPage from './pages/ReportsPage';
+import SettingsPage from './pages/SettingsPage';
+import { REPORTS_ROLES } from './modules/reports/reports-roles';
 import { Construction } from 'lucide-react';
 
 // Protected Route Wrapper
-const ProtectedRoute = ({ children, allowedRoles }: { children?: React.ReactNode, allowedRoles?: string[] }) => {
+const ProtectedRoute = ({ children, allowedRoles }: { children?: React.ReactNode, allowedRoles?: readonly string[] }) => {
   const { user, isLoading } = useAuth();
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading FooDeeZ...</div>;
@@ -60,13 +70,13 @@ const AppRoutes = () => {
         } />
         
         <Route path="employees" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'HR', 'MANAGER']}>
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER']}>
             <EmployeeList />
           </ProtectedRoute>
         } />
 
         <Route path="employees/:id" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'HR', 'MANAGER', 'EMPLOYEE']}>
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE']}>
             <EmployeeProfile />
           </ProtectedRoute>
         } />
@@ -78,49 +88,61 @@ const AppRoutes = () => {
         } />
 
         <Route path="employee-attendance" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'HR', 'MANAGER']}>
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER']}>
             <EmployeeAttendance />
           </ProtectedRoute>
         } />
 
         <Route path="leave" element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE']}>
             <LeaveManagement />
           </ProtectedRoute>
         } />
 
+        <Route path="wfh" element={
+          <ProtectedRoute allowedRoles={WFH_ROLES}>
+            <Wfh />
+          </ProtectedRoute>
+        } />
+
         <Route path="payroll" element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'EMPLOYEE']}>
             <Payroll />
           </ProtectedRoute>
         } />
 
         <Route path="team" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'HR', 'MANAGER']}>
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER']}>
             <TeamManagement />
           </ProtectedRoute>
         } />
 
         <Route path="recruitment" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'HR']}>
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER']}>
             <Recruitment />
           </ProtectedRoute>
         } />
 
         <Route path="assets" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'HR']}>
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER', 'FINANCE_MANAGER', 'EMPLOYEE']}>
             <Assets />
           </ProtectedRoute>
         } />
 
+        <Route path="holidays" element={
+          <ProtectedRoute allowedRoles={[...HOLIDAY_MANAGEMENT_ROLES, 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE']}>
+            <Holidays />
+          </ProtectedRoute>
+        } />
+
         {/* Placeholders for remaining modules */}
-        <Route path="performance" element={<ProtectedRoute><PlaceholderModule title="Performance" /></ProtectedRoute>} />
-        <Route path="documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
+        <Route path="performance" element={<ProtectedRoute><PerformanceManagement /></ProtectedRoute>} />
+        <Route path="documents" element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'EMPLOYEE']}><Documents /></ProtectedRoute>} />
         <Route path="helpdesk" element={<ProtectedRoute><Helpdesk /></ProtectedRoute>} />
-        <Route path="training" element={<ProtectedRoute><PlaceholderModule title="Training" /></ProtectedRoute>} />
-        <Route path="announcements" element={<ProtectedRoute><PlaceholderModule title="Announcements" /></ProtectedRoute>} />
-        <Route path="reports" element={<ProtectedRoute><PlaceholderModule title="Reports" /></ProtectedRoute>} />
-        <Route path="settings" element={<ProtectedRoute><PlaceholderModule title="Settings" /></ProtectedRoute>} />
+        <Route path="training" element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE']}><Training /></ProtectedRoute>} />
+        <Route path="announcements" element={<ProtectedRoute><AnnouncementsPage /></ProtectedRoute>} />
+        <Route path="reports" element={<ProtectedRoute allowedRoles={REPORTS_ROLES}><ReportsPage /></ProtectedRoute>} />
+        <Route path="settings" element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR']}><SettingsPage /></ProtectedRoute>} />
       </Route>
 
       {/* Catch all - redirect to login */}

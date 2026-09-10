@@ -1,0 +1,55 @@
+PHASE 5 — REMAINING MANAGER ROLE REFERENCE AUDIT (READ ONLY)
+
+Scope:
+- Read-only audit of remaining MANAGER references in the frontend
+- Focused only on the immediate prior prompt
+- No source code, API, auth, or UI logic changed
+
+Date:
+- 2026-09-02
+
+Summary:
+This review covers the remaining manager-related checks after the broader role-model remediation. The purpose was to determine whether any remaining MANAGER references are stale legacy logic or intentional business rules.
+
+Files reviewed:
+- src/components/team/CreateTeamModal.tsx
+- src/components/team/AddMembersModal.tsx
+
+1) CreateTeamModal.tsx
+Finding:
+- The code filters manager candidates using MANAGER-only checks, such as:
+  - emp.user?.role === 'MANAGER' || emp.role === 'MANAGER'
+- This is a real frontend role-selection issue under the approved role model.
+- It can exclude valid manager-capable roles such as IT_MANAGER and SALES_MANAGER from the team-manager dropdown.
+
+Assessment:
+- This is not an intentional auth gate.
+- It is a stale UI candidate filter that can block valid team-manager assignment.
+- It is therefore the primary remaining risk.
+
+Verdict:
+- REQUIRES TARGETED FIX
+
+2) AddMembersModal.tsx
+Finding:
+- The code excludes MANAGER employees from the available-member list using logic like:
+  - emp.user?.role !== 'MANAGER' && emp.role !== 'MANAGER'
+- This appears to be an intentional business filter for team-membership selection, not an authorization check.
+- It does not determine whether the user may access the module; it only filters selectable employees.
+
+Assessment:
+- This is likely safe to leave as-is unless product rules explicitly say that IT_MANAGER / SALES_MANAGER should also be excluded from ordinary team-member assignment.
+
+Verdict:
+- SAFE TO LEAVE
+
+Final verdict:
+REQUIRES TARGETED FIX
+
+Reason:
+- The manager-selection logic in CreateTeamModal.tsx is stale and can hide valid IT_MANAGER / SALES_MANAGER users from being assigned as team managers.
+- The member-filtering logic in AddMembersModal.tsx is a non-authorization UI filter and is not a backend access issue.
+
+Important note:
+- This audit was intentionally read-only and did not modify the codebase.
+- Only the immediate prior prompt is included here; the earlier broader audit is intentionally excluded.

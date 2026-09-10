@@ -6,12 +6,13 @@ import ApiService from '../../services/api';
 interface AssignAssetModalProps {
   isOpen: boolean;
   assetId?: number;
+  mode?: 'assign' | 'reassign';
   isLoading?: boolean;
   onClose: () => void;
   onSubmit: (data: { assetId: number; employeeId: number }) => Promise<void>;
 }
 
-export const AssignAssetModal = ({ isOpen, assetId, isLoading, onClose, onSubmit }: AssignAssetModalProps) => {
+export const AssignAssetModal = ({ isOpen, assetId, mode = 'assign', isLoading, onClose, onSubmit }: AssignAssetModalProps) => {
   const [employeeId, setEmployeeId] = useState('');
   const [employees, setEmployees] = useState<any[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
@@ -23,7 +24,7 @@ export const AssignAssetModal = ({ isOpen, assetId, isLoading, onClose, onSubmit
       ApiService.getAllEmployees()
         .then((data) => {
           // Filter to show only ACTIVE employees
-          const activeEmployees = (data || []).filter(
+          const activeEmployees = (data?.data || []).filter(
             (emp) => emp.status?.toUpperCase() === 'ACTIVE'
           );
           setEmployees(activeEmployees);
@@ -57,7 +58,7 @@ export const AssignAssetModal = ({ isOpen, assetId, isLoading, onClose, onSubmit
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-md border-0 shadow-xl">
         <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
-          <CardTitle>Assign Asset</CardTitle>
+          <CardTitle>{mode === 'reassign' ? 'Reassign Asset' : 'Assign Asset'}</CardTitle>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-700">
             <X size={20} />
           </button>
@@ -84,7 +85,7 @@ export const AssignAssetModal = ({ isOpen, assetId, isLoading, onClose, onSubmit
                   <option value="">-- Select Employee --</option>
                   {employees.map((emp) => (
                     <option key={emp.id || emp.user?.id} value={emp.id || emp.user?.id}>
-                      {emp.firstName ? `${emp.firstName} ${emp.lastName}` : emp.name} ({emp.user?.email || emp.email})
+                      {emp.firstName ? `${emp.firstName} ${emp.lastName}` : emp.name}
                     </option>
                   ))}
                 </select>
@@ -102,7 +103,7 @@ export const AssignAssetModal = ({ isOpen, assetId, isLoading, onClose, onSubmit
                 Cancel
               </Button>
               <Button type="submit" className="flex-1" disabled={isLoading || loadingEmployees}>
-                {isLoading ? 'Assigning...' : 'Assign'}
+                {isLoading ? (mode === 'reassign' ? 'Reassigning...' : 'Assigning...') : (mode === 'reassign' ? 'Reassign' : 'Assign')}
               </Button>
             </div>
           </form>

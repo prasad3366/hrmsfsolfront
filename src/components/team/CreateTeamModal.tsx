@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTeam } from '../../hooks/useTeam';
-import ApiService, { CreateTeamDto } from '../../services/api';
+import ApiService, { CreateTeamDto, EmployeeDirectoryResponse } from '../../services/api';
 import {
   Card,
   CardContent,
@@ -17,6 +17,22 @@ interface CreateTeamModalProps {
   onClose: () => void;
   onSuccess?: (team?: any) => void;
 }
+
+const managerRoles = new Set(['IT_MANAGER', 'SALES_MANAGER']);
+
+export const getCreateTeamCandidates = (response: EmployeeDirectoryResponse) => {
+  const allEmployees = response.data;
+  return {
+    managers: allEmployees.filter((employee) => {
+      const role = (employee.user?.role ?? employee.role ?? '').toString().toUpperCase();
+      return managerRoles.has(role);
+    }),
+    employees: allEmployees.filter((employee) => {
+      const role = (employee.user?.role ?? employee.role ?? '').toString().toUpperCase();
+      return !managerRoles.has(role);
+    }),
+  };
+};
 
 export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
   isOpen,
@@ -35,7 +51,7 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
   const [loadingData, setLoadingData] = useState(false);
 
-  const canCreateTeams = user?.role === 'ADMIN' || user?.role === 'HR';
+  const canCreateTeams = ['SUPER_ADMIN', 'CEO', 'HR'].includes(user?.role ?? '');
   const hasFetchedOnOpen = useRef(false);
 
   useEffect(() => {
@@ -56,18 +72,9 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
   const fetchManagersAndEmployees = async () => {
     setLoadingData(true);
     try {
-      const allEmployees = await ApiService.getAllEmployees();
-      
-      // Filter managers (employees with MANAGER role)
-      const managerList = allEmployees.filter(emp => 
-        emp.user?.role === 'MANAGER' || emp.role === 'MANAGER'
-      );
-      
-      // Filter non-manager employees
-      const employeeList = allEmployees.filter(emp => 
-        !(emp.user?.role === 'MANAGER' || emp.role === 'MANAGER')
-      );
-      
+      const response = await ApiService.getAllEmployees() as EmployeeDirectoryResponse;
+      const { managers: managerList, employees: employeeList } = getCreateTeamCandidates(response);
+
       console.log('📋 [CreateTeamModal.fetchManagersAndEmployees] Managers:', managerList.length);
       console.log('📋 [CreateTeamModal.fetchManagersAndEmployees] Employees:', employeeList.length);
       

@@ -1,0 +1,299 @@
+A-5 FRONTEND ASSET ASSIGNMENT CONTRACT REPORT
+==============================================
+
+Scope
+-----
+Frontend inspected:
+C:\Users\GANESH\Desktop\hrms\frontened\finalhrmsfront
+
+Backend reference requested:
+C:\Users\GANESH\Desktop\hrms\backend\fsolback\hrms
+
+No frontend or backend files were modified while producing this report.
+
+1. Exact executable frontend files containing the contract
+----------------------------------------------------------
+
+1. src/services/api.ts
+   - Defines AssignAssetDto.
+   - Defines AssetAssignment.
+   - Defines Asset status typing.
+   - Implements assignAsset().
+   - Implements returnAsset().
+
+2. src/hooks/useAssets.ts
+   - Exposes assignAsset().
+   - Calls ApiService.assignAsset().
+   - Refreshes the asset list after assignment.
+   - Exposes returnAsset().
+   - Calls ApiService.returnAsset().
+   - Refreshes the asset list after return.
+
+3. src/modules/assets/Assets.tsx
+   - Renders the executable asset management page.
+   - Renders Assign for assets without assignedTo.
+   - Renders Return for assets with assignedTo.
+   - Calls the assignment and return hook methods.
+
+4. src/components/assets/AssignAssetModal.tsx
+   - Provides the assignment UI.
+   - Loads active employees.
+   - Submits assetId and employeeId.
+
+5. src/components/assets/CreateAssetModal.tsx
+   - Supports optional assignment during asset creation.
+   - Uses assignedTo in the asset creation body.
+
+6. src/App.tsx
+   - Registers the executable /assets route for SUPER_ADMIN, CEO, and HR.
+
+2. Exact endpoint, method, and body expected
+---------------------------------------------
+
+Assignment endpoint:
+
+POST /api/assets/assign
+
+Request body:
+
+{
+  "assetId": number,
+  "employeeId": number
+}
+
+Frontend type:
+
+interface AssignAssetDto {
+  assetId: number;
+  employeeId: number;
+}
+
+The frontend serializes the assignment object directly with JSON.stringify().
+The assignment request does not contain assignedTo.
+
+Expected assignment response type:
+
+interface AssetAssignment {
+  id: number;
+  assetId: number;
+  employeeId: number;
+  assignedAt: string;
+  returnedAt?: string;
+}
+
+Return endpoint:
+
+PUT /api/assets/return/{assetId}
+
+Request body:
+
+None.
+
+Asset creation endpoint:
+
+POST /api/assets
+
+Asset creation may include:
+
+{
+  "name": string,
+  "description": string,
+  "assignedTo": number
+}
+
+The assignedTo field is used only by the create-asset flow. There is no
+existing assignment request body containing both assetId and assignedTo.
+
+3. Does /assets/assign already exist in executable frontend code?
+------------------------------------------------------------------
+
+Yes.
+
+src/services/api.ts contains ApiService.assignAsset(), which executes:
+
+fetch(`${API_BASE_URL}/assets/assign`, {
+  method: 'POST',
+  headers: this.getAuthHeaders(),
+  body: JSON.stringify(assignment),
+});
+
+The method is called by useAssets(), and the Assets page calls that hook from
+its assignment handler. The page is registered at /assets in App.tsx.
+
+4. Exact current frontend expectation for assignment/reassignment
+------------------------------------------------------------------
+
+The current frontend expects an asset assignment to be initiated with:
+
+POST /api/assets/assign
+
+{
+  "assetId": <asset id>,
+  "employeeId": <employee id>
+}
+
+The assignment UI is a modal titled Assign Asset. It selects an active
+employee and submits the selected employee's numeric ID as employeeId.
+
+There is no separate reassignment contract. There is no reassignment endpoint,
+no reassignment request body, and no assignment-history UI in the executable
+frontend.
+
+5. Current support for asset operations
+---------------------------------------
+
+Assigning an unassigned asset:
+
+SUPPORTED.
+
+Assets.tsx renders Assign when:
+
+asset.status !== 'RETURNED' && !asset.assignedTo
+
+The modal then submits assetId and employeeId to POST /assets/assign.
+
+Reassigning an assigned asset:
+
+NOT SUPPORTED by the current executable frontend.
+
+When an asset has assignedTo, the page does not show Assign or Reassign. It
+shows only Return. There is no UI for selecting a replacement employee while
+the asset remains assigned.
+
+Returning an asset:
+
+SUPPORTED.
+
+Assets.tsx renders Return when:
+
+asset.status !== 'RETURNED' && asset.assignedTo
+
+The frontend sends PUT /assets/return/{assetId} with no request body.
+
+After either assignment or return, useAssets() refreshes the asset list.
+
+6. Can A-5 preserve the current frontend contract?
+---------------------------------------------------
+
+YES.Our document upload form is completely unresponsive on click and failing with 401 errors. Please rewrite the upload handler and modal form binding.
+
+--- FRONTEND FIXES ---
+1. **Attach Bearer Token**:
+   - Ensure every Axios/Fetch call extracts the JWT token (`localStorage.getItem('token')`) and adds the header:
+     `Authorization: Bearer ${token}`
+
+2. **Fix Unresponsive Upload Button**:
+   - Bind the submission directly to the form: `<form onSubmit={handleUploadSubmit}>`.
+   - Add explicit logging at the start of `handleUploadSubmit`:
+     `console.log('Upload initiated', { selectedFile, documentType });`
+   - Alert the user if no file is selected instead of silently exiting.
+
+3. **FormData Payload**:
+   ```typescript
+   const handleUploadSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+     if (!selectedFile) return alert('Please select a file');
+
+     const formData = new FormData();
+     formData.append('file', selectedFile);
+     formData.append('documentType', documentType || 'GENERAL');
+     if (employeeId) formData.append('employeeId', String(employeeId));
+
+     try {
+       const token = localStorage.getItem('token');
+       await axios.post('http://localhost:3000/api/documents/upload', formData, {
+         headers: {
+           Authorization: `Bearer ${token}`,
+         },
+       });
+       alert('Upload successful!');
+       refreshDocuments();
+     } catch (err) {
+       console.error('Upload error:', err);
+       alert('Upload failed. Check console for details.');
+     }
+   };
+
+A-5 can preserve the existing frontend contract by retaining:
+
+POST /api/assets/assign
+
+with this body:
+
+{
+  "assetId": number,
+  "employeeId": number
+}
+
+The existing return contract should also remain compatible:
+
+PUT /api/assets/return/{assetId}
+
+Introducing a different body based on assignedTo for the assignment endpoint
+would not preserve the current executable frontend contract.
+
+7. Compatibility issues with AVAILABLE status
+----------------------------------------------
+
+The frontend Asset type in src/services/api.ts currently declares:
+
+status: 'ASSIGNED' | 'RETURNED';
+
+Adding AVAILABLE as a backend status creates a TypeScript type mismatch until
+the frontend type is updated.
+
+At runtime, Assets.tsx has a fallback status badge labeled Unassigned. An
+AVAILABLE asset with no assignedTo would therefore likely display as Unassigned
+and meet the existing Assign-button condition. However, AVAILABLE is not part
+of the declared frontend status union.
+
+The current UI also treats RETURNED as terminal:
+
+- RETURNED assets do not show Assign.
+- RETURNED assets do not show Return.
+
+Therefore, if A-5 uses AVAILABLE to represent a reusable unassigned asset,
+the backend must preserve response fields and assignment behavior expected by
+the existing frontend, or the frontend type and terminal-status logic must be
+updated in a later coordinated change.
+
+8. Compatibility issues with reassignment history
+--------------------------------------------------
+
+The current frontend supports only the current assignment fields:
+
+- assignedTo
+- assignedAt
+- returnedAt
+- status
+
+It does not consume assignment-history records and has no history endpoint or
+history display.
+
+A backend reassignment-history implementation can be added without breaking
+the current frontend if:
+
+- POST /assets/assign remains available with assetId and employeeId.
+- The current asset response fields remain compatible.
+- Existing return behavior remains available.
+- Additional history data is additive rather than replacing current fields.
+
+The current frontend will ignore any new history data and will continue to
+require the current asset to be returned before another assignment can be
+started through the UI.
+
+Final determination
+-------------------
+
+An executable frontend contract DOES exist.
+
+The contract is:
+
+POST /api/assets/assign
+Body: { assetId: number, employeeId: number }
+
+The frontend supports assigning an unassigned asset and returning an assigned
+asset. It does not support reassigning an assigned asset. A-5 should preserve
+the assignment endpoint and body, and should treat AVAILABLE and assignment
+history as additive backend changes unless a coordinated frontend contract
+change is intentionally introduced.

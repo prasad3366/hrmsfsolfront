@@ -41,8 +41,8 @@ const CreateHolidayModal: React.FC<CreateHolidayModalProps> = ({
         location: '',
       });
       onClose();
-    } catch (error) {
-      console.error('Failed to create holiday', error);
+    } catch {
+      return;
     }
   };
 

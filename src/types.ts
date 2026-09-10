@@ -1,4 +1,11 @@
-export type Role = 'ADMIN' | 'HR' | 'MANAGER' | 'EMPLOYEE' | 'FINANCE';
+export type Role =
+  | 'SUPER_ADMIN'
+  | 'CEO'
+  | 'HR'
+  | 'FINANCE_MANAGER'
+  | 'IT_MANAGER'
+  | 'SALES_MANAGER'
+  | 'EMPLOYEE';
 
 export interface User {
   id: string;

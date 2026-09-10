@@ -17,6 +17,7 @@ import { useWfh } from '../../hooks/useWfh';
 import { useHolidays } from '../../hooks/useHolidays';
 import { useNotifications } from '../../context/NotificationContext';
 import { usePayroll } from '../../hooks/usePayroll';
+import { WfhApprovalList } from '../../components/wfh/WfhApprovalList';
 
 const StatCard = ({ title, value, icon: Icon, trend, subtext, color = "blue", delay = 0 }: any) => {
   const colors: Record<string, string> = {
@@ -75,7 +76,8 @@ const AdminDashboard = () => {
   const [recentJoiners, setRecentJoiners] = useState<any[]>([]);
   const [totalEmployees, setTotalEmployees] = useState<number | null>(null);
   const [newHiresCount, setNewHiresCount] = useState<number>(0);
-  const { wfhRequests, fetchAllWfhRequests } = useWfh();
+  const [employeeError, setEmployeeError] = useState<string | null>(null);
+  const { wfhRequests, fetchAllWfhRequests, approveWfh, rejectWfh, isAllLoading, allError, isSubmitting, success, error: wfhError } = useWfh();
 
   const isEmployeeActive = (emp: any) => {
     const status = (emp.status || emp.user?.status || '').toString().toUpperCase();
@@ -88,7 +90,7 @@ const AdminDashboard = () => {
 
   const { addNotification } = useNotifications();
   const { createHoliday, isSubmitting: isHolidaySubmitting } = useHolidays();
-  const { payrolls: allPayrolls } = usePayroll();
+  const { payrolls: allPayrolls, error: payrollError } = usePayroll();
 
   const handleHolidayCreated = async (data: any) => {
     try {
@@ -106,10 +108,10 @@ const AdminDashboard = () => {
   // Fetch dynamic employee counts
   useEffect(() => {
     let mounted = true;
-    ApiService.getAllEmployees()
-      .then((data) => {
+    ApiService.getAllEmployees({ page: 1, pageSize: 1000 })
+      .then((response) => {
         if (mounted === false) return;
-        const list = data || [];
+        const list = Array.isArray(response) ? response : response?.data ?? [];
         const activeEmployees = list.filter(isEmployeeActive);
         setTotalEmployees(activeEmployees.length);
 
@@ -141,6 +143,7 @@ const AdminDashboard = () => {
       })
       .catch((err) => {
         console.error('Failed to fetch employees for dashboard', err);
+        setEmployeeError(err instanceof Error ? err.message : 'Failed to load employee metrics');
         setTotalEmployees(null);
         setNewHiresCount(0);
         setRecentJoiners([]);
@@ -160,7 +163,7 @@ const AdminDashboard = () => {
   // Calculate payroll cost and month-over-month trend
   const { totalPayrollCost, payrollTrend } = useMemo(() => {
     if (allPayrolls == null || allPayrolls.length === 0) {
-      return { totalPayrollCost: 0, payrollTrend: '0%' };
+      return { totalPayrollCost: null, payrollTrend: null };
     }
 
     const now = new Date();
@@ -196,9 +199,9 @@ const AdminDashboard = () => {
     };
   }, [allPayrolls]);
 
-  // Calculate active projects (using approved WFH requests as active work arrangements)
-  const { activeProjects, newProjects } = useMemo(() => {
-    if (wfhRequests == null) return { activeProjects: 0, newProjects: 0 };
+  // Display approved WFH arrangements without relabeling them as projects.
+  const { activeWfhArrangements, newWfhArrangements } = useMemo(() => {
+    if (wfhRequests == null) return { activeWfhArrangements: 0, newWfhArrangements: 0 };
 
     const now = new Date();
     const approvedWfh = wfhRequests.filter(
@@ -212,49 +215,14 @@ const AdminDashboard = () => {
     });
 
     return {
-      activeProjects: approvedWfh.length,
-      newProjects: recentlyApproved.length,
+      activeWfhArrangements: approvedWfh.length,
+      newWfhArrangements: recentlyApproved.length,
     };
   }, [wfhRequests]);
 
-  // Calculate attrition rate (placeholder calculation based on employee count trend)
-  const { attritionRate, attritionTrend } = useMemo(() => {
-    // Simulate attrition rate based on employee data
-    // In a real system, this would come from employee historical data
-    // For now, calculate based on employee count stability
-    const baseRate = totalEmployees && totalEmployees > 0 ? (newHiresCount / totalEmployees) * 100 : 0;
-    
-    // Attrition is roughly inverse to hiring (simplified model)
-    const rate = Math.max(0, (100 - baseRate) * 0.1);
-    const trend = rate > 2 ? '0.5%' : '-0.2%';
-
-    return {
-      attritionRate: rate.toFixed(1),
-      attritionTrend: trend,
-    };
-  }, [totalEmployees, newHiresCount]);
-
-  // Generate dynamic financial chart data
-  const adminChartData = useMemo(() => {
-    const currentMonth = new Date().getMonth();
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-    
-    return months.map((month, index) => {
-      // Generate some realistic-looking data based on employee count
-      const baseRevenue = totalEmployees ? totalEmployees * 8000 : 40000;
-      const baseExpense = totalEmployees ? totalEmployees * 6000 : 24000;
-      
-      // Add some variation
-      const revenueVariation = (Math.random() - 0.5) * 0.3; // ±15%
-      const expenseVariation = (Math.random() - 0.5) * 0.2; // ±10%
-      
-      return {
-        name: month,
-        revenue: Math.round(baseRevenue * (1 + revenueVariation)),
-        expense: Math.round(baseExpense * (1 + expenseVariation))
-      };
-    });
-  }, [totalEmployees]);
+  const attritionRate = 'Not available';
+  const attritionTrend = 'Not provided';
+  const adminChartData: any[] = [];
 
   // Show notification when there are pending WFH requests
   useEffect(() => {
@@ -304,7 +272,7 @@ const AdminDashboard = () => {
       }} className="cursor-pointer">
         <StatCard
           title="Total Employees"
-          value={totalEmployees !== null ? String(totalEmployees.toLocaleString()) : '—'}
+          value={employeeError ? '0' : totalEmployees !== null ? String(totalEmployees.toLocaleString()) : '0'}
           icon={Users}
           trend="up"
           subtext={`${newHiresCount} new`}
@@ -312,9 +280,9 @@ const AdminDashboard = () => {
           delay={0}
         />
       </div>
-      <StatCard title="Payroll Cost" value={`$${(totalPayrollCost / 1000000).toFixed(1)}M`} icon={DollarSign} trend="up" subtext={payrollTrend} color="green" delay={100} />
-      <StatCard title="Active Projects" value={String(activeProjects)} icon={Layers} trend="up" subtext={`${newProjects} new`} color="purple" delay={200} />
-      <StatCard title="Attrition Rate" value={`${attritionRate}%`} icon={Activity} trend="down" subtext={attritionTrend} color="rose" delay={300} />
+      <StatCard title="Payroll Cost" value={payrollError || totalPayrollCost == null ? '$0.00' : `$${(totalPayrollCost / 1000000).toFixed(1)}M`} icon={DollarSign} trend={payrollTrend ? 'up' : null} subtext={payrollError || totalPayrollCost == null ? 'No payroll data generated yet' : payrollTrend} color="green" delay={100} />
+      <StatCard title="Active WFH Arrangements" value={wfhError ? '0' : String(activeWfhArrangements)} icon={Layers} trend="up" subtext={`${newWfhArrangements} new`} color="purple" delay={200} />
+      <StatCard title="Attrition Rate" value={attritionRate} icon={Activity} trend={null} subtext={attritionTrend} color="rose" delay={300} />
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -328,7 +296,11 @@ const AdminDashboard = () => {
         </CardHeader>
         <CardContent className="pt-6">
           <div className="h-[280px] w-full min-h-[220px] min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
+            {adminChartData.length === 0 ? (
+              <div className="flex h-full items-center justify-center rounded-xl border border-slate-100 bg-white px-6 text-center text-sm text-slate-500">
+                No payroll data generated yet
+              </div>
+            ) : <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={adminChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
@@ -344,6 +316,7 @@ const AdminDashboard = () => {
                 <Area type="monotone" dataKey="expense" stroke="#EF4444" fillOpacity={0} strokeWidth={2.5} strokeDasharray="4 4" />
               </AreaChart>
             </ResponsiveContainer>
+            }
           </div>
         </CardContent>
       </Card>
@@ -395,6 +368,25 @@ const AdminDashboard = () => {
       </div>
     </div>
 
+    <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
+      <CardHeader className="pb-4 border-b">
+        <CardTitle className="text-base">Requests for your scope</CardTitle>
+        <p className="text-xs text-slate-500 mt-1">Review employee work from home requests</p>
+      </CardHeader>
+      <CardContent className="pt-6">
+        <WfhApprovalList
+          requests={wfhRequests}
+          isLoading={isAllLoading}
+          onRefresh={fetchAllWfhRequests}
+          approveWfh={approveWfh}
+          rejectWfh={rejectWfh}
+          isSubmitting={isSubmitting}
+          error={allError}
+          success={success}
+        />
+      </CardContent>
+    </Card>
+
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
          <Card className="border shadow-sm hover:shadow-md transition-shadow" hoverEffect>
             <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
@@ -411,7 +403,7 @@ const AdminDashboard = () => {
                         </TableRow>
                     </TableHeader>
                     <tbody>
-                        {recentJoiners.map(emp => (
+                        {employeeError ? <TableRow><TableCell colSpan={3} className="text-center text-sm text-slate-500">No employee data available.</TableCell></TableRow> : recentJoiners.map(emp => (
                             <TableRow key={emp.id} className="hover:bg-slate-50 transition-colors">
                                 <TableCell className="py-3">
                                     <span className="text-sm font-medium text-slate-900">{emp.firstName} {emp.lastName}</span>

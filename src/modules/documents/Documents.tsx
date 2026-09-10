@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import api from '../../services/api';
+import api, { EmployeeDirectoryResponse } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationContext';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../../components/ui/components';
 
 const Documents = () => {
   const { user, role } = useAuth();
+  const { addNotification } = useNotifications();
   const [employeeId, setEmployeeId] = useState<number | undefined>(() => {
-    const n = Number(user?.id);
-    return Number.isInteger(n) ? n : undefined;
+    const n = Number(user?.employeeId);
+    return Number.isInteger(n) && n > 0 ? n : undefined;
   });
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | undefined>(undefined);
   const [employeeList, setEmployeeList] = useState<any[]>([]);
@@ -17,18 +19,28 @@ const Documents = () => {
   const [page, setPage] = useState(1);
   const perPage = 10; // number of rows per page
 
-  const [files, setFiles] = useState<Record<string, File | null>>({});
+  const [selectedFiles, setSelectedFiles] = useState<Record<number, File>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rejectionDocumentId, setRejectionDocumentId] = useState<number | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionError, setRejectionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedFiles({});
+    setPage(1);
+  }, [employeeId, selectedEmployeeId]);
 
   const fetchEmployeeList = async () => {
     try {
-      const list = await api.getAllEmployees();
+      const response = await api.getAllEmployees() as EmployeeDirectoryResponse;
+      const list = response.data;
       setEmployeeList(list || []);
       if (selectedEmployeeId == null && list?.length > 0) {
         setSelectedEmployeeId(list[0].id);
       }
     } catch (e: any) {
+      setError(e.message || 'Failed to load employee list');
       console.error('Failed to fetch employee list', e);
     }
   };
@@ -37,16 +49,16 @@ const Documents = () => {
     const init = async () => {
       // try to resolve employee id from JWT-derived user info
       if (employeeId == null && user) {
-        const maybeId = Number((user as any).employeeId || user.id);
-        if (Number.isInteger(maybeId)) setEmployeeId(maybeId);
+        const maybeId = Number((user as any).employeeId);
+        if (Number.isInteger(maybeId) && maybeId > 0) setEmployeeId(maybeId);
       }
 
-      if (role === 'HR' || role === 'ADMIN') {
+      if (['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '')) {
         await fetchEmployeeList();
       }
 
       // fetch lists
-      const loadForId = (role === 'HR' || role === 'ADMIN') ? selectedEmployeeId : employeeId;
+      const loadForId = (['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '')) ? selectedEmployeeId : employeeId;
       if (loadForId) {
         setSelectedEmployeeId(loadForId);
         await fetchRequired();
@@ -60,11 +72,16 @@ const Documents = () => {
   }, [employeeId, selectedEmployeeId, role, user]);
 
   const getCurrentEmployeeId = (): number | undefined => {
-    if (role === 'HR' || role === 'ADMIN') {
+    if (['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '')) {
       return selectedEmployeeId || employeeId;
     }
     return employeeId;
   };
+
+  const hasUploadableDocumentType = required.some((document) => {
+    const id = Number(document.id);
+    return Number.isInteger(id) && id > 0;
+  });
 
   const getDocumentStatusVariant = (status: string): 'success' | 'warning' | 'danger' | 'default' => {
     switch (status) {
@@ -135,8 +152,8 @@ const Documents = () => {
     setError(null);
     setEmployeeId(undefined);
     try {
-      const maybeId = Number((user as any).employeeId || user?.id);
-      if (Number.isInteger(maybeId)) setEmployeeId(maybeId);
+      const maybeId = Number((user as any).employeeId);
+      if (Number.isInteger(maybeId) && maybeId > 0) setEmployeeId(maybeId);
     } catch (err) {
       console.error('retryResolve error:', err);
     } finally {
@@ -144,7 +161,15 @@ const Documents = () => {
     }
   };
 
-  const onFileChange = (docTypeId: number | string, f?: File) => setFiles((s) => ({ ...s, [docTypeId]: f || null }));
+  const handleFileChange = (documentTypeId: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFiles((current) => ({
+        ...current,
+        [documentTypeId]: e.target.files![0],
+      }));
+      console.log('File captured:', e.target.files[0].name);
+    }
+  };
 
   const handleApprove = async (documentId: number) => {
     try {
@@ -158,13 +183,42 @@ const Documents = () => {
     }
   };
 
-  const handleReject = async (documentId: number) => {
+  const handleReject = (documentId: number) => {
+    setRejectionDocumentId(documentId);
+    setRejectionReason('');
+    setRejectionError(null);
+  };
+
+  const closeRejectionDialog = () => {
+    if (loading) return;
+    setRejectionDocumentId(null);
+    setRejectionReason('');
+    setRejectionError(null);
+  };
+
+  const submitRejection = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const normalizedReason = rejectionReason.trim();
+
+    if (!normalizedReason) {
+      setRejectionError('Rejection reason is required.');
+      return;
+    }
+
+    if (rejectionDocumentId == null) return;
+
     try {
       setLoading(true);
-      await api.updateDocumentStatus(documentId, 'REJECTED', role || '');
-      fetchDocuments();
+      await api.updateDocumentStatus(
+        rejectionDocumentId,
+        'REJECTED',
+        role || '',
+        normalizedReason,
+      );
+      await fetchDocuments();
+      closeRejectionDialog();
     } catch (e: any) {
-      alert(e.message || 'Failed to reject');
+      setRejectionError(e.message || 'Failed to reject');
     } finally {
       setLoading(false);
     }
@@ -185,28 +239,76 @@ const Documents = () => {
     }
   };
 
-  const handleUpload = async () => {
-    const targetId = getCurrentEmployeeId();
-    if (targetId == null) return alert('Employee id not detected. Contact HR.');
-    const docIds: number[] = [];
-    const uploadFiles: File[] = [];
-    for (const r of required) {
-      if ((r as any).virtual) continue; // skip synthetic fallback docs because id is not known
-      const f = files[r.id];
-      if (f) {
-        docIds.push(r.id);
-        uploadFiles.push(f);
-      }
-    }
-    if (uploadFiles.length === 0) return alert('Please choose files to upload');
+  const handleDownload = async (documentId: number, fileName?: string) => {
     try {
       setLoading(true);
-      await api.uploadDocuments(targetId, docIds, uploadFiles);
-      alert('Uploaded');
-      setFiles({});
-      fetchDocuments();
+      const { blob, fileName: responseFileName } = await api.downloadDocumentFile(documentId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = responseFileName || fileName || `document-${documentId}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
     } catch (e: any) {
-      alert(e.message || 'Upload failed');
+      alert(e.message || 'Failed to download file');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUploadSubmit = async (
+    e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    e.preventDefault();
+
+    const selectedEntries = required
+      .map((document) => Number(document.id))
+      .filter((documentTypeId) => Number.isInteger(documentTypeId) && documentTypeId > 0)
+      .map((documentTypeId) => ({ documentTypeId, file: selectedFiles[documentTypeId] }))
+      .filter((entry): entry is { documentTypeId: number; file: File } => Boolean(entry.file));
+
+    if (selectedEntries.length === 0) {
+      setError('Please select a file before uploading.');
+      alert('Please select a file');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const targetId = getCurrentEmployeeId();
+      if (!targetId || !Number.isInteger(targetId) || targetId <= 0) {
+        setError('Employee profile is not available. Please try again after your profile loads.');
+        alert('Employee profile is not available. Please try again after your profile loads.');
+        return;
+      }
+
+      console.log('Uploading document through the EmployeeDocument endpoint', {
+        employeeId: targetId,
+        documentTypeIds: selectedEntries.map((entry) => entry.documentTypeId),
+        fileNames: selectedEntries.map((entry) => entry.file.name),
+      });
+
+      await api.uploadDocuments(
+        targetId,
+        selectedEntries.map((entry) => entry.documentTypeId),
+        selectedEntries.map((entry) => entry.file),
+      );
+
+      setError(null);
+      setSelectedFiles({});
+      await fetchDocuments();
+      alert('Upload successful!');
+      addNotification({
+        type: 'other',
+        title: 'Documents uploaded',
+        message: 'The documents were uploaded successfully and the list was refreshed.',
+      });
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      setError(err?.message || 'Upload failed.');
+      alert('Upload failed. Check console for details.');
     } finally {
       setLoading(false);
     }
@@ -233,7 +335,7 @@ const Documents = () => {
             })()}
           </div>
 
-          {(role === 'HR' || role === 'ADMIN') && (
+          {['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '') && (
             <div className="mb-4">
               <label htmlFor="selectEmployee" className="text-xs font-medium text-slate-600 mb-1 block">Select Employee</label>
               <select
@@ -266,35 +368,49 @@ const Documents = () => {
             </div>
           )}
 
-          <h4 className="font-semibold mb-2">Required Documents</h4>
-          {required.length === 0 ? (
-            <div className="text-sm text-slate-500">No required documents found.</div>
-          ) : (
-            required.map((r) => (
-              <div key={`${r.id}-${r.name}`} className="flex items-center gap-3 mb-2">
-                <div className="flex-1">
-                  {r.name}
-                  {r.virtual && (
-                    <span className="ml-2 text-xs text-rose-600">
-                      (added as experienced-only fallback)
+          <form onSubmit={(e) => handleUploadSubmit(e)}>
+            <h4 className="font-semibold mb-2">Required Documents</h4>
+            {!hasUploadableDocumentType ? (
+              <div className="text-sm text-slate-500">
+                No applicable document types are configured for this employee. Upload is unavailable.
+              </div>
+            ) : (
+              required.filter((document) => Number(document.id) > 0).map((r) => (
+                <div key={`${r.id}-${r.name}`} className="flex items-center gap-3 mb-2">
+                  <div className="flex-1">
+                    {r.name}
+                    {r.virtual && (
+                      <span className="ml-2 text-xs text-rose-600">
+                        (added as experienced-only fallback)
+                      </span>
+                    )}
+                  </div>
+
+                  <input
+                    key={`${r.id}-${getCurrentEmployeeId()}`}
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                    onChange={(e) => handleFileChange(Number(r.id), e)}
+                  />
+                  {selectedFiles[Number(r.id)] && (
+                    <span className="text-xs text-slate-600">
+                      {selectedFiles[Number(r.id)].name}
                     </span>
                   )}
                 </div>
+              ))
+            )}
 
-                <input
-                  type="file"
-                  onChange={(e) => {
-                    const fileKey = r.virtual ? 'virtual-relieving' : r.id;
-                    onFileChange(fileKey, e.target.files?.[0]);
-                  }}
-                />
-              </div>
-            ))
-          )}
-
-          <div className="mt-4">
-            <Button onClick={handleUpload} disabled={loading}>{loading ? 'Uploading...' : 'Upload Documents'}</Button>
-          </div>
+            <div className="mt-4">
+              <Button
+                type="button"
+                onClick={(e) => void handleUploadSubmit(e)}
+                disabled={loading || !hasUploadableDocumentType}
+              >
+                {loading ? 'Uploading...' : 'Upload Documents'}
+              </Button>
+            </div>
+          </form>
         </CardContent>
       </Card>
 
@@ -314,7 +430,7 @@ const Documents = () => {
                   <th>Document</th>
                   <th>File</th>
                   <th>Status</th>
-                  {(role === 'HR' || role === 'ADMIN') && <th>Action</th>}
+                  {['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '') && <th>Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -324,20 +440,28 @@ const Documents = () => {
                     <td className="p-2">{d.documentType?.name || d.documentTypeId}</td>
                     <td className="p-2 flex items-center gap-4">
                       <span>{d.fileName}</span>
-                      {(role === 'HR' || role === 'ADMIN') && (
-                        <Button size="xs" variant="outline" className="flex items-center gap-1 ml-4" onClick={() => handleView(d.id)}>
+                      {['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '') && (
+                        <div className="flex flex-wrap items-center gap-2 ml-4">
+                        <Button size="xs" variant="outline" className="flex items-center gap-1" onClick={() => handleView(d.id)}>
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                           View
                         </Button>
+                        <Button size="xs" variant="outline" onClick={() => handleDownload(d.id, d.fileName)}>Download</Button>
+                        </div>
                       )}
                     </td>
-                    <td className="p-2 flex items-center gap-2">
+                    <td className="p-2">
                       <Badge variant={getDocumentStatusVariant(d.status)}>{d.status}</Badge>
+                      {d.status === 'REJECTED' && (d.remarks || d.rejectionReason) && (
+                        <div className="mt-1 text-xs text-rose-700">
+                          Reason: {d.remarks || d.rejectionReason}
+                        </div>
+                      )}
                     </td>
-                    {(role === 'HR' || role === 'ADMIN') && (
+                    {['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '') && (
                       <td className="p-2">
                         {d.status === 'PENDING' && (
                           <div className="flex gap-1">
@@ -373,6 +497,45 @@ const Documents = () => {
           </>)}
         </CardContent>
       </Card>
+
+      {rejectionDocumentId != null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">Reject document</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Provide a reason for rejecting this document.
+            </p>
+            <form onSubmit={submitRejection} className="mt-4">
+              <label htmlFor="rejectionReason" className="block text-sm font-medium text-slate-700">
+                Rejection reason
+              </label>
+              <textarea
+                id="rejectionReason"
+                value={rejectionReason}
+                onChange={(e) => {
+                  setRejectionReason(e.target.value);
+                  if (rejectionError) setRejectionError(null);
+                }}
+                rows={4}
+                autoFocus
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                placeholder="Enter the rejection reason"
+              />
+              {rejectionError && (
+                <p className="mt-1 text-sm text-rose-600">{rejectionError}</p>
+              )}
+              <div className="mt-4 flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={closeRejectionDialog} disabled={loading}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="danger" disabled={loading}>
+                  {loading ? 'Rejecting...' : 'Reject document'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

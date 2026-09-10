@@ -37,7 +37,7 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
   const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
 
-  const canManageTeam = user?.role === 'ADMIN' || user?.role === 'HR';
+  const canManageTeam = ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER'].includes(user?.role ?? '');
 
   useEffect(() => {
     if (isOpen) {

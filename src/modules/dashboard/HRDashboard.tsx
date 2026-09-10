@@ -166,17 +166,19 @@ const HRDashboard = () => {
   const { user } = useAuth();
   const [totalEmployees, setTotalEmployees] = useState<number | null>(null);
   const [newHiresCount, setNewHiresCount] = useState<number>(0);
+  const [employeeError, setEmployeeError] = useState<string | null>(null);
   const [isCreateHolidayOpen, setIsCreateHolidayOpen] = useState(false);
   const [attendanceTab, setAttendanceTab] = useState<'inside' | 'outside' | 'wfh'>('inside');
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getWeekStartDate);
   
-  const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests } = useWfh();
+  const { wfhRequests, isLoading: isWfhLoading, fetchAllWfhRequests, error: wfhError } = useWfh();
   const activeWfhRequests = filterActiveWfhRequests(wfhRequests);
   const { holidays, isSubmitting: isHolidaySubmitting, fetchHolidaysByYear, createHoliday, deleteHoliday } = useHolidays();
-  const { pendingLeaves, fetchPendingLeaves, approveLeave } = useLeave();
+  const { pendingLeaves, fetchPendingLeaves, approveLeave, error: leaveError } = useLeave();
   const { addNotification } = useNotifications();
-  const { records: attendanceRecords, isLoading: isAttendanceLoading } = useAttendance({ scope: 'all' });
+  const { records: attendanceRecords, isLoading: isAttendanceLoading, error: attendanceError } = useAttendance({ scope: 'all' });
   const [helpdeskTickets, setHelpdeskTickets] = useState<HelpdeskTicket[]>([]);
+  const [helpdeskError, setHelpdeskError] = useState<string | null>(null);
 
   // Track employees for name resolution
   const [employeeMap, setEmployeeMap] = useState<Record<string, string>>({});
@@ -288,6 +290,7 @@ const normalizeHelpdeskStatus = (status?: string) => {
           localStorage.setItem('foodeez_helpdesk_tickets', JSON.stringify(merged));
         } catch (apiErr) {
           console.warn('Failed to fetch from API, using localStorage only:', apiErr);
+          setHelpdeskError(apiErr instanceof Error ? apiErr.message : 'Failed to load helpdesk tickets');
           // If API fails, just use localStorage
           if (localTickets.length === 0) {
             setHelpdeskTickets([]);
@@ -295,6 +298,7 @@ const normalizeHelpdeskStatus = (status?: string) => {
         }
       } catch (err) {
         console.error('Failed to load helpdesk tickets for HR dashboard:', err);
+        setHelpdeskError(err instanceof Error ? err.message : 'Failed to load helpdesk tickets');
         setHelpdeskTickets([]);
       }
     };
@@ -333,9 +337,9 @@ const normalizeHelpdeskStatus = (status?: string) => {
   useEffect(() => {
     let mounted = true;
     ApiService.getAllEmployees()
-      .then((data) => {
+      .then((response) => {
         if (mounted === false) return;
-        const list = data || [];
+        const list = Array.isArray(response) ? response : response?.data ?? [];
         const activeEmployees = list.filter(isEmployeeActive);
         setTotalEmployees(activeEmployees.length);
 
@@ -365,6 +369,7 @@ const normalizeHelpdeskStatus = (status?: string) => {
       })
       .catch((err) => {
         console.error('Failed to fetch employees for dashboard', err);
+        setEmployeeError(err instanceof Error ? err.message : 'Failed to load employee metrics');
         setTotalEmployees(null);
         setNewHiresCount(0);
       });
@@ -518,6 +523,14 @@ const normalizeHelpdeskStatus = (status?: string) => {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [attendanceRecords]);
 
+  const attendanceToday = useMemo(() => {
+    const today = new Date().toDateString();
+    const todayRecords = attendanceRecords.filter((record) => new Date(record.date).toDateString() === today);
+    if (todayRecords.length === 0) return null;
+    const present = todayRecords.filter((record) => record.status === 'PRESENT' || (record.punchIn && !record.punchOut)).length;
+    return Math.round((present / todayRecords.length) * 100);
+  }, [attendanceRecords]);
+
   return (
   <div className="space-y-8">
     {/** Stat cards - clicking Total Employees navigates to the employee list */}
@@ -540,7 +553,7 @@ const normalizeHelpdeskStatus = (status?: string) => {
       <StatCard title="Active WFH Approvals" value={String(activeWfhRequests.length)} icon={Briefcase} trend="up" subtext="currently approved" color="purple" delay={100} />
       <StatCard title="Pending Leaves" value={pendingLeaves.length} icon={Clock} trend="down" subtext="awaiting review" color="orange" delay={200} />
       <StatCard title="Pending Helpdesk Tickets" value={String(helpdeskTickets.filter((ticket) => normalizeHelpdeskStatus(ticket.status) === 'Pending').length)} icon={AlertTriangle} trend="down" subtext="awaiting HR review" color="rose" delay={250} onClick={() => navigate('/helpdesk')} />
-      <StatCard title="Attendance Today" value="92%" icon={CheckCircle} trend="up" subtext="8% up" color="green" delay={300} />
+      <StatCard title="Attendance Today" value={attendanceError ? 'N/A' : attendanceToday == null ? 'N/A' : `${attendanceToday}%`} icon={CheckCircle} trend={attendanceToday == null ? null : 'up'} subtext={attendanceToday == null ? 'Unavailable' : 'Current API data'} color="green" delay={300} />
     </div>
 
     <div>

@@ -1,0 +1,55 @@
+PHASE 5 — PROMPT 13: VERIFY PREVIOUS FIXES ONLY — READ ONLY
+
+Scope:
+- Verify only the CURRENT workspace state.
+- Do not modify any files.
+- Do not fix anything.
+- Do not perform a general frontend audit.
+- Do not rely on earlier audit text.
+
+Verified files (current workspace state):
+- src/App.tsx
+- src/components/layout/Sidebar.tsx
+- src/modules/payroll/Payroll.tsx
+- src/modules/leave/LeaveManagement.tsx
+- src/modules/documents/Documents.tsx
+- src/modules/team/Team.tsx
+- src/modules/employees/EmployeeList.tsx
+
+VERIFICATION TABLE
+
+| Module | Expected current state | Actual current state | PASS/FAIL |
+|---|---|---|---|
+| Payroll | App.tsx route should allow SUPER_ADMIN, CEO, HR, FINANCE_MANAGER, EMPLOYEE; Sidebar should show payroll for HR, FINANCE_MANAGER, and EMPLOYEE; IT_MANAGER/SALES_MANAGER should not see payroll management buttons; EMPLOYEE self-service should remain. | App.tsx route is allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'EMPLOYEE']}. Sidebar has payroll only in HR/admin branch, FINANCE_MANAGER branch, and employee default branch. Payroll.tsx shouldShowManagementButtons() is ['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER']; IT_MANAGER/SALES_MANAGER are excluded. Employee self-service remains by using user.employeeId to fetch that employee's payroll details. | PASS |
+| Team | Sidebar should show Team for SUPER_ADMIN, CEO, HR, IT_MANAGER, SALES_MANAGER; FINANCE_MANAGER/EMPLOYEE hidden; App route should allow the same set. | Sidebar getLinks() includes teamLink in HR branch and IT_MANAGER/SALES_MANAGER branch; FINANCE_MANAGER case returns only Dashboard + payroll; employee default branch does not include Team. App.tsx route uses allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER']}. | PASS |
+| Assets | App.tsx route should be narrowed to SUPER_ADMIN/CEO/HR only; Sidebar should expose Assets only to HR/admin; no invented manager scope. | App.tsx route is allowedRoles={['SUPER_ADMIN', 'CEO', 'HR']}. Sidebar HR/admin branch includes Assets; IT_MANAGER/SALES_MANAGER branch does not include Assets; FINANCE_MANAGER branch does not include Assets. No manager-scoped Assets route was added. | PASS |
+| Leave | App.tsx route should allow SUPER_ADMIN, CEO, HR, IT_MANAGER, SALES_MANAGER, EMPLOYEE; FINANCE_MANAGER should not be in management controls; EMPLOYEE self-service preserved. | App.tsx route is allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE']}. LeaveManagement.tsx defines canManageLeave and canApproveLeave as ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER']; FINANCE_MANAGER is excluded. Employee-side apply/leave-balance flows still use the current employee data. | PASS |
+| Documents | Search Documents.tsx should no longer use ADMIN/MANAGER role checks; current management gate should be ['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? ''). | Documents.tsx uses ['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '') in the initialization and role-based document fetching logic. No ADMIN or MANAGER legacy checks are present in the current file. | PASS |
+| Employees | Current route/sidebar should remain as approved; no client-side team filtering added. | App.tsx employee route allows ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER']; Sidebar includes Employees in HR/admin and IT_MANAGER/SALES_MANAGER branches, but not FINANCE_MANAGER or EMPLOYEE. EmployeeList.tsx shows canManageEmployees only for ['SUPER_ADMIN', 'CEO', 'HR']; there is no added frontend team filtering or manager-only employee scoping logic in the file. | PASS |
+
+1. ONLY GENUINELY REMAINING ISSUES
+
+None in the six previously completed fixes.
+
+The current workspace state matches the expected results for:
+- Payroll
+- Team
+- Assets
+- Leave
+- Documents
+- Employees
+
+2. WHETHER PHASE 5 REQUIRES ANOTHER CODE FIX
+
+No — not for the previously completed fixes listed in this prompt.
+
+The current files already reflect the fixes described in the earlier Phase 5 work.
+
+3. MINIMUM EXACT FILE/CHANGE NEEDED
+
+None.
+
+No additional code change is required for the previously fixed modules based on the current workspace state.
+
+Verification note:
+This conclusion is based on direct inspection of the current files, without modifying any code or relying on prior audit text.
