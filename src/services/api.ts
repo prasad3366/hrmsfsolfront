@@ -2400,14 +2400,6 @@ class ApiService {
       console.debug('Failed employee fallback (employees/me)', error);
     }
 
-    // Fallback: Use getAllEmployees if user has permission (requires ADMIN/HR/MANAGER)
-    try {
-      const list = await this.getAllEmployees();
-      const found = list.find((e: any) => String(e.id) === String(id) || String(e.userId) === String(id) || String(e.user?.id) === String(id));
-      if (found) return found;
-    } catch (error) {
-      console.debug('Failed to fallback to getAllEmployees', error);
-    }
 
     throw new Error(`Employee with ID ${id} not found`);
   }
