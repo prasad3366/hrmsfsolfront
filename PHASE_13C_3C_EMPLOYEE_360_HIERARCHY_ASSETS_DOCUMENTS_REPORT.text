@@ -1,0 +1,82 @@
+PHASE 13C-3C - EMPLOYEE 360 HIERARCHY + ASSETS + DOCUMENTS REPORT
+
+Scope
+-----
+Implemented only Team/Reporting Hierarchy, Assets, and Documents in the existing EmployeeProfile Employee 360 tab structure. Personal, Employment, Contact, Attendance, and Leave tabs remain present. Payroll and Performance were not added.
+
+Exact files changed for this phase
+-----------------------------------
+- src/modules/employees/EmployeeProfile.tsx
+- src/services/api.ts
+- PHASE_13C_3C_EMPLOYEE_360_HIERARCHY_ASSETS_DOCUMENTS_REPORT.text
+
+APIs used
+---------
+- ApiService.getEmployee360Hierarchy(Number(employee.id))
+  GET /employees/:id/360/hierarchy
+- ApiService.getEmployee360Assets(Number(employee.id))
+  GET /employees/:id/360/assets
+- ApiService.getEmployee360Documents(Number(employee.id))
+  GET /employees/:id/360/documents
+
+The profile uses no broad employee API for these sections, no organization-wide asset/document API, and no document file download method. Employee IDs come from the loaded profile record. No client-supplied role, teamId, or managerId is used for access decisions; backend authorization remains authoritative.
+
+UI sections added
+-----------------
+- Hierarchy tab: Team, Manager, Manager Designation, Reporting Relationship.
+- Assets tab: Asset ID, Name, Description, Assigned Date, Status.
+- Documents tab: document filename, MIME type, status, and uploaded date metadata.
+
+Security and data exclusions
+----------------------------
+Hierarchy:
+- Only safe organizational projection fields are rendered.
+- No frontend authorization logic or client-trusted team/manager identity is introduced.
+
+Assets:
+- Only the requested safe metadata is rendered.
+- Internal ownership identifiers such as assignedTo and nested user data are not displayed.
+- Existing asset assignment/edit functionality outside the Employee 360 profile was not changed.
+
+Documents:
+- Metadata only is rendered from the safe 360 document projection.
+- fileData, binary/base64 content, raw document URLs, signed/public download URLs, rejection remarks, and other document content are neither requested nor rendered.
+- No download/view control was added.
+- Existing document functionality outside the profile remains unchanged.
+
+Loading, empty, and error states
+--------------------------------
+Each new section has independent state handling:
+- Hierarchy: loading, API error, no hierarchy information, and successful metadata.
+- Assets: loading, API error, no assets assigned, and successful metadata.
+- Documents: loading, API error, no documents available, and successful metadata.
+
+API failures set the section data to null and render an error message rather than an empty-state message.
+
+Preserved functionality
+-----------------------
+- Existing Personal, Employment, Contact, Attendance, and Leave tabs remain.
+- Existing safe base profile loading remains unchanged.
+- Existing Edit action still loads detailed employee data only when Edit is opened.
+- Existing Give Raise behavior remains unchanged.
+- Existing profile routing and self/target behavior remain unchanged.
+- No Payroll or Performance UI was added.
+
+Tests and validation
+--------------------
+- Existing focused frontend suite: passed, 11/11 tests.
+- EmployeeProfile.tsx and api.ts diagnostics: no errors.
+- Full TypeScript check: three pre-existing unrelated errors remain:
+  1. src/components/ui/components.tsx: onKeyDown handler element type mismatch.
+  2. src/modules/leave/LeaveManagement.tsx: LeaveType has no type property at two usages.
+- Production build: passed successfully with Vite.
+- Existing build warnings remain for missing /index.css and a chunk larger than 500 kB.
+- No component-level tests were added because the project has no component test harness/testing-library dependency. Existing focused API tests cover the 360 endpoint methods and paths.
+
+Change-scope confirmation
+-------------------------
+- No backend files changed.
+- No Prisma/schema/migration files changed.
+- No new API endpoints were created.
+- No unrelated frontend source files were changed for this phase.
+- Existing unrelated worktree modifications were left untouched.

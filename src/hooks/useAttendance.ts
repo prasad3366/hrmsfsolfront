@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import ApiService, { AttendanceRecord, TodayAttendanceStatus } from '../services/api';
+import { useState, useEffect, useRef } from 'react';
+import ApiService, { AttendanceRecord, AttendanceHistoryResponse, TodayAttendanceStatus } from '../services/api';
 
 export interface UseAttendanceOptions {
   /**
@@ -10,6 +10,9 @@ export interface UseAttendanceOptions {
    */
   scope?: 'me' | 'all' | 'employee';
   employeeId?: number;
+  pageSize?: number;
+  month?: number;
+  year?: number;
 }
 
 export interface UseAttendanceReturn {
@@ -20,20 +23,43 @@ export interface UseAttendanceReturn {
   todayRecord: TodayAttendanceStatus | undefined;
   punchIn: (latitude?: number, longitude?: number) => Promise<void>;
   punchOut: (latitude?: number, longitude?: number) => Promise<void>;
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  setPage: (page: number) => void;
 }
 
 /**
  * Hook to fetch attendance records
  */
 export const useAttendance = (options: UseAttendanceOptions = {}): UseAttendanceReturn => {
-  const { scope = 'me', employeeId } = options;
+  const { scope = 'me', employeeId, pageSize = 10, month, year } = options;
 
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<AttendanceHistoryResponse['meta']>({
+    page: 1,
+    pageSize,
+    total: 0,
+    totalPages: 0,
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+  });
   const [todayRecord, setTodayRecord] = useState<TodayAttendanceStatus | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const fetchAttendance = async () => {
+    const requestId = ++requestIdRef.current;
+    if (scope === 'me' && (month !== undefined || year !== undefined) && page !== 1) {
+      setRecords([]);
+      setIsLoading(true);
+      setError(null);
+      setPage(1);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -44,23 +70,34 @@ export const useAttendance = (options: UseAttendanceOptions = {}): UseAttendance
       } else if (scope === 'employee' && typeof employeeId === 'number') {
         data = await ApiService.getEmployeeAttendance(employeeId);
       } else {
-        data = await ApiService.getMyAttendance();
+        const now = new Date();
+        const response = await ApiService.getMyAttendance(
+          month ?? now.getMonth() + 1,
+          year ?? now.getFullYear(),
+          page,
+          pageSize,
+        );
+        data = response.data;
+        setPagination(response.meta);
       }
 
+      if (requestId !== requestIdRef.current) return;
       setRecords(data);
 
       // Also refresh today record if available
       try {
         const today = await ApiService.getTodayStatus();
-        setTodayRecord(today ?? undefined);
+        if (requestId === requestIdRef.current) setTodayRecord(today ?? undefined);
       } catch (err) {
-        // If not available, just keep previous state
         console.warn('Failed to fetch today attendance status:', err);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch attendance');
+      if (requestId === requestIdRef.current) {
+        setTodayRecord(undefined);
+        setError(err instanceof Error ? err.message : 'Failed to fetch attendance');
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) setIsLoading(false);
     }
   };
 
@@ -96,7 +133,7 @@ export const useAttendance = (options: UseAttendanceOptions = {}): UseAttendance
 
   useEffect(() => {
     fetchAttendance();
-  }, [scope, employeeId]);
+  }, [scope, employeeId, page, pageSize, month, year]);
 
   return {
     records,
@@ -106,5 +143,10 @@ export const useAttendance = (options: UseAttendanceOptions = {}): UseAttendance
     todayRecord,
     punchIn,
     punchOut,
+    page,
+    pageSize: pagination.pageSize,
+    total: pagination.total,
+    totalPages: pagination.totalPages,
+    setPage,
   };
 };

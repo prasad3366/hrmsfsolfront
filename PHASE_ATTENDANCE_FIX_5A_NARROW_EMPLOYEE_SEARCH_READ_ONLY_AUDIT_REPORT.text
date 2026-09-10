@@ -1,0 +1,297 @@
+PHASE ATTENDANCE FIX 5A - NARROW EMPLOYEE SEARCH
+READ-ONLY IMPLEMENTATION AUDIT REPORT
+
+Date
+----
+2026-09-04
+
+Scope and limitation
+--------------------
+This audit covers only the EmployeeAttendance employee search/selector and
+the existing employee API mechanisms relevant to narrowing that search.
+
+No source, test, schema, migration, backend, authorization, or API files were
+modified. The current workspace contains the frontend project only. The
+backend-updates directory is empty; EmployeesController, EmployeesService,
+and AuthorizationService source are not available for direct inspection.
+Backend authorization conclusions therefore rely on the existing role-based
+audit evidence in this workspace plus the frontend endpoint contracts.
+
+Final verdict
+-------------
+SAFE TO IMPLEMENT FRONTEND + EXISTING BACKEND QUERY
+
+The existing GET /employees query contract already supports server-side
+search, filtering, sorting, page, and pageSize. EmployeeAttendance can reuse
+that existing endpoint with a search query and a bounded page size. No new
+endpoint, schema change, authorization change, or Employee 360 change is
+required by the available evidence.
+
+This is a frontend usage change against an existing backend query capability;
+the backend files required for implementation are none, provided the existing
+EmployeesController/EmployeesService query behavior is unchanged and applies
+the same authenticated-role scope documented by the prior audit.
+
+1. Exact current usage
+----------------------
+
+EmployeeAttendance.tsx calls ApiService.getAllEmployees() in its initial
+useEffect without a query object. ApiService constructs:
+
+- GET /employees
+
+The response is placed in the local employees array. The component then
+filters that array in the browser whenever searchTerm changes.
+
+Attendance.tsx does not use an employee collection. Its default useAttendance
+scope is "me", which calls the self-history and today-status endpoints.
+
+2. Minimum fields actually required by the UI
+----------------------------------------------
+
+Required identity fields:
+- id: selectedEmployee.id is converted to a number and sent to the
+  target-specific attendance, attendance-summary, and Employee 360 leave
+  calls.
+- firstName and lastName: used to render the employee name and search name
+  terms. The existing fallback also accepts name when present.
+- empCode: used in the result row, selected-employee label, and local search.
+
+Conditionally displayed:
+- designation: rendered at the right side of each search result and in the
+  selected employee report header.
+
+Not required by this component:
+- email
+- department
+- team/team membership
+- role
+- managerId
+- teamId
+- employeeId as an authorization or impersonation value
+
+The directory response may contain more fields, but EmployeeAttendance only
+needs a small identity projection for the visible workflow. The frontend must
+not treat any returned field as an authorization decision.
+
+3. Existing endpoint options
+----------------------------
+
+Option A: existing narrow endpoint
+- No existing target-independent identity-directory endpoint is exposed by
+  the frontend API service.
+- Employee 360 endpoints are target-specific: /employees/:id/360 and its
+  attendance/leave subpaths. They require an employee id before they can be
+  called and therefore cannot power the initial name/code search.
+- /employees/me is self-specific and cannot provide a manager's searchable
+  directory.
+- Result: Option A is not available.
+
+Option B: existing employee endpoint with a query parameter
+- ApiService.getAllEmployees(query) already accepts EmployeeDirectoryQuery:
+  search, department, status, sortBy, sortDirection, page, and pageSize.
+- EmployeeList.tsx already uses this contract with server-side search and
+  pagination and reads the response as EmployeeDirectoryResponse with data and
+  meta fields.
+- The smallest reuse is to call the same existing method from
+  EmployeeAttendance with search and a bounded page/pageSize, then use the
+  returned data rows for the selector.
+- The request must not include role, managerId, teamId, or an impersonating
+  employeeId.
+- Result: Option B satisfies the UI without an API or backend design change.
+
+Option C: new narrow endpoint
+- Not necessary on the available evidence.
+- Creating a second directory endpoint would duplicate employee-search logic
+  and create another authorization surface.
+- Result: reject Option C.
+
+4. Authorization and scoping
+----------------------------
+
+Frontend route
+- /employee-attendance allows SUPER_ADMIN, CEO, HR, IT_MANAGER, and
+  SALES_MANAGER.
+- EMPLOYEE and FINANCE_MANAGER are excluded from this report route.
+- This route guard is only a UI boundary; the backend must independently
+  authorize GET /employees and all selected-employee requests.
+
+Existing backend authorization evidence
+- The existing PHASE_5_ROLE_BASED_FUNCTIONAL_AUDIT reports backend
+  authorization based on the authenticated principal, with no confirmed
+  critical authorization bypass.
+- It reports organization-wide employee access for SUPER_ADMIN, CEO, and HR.
+- It reports IT_MANAGER and SALES_MANAGER access limited to their actual
+  assigned managed teams, including cross-team denial.
+- It reports EMPLOYEE self-only access and denial of employee-ID tampering.
+- It reports FINANCE_MANAGER as limited to permitted finance-related scopes.
+
+Expected behavior when reusing GET /employees with query parameters
+- SUPER_ADMIN: permitted organization-wide employee directory scope remains
+  unchanged.
+- CEO: permitted organization-wide employee directory scope remains
+  unchanged.
+- HR: permitted organization-wide employee directory scope remains unchanged.
+- FINANCE_MANAGER: existing Employees authorization remains unchanged; this
+  Attendance route does not newly grant access to the role.
+- IT_MANAGER: search operates only over employees the backend authorizes in
+  teams managed by that authenticated manager.
+- SALES_MANAGER: search operates only over employees the backend authorizes
+  in teams managed by that authenticated manager.
+- EMPLOYEE: no employee directory access; a client query cannot elevate this
+  role, and the frontend route already excludes it.
+
+Because backend source is absent, this audit cannot independently verify the
+exact EmployeesController/EmployeesService predicate implementation. The
+recommended reuse is safe only if the existing endpoint continues to apply
+those authenticated-role scopes, as established by the prior backend audit.
+
+5. Client input and authorization rules
+----------------------------------------
+
+The frontend request must send only legitimate query/search inputs, such as:
+- search: the user's typed name or employee code
+- page: the requested result page
+- pageSize: a bounded selector result size
+- optionally existing display filters/sort values, if the UI needs them
+
+The frontend must never send these as authorization claims:
+- role
+- managerId
+- teamId
+- an employeeId intended to impersonate another user
+
+The selected employee id is a resource identifier used after selection for
+GET /attendance/employee/:id, its summary endpoint, and
+GET /employees/:id/360/leave. It is not an authorization claim. Each backend
+endpoint must enforce whether the authenticated user may access that target.
+
+6. All-at-once versus server-side search
+------------------------------------------
+
+EmployeeAttendance does not need all employees loaded initially. It needs an
+identity directory sufficient to show matching results:
+- id
+- name
+- employee code
+- designation for display
+
+Server-side search is preferable because the current broad call transfers the
+whole default employee collection and performs filtering in the browser.
+Pagination is also appropriate, but it introduces one important UX decision:
+the current component displays only the loaded array and has no page controls.
+The implementation must either:
+- use a bounded page size that is explicitly sufficient for the selector, or
+- add a small result-pagination/load-more interaction in the same component.
+
+The existing server query should not be used with an unbounded or arbitrary
+10000-row fallback merely to preserve local filtering. That would retain the
+main performance concern and would not be a genuinely narrow implementation.
+
+7. Search UX and response-shape impact
+---------------------------------------
+
+Current behavior:
+- one collection request on mount
+- immediate local filtering while typing
+- no search request loading state
+- result list can include every row returned by the initial collection call
+
+Proposed reuse of the existing query:
+- request search results as searchTerm changes, preferably with basic request
+  cancellation or a small debounce to avoid stale-result races
+- parse EmployeeDirectoryResponse.data rather than assuming the response is a
+  raw array
+- preserve the current result fields, selection behavior, and selected id
+- show no-match and request-loading states consistently with the existing UI
+
+This changes network timing and the completeness of results per page, but it
+preserves the user-visible purpose: type a name/code, choose one employee,
+then view that employee's attendance and leave report. Employee 360 is not
+changed and remains the target-specific leave source.
+
+8. Exact minimal implementation boundary
+------------------------------------------
+
+Frontend files:
+- src/modules/attendance/EmployeeAttendance.tsx: replace the initial
+  unqueried collection load and local-only filtering with calls to the
+  existing getAllEmployees(EmployeeDirectoryQuery) contract; retain the
+  existing selection and target-specific report calls.
+- src/services/api.ts: no change required because getAllEmployees(query)
+  already serializes the supported query parameters. A response type cleanup
+  is optional, not required for the behavior change.
+
+Backend files:
+- none, assuming the existing EmployeesController/EmployeesService query
+  endpoint already enforces the established role scope.
+- Do not add an endpoint, authorization rule, DTO, schema field, or migration.
+
+Tests required:
+- update/add focused API or component coverage for GET /employees with
+  search, page, and bounded pageSize, including parsing data from the existing
+  EmployeeDirectoryResponse shape.
+- verify no role, managerId, teamId, or impersonating employeeId is added to
+  the request.
+- preserve existing tests for target attendance, summary, and Employee 360
+  leave paths.
+- backend authorization tests are required only if the backend query contract
+  or authorization implementation changes; this recommendation changes
+  neither.
+
+9. Explicit impact assessment
+------------------------------
+
+IT_MANAGER team scope
+- No intended change. Backend scope remains authoritative and search only
+  narrows the already-authorized result set.
+
+SALES_MANAGER team scope
+- No intended change. Cross-team data must remain denied by the backend.
+
+HR, CEO, SUPER_ADMIN access
+- No intended change. Their permitted organization-wide scope remains
+  available through the same endpoint.
+
+FINANCE_MANAGER access
+- No intended change. The route remains excluded, and no new role handling is
+  introduced.
+
+Employee 360
+- No change. The selected employee still loads leave through the existing
+  target-specific Employee 360 method.
+
+Employees module
+- No change to EmployeeList or its existing server-side pagination/filtering.
+  EmployeeAttendance reuses the same API contract only.
+
+Attendance authorization
+- No change to backend authorization. Target attendance and summary calls
+  remain unchanged; selected ids are still checked by the backend.
+
+Existing search UX
+- Purpose and result fields remain the same, but requests become server-side
+  and paginated. Loading/debounce behavior and page completeness need to be
+  handled deliberately in EmployeeAttendance.
+
+Conclusion
+----------
+
+The confirmed P2 issue is real as a broad data-loading/performance concern,
+but it does not require a new API. The safest existing mechanism is Option B:
+reuse GET /employees with its established search and pagination query contract,
+without sending role, managerId, teamId, or impersonating employeeId values.
+
+The recommended change is limited to
+src/modules/attendance/EmployeeAttendance.tsx, with focused frontend tests.
+No backend files are required unless a fresh backend checkout disproves that
+the existing query endpoint applies the established authenticated-role scope.
+
+Change-scope confirmation
+-------------------------
+
+- No source files modified.
+- No tests modified.
+- No backend, schema, or migration files modified.
+- No endpoint created.
+- Existing dirty worktree preserved.

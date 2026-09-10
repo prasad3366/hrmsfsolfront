@@ -109,7 +109,7 @@ const getFormattedSalaryValue = (
 
 const shouldShowManagementButtons = (role: string): boolean => {
   const upperRole = role?.toUpperCase();
-  return upperRole === 'HR' || upperRole === 'ADMIN' || upperRole === 'MANAGER';
+  return ['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER'].includes(upperRole);
 };
 
 const Payroll = () => {

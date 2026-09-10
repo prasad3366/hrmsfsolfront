@@ -1,0 +1,215 @@
+PHASE ATTENDANCE FIX 5A - BROAD EMPLOYEE SEARCH USAGE
+READ-ONLY AUDIT REPORT
+
+Date
+----
+2026-09-04
+
+Scope and limitation
+--------------------
+This audit covers only the broad employee collection usage associated with
+Attendance. No source, test, schema, migration, API, or authorization files
+were modified.
+
+The current workspace contains the frontend project only. The
+backend-updates directory is empty, and no EmployeesController,
+EmployeesService, AttendanceController, or AttendanceService source files are
+available here. Therefore, backend implementation details below are based on
+the existing role-based audit reports in this workspace and the frontend route
+contracts, not a fresh read of backend controller/service source.
+
+Executive verdict
+-----------------
+SAFE TO DEFER
+
+This is an architecture/performance concern, not a confirmed security or
+authorization defect in the available evidence. The current implementation is
+functionally correct for its intended report search, provided the backend
+authorization behavior recorded by the existing backend audit remains in
+force. Replacing the call is not a minimal frontend-only change that preserves
+the current search behavior unless an existing authorized, searchable employee
+collection endpoint is confirmed in the backend project.
+
+1. Exact broad employee API usage
+---------------------------------
+
+Attendance.tsx
+- src/modules/attendance/Attendance.tsx does not call getAllEmployees(),
+  another employee collection API, or an employee lookup API.
+- It uses useAttendance() with the default scope "me".
+- That hook calls GET /attendance/my-history and GET /attendance/today-status.
+
+EmployeeAttendance.tsx
+- src/modules/attendance/EmployeeAttendance.tsx calls
+  ApiService.getAllEmployees() in its initial useEffect (currently line 29).
+- ApiService.getAllEmployees() constructs GET /employees when called without a
+  query object (currently src/services/api.ts line 1367).
+- The response is stored in the employees state array.
+- The component then filters that in-memory array by name, first name, last
+  name, employee code, employeeId, or id.
+
+No other broad employee collection call is made by either Attendance.tsx or
+EmployeeAttendance.tsx. The other employee-related calls in
+EmployeeAttendance.tsx are target-specific:
+- GET /attendance/employee/:id
+- GET /attendance/employee/:id/summary?month=YYYY-MM
+- GET /employees/:id/360/leave
+
+2. Purpose of getAllEmployees() in Attendance
+----------------------------------------------
+
+The call is used for an employee selector/search in the Employee Attendance &
+Leave Report screen. It is not used to render the ordinary self-attendance
+screen and is not itself an attendance report endpoint.
+
+The workflow is:
+1. Load the employee collection once on component mount.
+2. Filter the loaded array locally as the user types.
+3. Let the user select one employee.
+4. Load that selected employee's attendance records and monthly summary.
+5. Load the selected employee's Employee 360 leave projection.
+
+3. Authorization and scoping assessment
+----------------------------------------
+
+Frontend route scope
+- /attendance is protected but uses no allowedRoles list. Attendance.tsx is
+  self-scoped through useAttendance()'s default "me" scope.
+- /employee-attendance explicitly allows only SUPER_ADMIN, CEO, HR,
+  IT_MANAGER, and SALES_MANAGER in src/App.tsx.
+- EMPLOYEE cannot reach the employee report through the frontend route guard.
+- FINANCE_MANAGER is not included in this route, so its current behavior is
+  unchanged by this screen.
+
+Backend scope evidence available in this workspace
+- The existing PHASE_5_ROLE_BASED_FUNCTIONAL_AUDIT reports that backend
+  authorization is enforced from the authenticated principal and that no
+  critical authorization bypass was confirmed.
+- It reports team access checks tied to actual manager/team ownership,
+  including cross-team denial.
+- It reports that IT_MANAGER and SALES_MANAGER are restricted to their
+  assigned team scope.
+- It reports that EMPLOYEE access is self-only and that employee-ID tampering
+  is denied.
+- It reports organization-wide backend access for SUPER_ADMIN, CEO, and HR.
+- It reports FINANCE_MANAGER as limited to finance-related scopes rather than
+  broad administrative access.
+
+Role-by-role conclusion, based on that existing backend evidence
+- IT_MANAGER: the returned collection is expected to contain only managed-team
+  employees; cross-team access should be denied by the backend.
+- SALES_MANAGER: the returned collection is expected to contain only
+  managed-team employees; cross-team access should be denied by the backend.
+- EMPLOYEE: the employee collection is expected to be denied. The frontend
+  employee-report route also excludes EMPLOYEE.
+- SUPER_ADMIN, CEO, HR: organization-wide employee access is expected to be
+  retained as permitted by the backend role model.
+- FINANCE_MANAGER: this report route excludes the role, and no Attendance
+  code change alters its existing behavior.
+
+Important verification boundary
+- Because the backend controller/service source is absent, this audit cannot
+  independently prove the exact EmployeesController/EmployeesService query
+  predicate or the exact AttendanceController/AttendanceService predicate.
+- The role conclusions above are a confirmation of the prior audit evidence,
+  not a new backend source-level verification. A backend checkout is required
+  to make that claim independently.
+
+4. Existing narrower alternatives
+----------------------------------
+
+Employee 360 is narrower for a known employee:
+- GET /employees/:id/360
+- GET /employees/:id/360/attendance?month=YYYY-MM
+- GET /employees/:id/360/leave
+
+Those endpoints cannot replace the initial collection call by themselves: the
+current UI needs a searchable set of employee identities before it knows the
+target id. The existing 360 methods are target-specific and do not provide
+employee search or collection pagination.
+
+ApiService.getAllEmployees(query) supports search, filters, sorting, page, and
+pageSize at the client method boundary. EmployeeAttendance currently passes no
+query, so it does not use those controls. EmployeeList uses the same API with
+server-side query parameters, but its existing large page-size fallback is not
+a clearly safer replacement for this report and would change this screen's
+behavior.
+
+No already-confirmed narrower authorized employee-search endpoint is present
+in the frontend code or available backend source. No new endpoint should be
+invented for this issue.
+
+5. Impact of replacing getAllEmployees()
+-----------------------------------------
+
+Search behavior
+- Current behavior is immediate local filtering across the loaded collection.
+- A server-search replacement would change request timing, loading behavior,
+  result semantics, and likely empty-result behavior.
+- A target-specific Employee 360 replacement cannot implement the current
+  search flow without another employee identity source.
+
+Employee selection
+- Current selection stores the chosen employee object and uses its database id
+  for subsequent calls.
+- Any replacement must preserve id mapping and the displayed name/code fields.
+
+Authorization
+- Current frontend route protection already excludes EMPLOYEE and
+  FINANCE_MANAGER.
+- Backend authorization remains the controlling boundary; client-side
+  filtering is not authorization.
+- Changing the frontend call alone cannot strengthen backend authorization.
+
+Pagination and filtering
+- Current EmployeeAttendance call sends no pagination or filter query.
+- It receives the endpoint default collection and filters locally.
+- Introducing paginated search would require UI support for page boundaries or
+  a deliberate server-search contract; otherwise employees outside the first
+  page may disappear from search results.
+
+Existing UI behavior
+- The current single-load, local-search, select-then-report workflow would
+  change with a server-side search or 360-based design.
+- The per-employee attendance, summary, and leave calls should remain unchanged
+  to preserve the report contents and existing target-level authorization.
+
+6. Classification
+-----------------
+
+- Confirmed security/authorization defect: NO, based on available evidence.
+- Confirmed functional defect: NO. The report search and selection workflow is
+  implemented and the route is role-restricted.
+- Architecture/performance concern: YES. An unparameterized employee
+  collection is transferred and filtered in the browser, which can increase
+  payload size and does not scale as well as authorized server-side search.
+- Safe to leave as-is: YES, while the backend collection endpoint continues to
+  enforce the documented role scope.
+- Safe minimal frontend-only fix: NOT CONFIRMED. A frontend-only replacement
+  would either lose search/selection behavior or require assumptions about an
+  endpoint contract not available in this checkout.
+
+7. Final recommendation
+-----------------------
+
+SAFE TO DEFER.
+
+The smallest responsible boundary for a future fix is
+src/modules/attendance/EmployeeAttendance.tsx, changing only the employee
+search data-loading strategy after the backend project confirms an existing
+authorized, searchable employee endpoint. The target attendance, summary, and
+Employee 360 leave calls should not be changed for this issue.
+
+Until that endpoint is confirmed, retain getAllEmployees() in this component.
+The current implementation preserves the report's search and selection
+behavior, while the backend remains responsible for scoping IT_MANAGER,
+SALES_MANAGER, EMPLOYEE, SUPER_ADMIN, CEO, HR, and FINANCE_MANAGER access.
+
+Change-scope confirmation
+-------------------------
+
+- No source files modified.
+- No tests modified.
+- No schema or migration files modified.
+- No API or backend endpoint added.
+- Existing dirty worktree preserved.

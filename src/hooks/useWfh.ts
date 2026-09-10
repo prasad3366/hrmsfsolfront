@@ -1,10 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import api, { WfhRequest, RequestWfhDto } from '../services/api';
 
 export const useWfh = () => {
   const [wfhRequests, setWfhRequests] = useState<WfhRequest[]>([]);
   const [myWfhRequests, setMyWfhRequests] = useState<WfhRequest[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isMyLoading, setIsMyLoading] = useState(false);
+  const [isAllLoading, setIsAllLoading] = useState(false);
+  const [myError, setMyError] = useState<string | null>(null);
+  const [allError, setAllError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -14,30 +18,38 @@ export const useWfh = () => {
   // Fetch all WFH requests (for HR/Admin)
   const fetchAllWfhRequests = useCallback(async () => {
     setIsLoading(true);
+    setIsAllLoading(true);
     setError(null);
+    setAllError(null);
     try {
       const data = await api.getAllWfhRequests();
       setWfhRequests(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch WFH requests';
       setError(errorMessage);
+      setAllError(errorMessage);
     } finally {
       setIsLoading(false);
+      setIsAllLoading(false);
     }
   }, []);
 
   // Fetch my WFH requests (for employees)
   const fetchMyWfhRequests = useCallback(async () => {
     setIsLoading(true);
+    setIsMyLoading(true);
     setError(null);
+    setMyError(null);
     try {
       const data = await api.getMyWfhRequests();
       setMyWfhRequests(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch your WFH requests';
       setError(errorMessage);
+      setMyError(errorMessage);
     } finally {
       setIsLoading(false);
+      setIsMyLoading(false);
     }
   }, []);
 
@@ -70,6 +82,7 @@ export const useWfh = () => {
       setWfhRequests((prev) =>
         prev.map((req) => (req.id === requestId ? updatedRequest : req))
       );
+      window.dispatchEvent(new Event('wfh-updated'));
       setSuccess('WFH request approved successfully');
       return updatedRequest;
     } catch (err) {
@@ -91,6 +104,7 @@ export const useWfh = () => {
       setWfhRequests((prev) =>
         prev.map((req) => (req.id === requestId ? updatedRequest : req))
       );
+      window.dispatchEvent(new Event('wfh-updated'));
       setSuccess('WFH request rejected successfully');
       return updatedRequest;
     } catch (err) {
@@ -108,10 +122,22 @@ export const useWfh = () => {
     setSuccess(null);
   }, []);
 
+  useEffect(() => {
+    const handleWfhUpdated = () => {
+      void Promise.all([fetchAllWfhRequests(), fetchMyWfhRequests()]);
+    };
+    window.addEventListener('wfh-updated', handleWfhUpdated);
+    return () => window.removeEventListener('wfh-updated', handleWfhUpdated);
+  }, [fetchAllWfhRequests, fetchMyWfhRequests]);
+
   return {
     wfhRequests,
     myWfhRequests,
     isLoading,
+    isMyLoading,
+    isAllLoading,
+    myError,
+    allError,
     isSubmitting,
     error,
     success,

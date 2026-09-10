@@ -1,99 +1,59 @@
-import React from 'react';
-import { Button, Badge } from '../../components/ui/components';
-import { Plus, MoreHorizontal, MessageSquare, Paperclip } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Calendar, Eye, Mail, Phone, Plus, Trash2, UserPlus, X } from 'lucide-react';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from '../../components/ui/components';
+import { useAuth } from '../../context/AuthContext';
+import api, { CreateRecruitmentCandidateDto, CreateRecruitmentJobDto, RecruitmentCandidate, RecruitmentCandidateStatus, RecruitmentInterview, RecruitmentJobPosting, UpdateRecruitmentJobDto } from '../../services/api';
 
-interface Candidate {
-    id: string;
-    name: string;
-    role: string;
-    date: string;
-    tag: string;
-}
+const MANAGEMENT_ROLES = ['SUPER_ADMIN', 'CEO', 'HR'];
+const STAGES: RecruitmentCandidateStatus[] = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFERED', 'HIRED', 'REJECTED'];
+const STAGE_COLORS: Record<RecruitmentCandidateStatus, string> = { APPLIED: 'bg-slate-400', SCREENING: 'bg-blue-400', INTERVIEW: 'bg-violet-400', OFFERED: 'bg-amber-400', HIRED: 'bg-emerald-400', REJECTED: 'bg-rose-400' };
+const label = (value: string) => value.charAt(0) + value.slice(1).toLowerCase();
+const errorText = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
 
-const KANBAN_DATA: Record<string, Candidate[]> = {
-    "Applied": [
-        { id: "c1", name: "John Doe", role: "Frontend Dev", date: "2m ago", tag: "Senior" },
-        { id: "c2", name: "Jane Smith", role: "Product Designer", date: "1d ago", tag: "Mid" },
-        { id: "c5", name: "Robert Fox", role: "Backend Dev", date: "3d ago", tag: "Junior" },
-    ],
-    "Screening": [
-        { id: "c3", name: "Alice Brown", role: "Marketing Lead", date: "4h ago", tag: "Lead" },
-    ],
-    "Interview": [
-        { id: "c4", name: "Charlie Day", role: "Sales Manager", date: "2d ago", tag: "Sales" },
-    ],
-    "Offer": [],
-    "Hired": []
+const Modal = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"><Card className="w-full max-w-lg shadow-xl"><CardHeader className="flex flex-row items-center justify-between border-b pb-4"><CardTitle>{title}</CardTitle><button type="button" onClick={onClose} aria-label="Close dialog" className="text-slate-400 hover:text-slate-700"><X size={20} /></button></CardHeader><CardContent className="pt-5">{children}</CardContent></Card></div>;
+
+const JobModal = ({ job, onClose, onSubmit, busy }: { job?: RecruitmentJobPosting; onClose: () => void; onSubmit: (data: CreateRecruitmentJobDto | UpdateRecruitmentJobDto) => Promise<void>; busy: boolean }) => {
+  const [form, setForm] = useState<CreateRecruitmentJobDto>({ title: job?.title ?? '', department: job?.department ?? '', requirements: job?.requirements ?? '', description: job?.description ?? '', openings: job?.openings ?? 1 });
+  const [error, setError] = useState('');
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); const payload = { ...form, title: form.title.trim(), department: form.department.trim(), requirements: form.requirements || '', description: form.description || '', openings: Number(form.openings) }; if (!payload.title || !payload.department || !Number.isInteger(payload.openings) || payload.openings < 1) { setError('Title, department, and at least one opening are required.'); return; } try { await onSubmit(payload); onClose(); } catch (err) { setError(errorText(err, `Failed to ${job ? 'update' : 'create'} job posting`)); } };
+  return <Modal title={job ? 'Edit Job Posting' : 'Create Job Posting'} onClose={onClose}><form onSubmit={submit} className="space-y-4">{error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}<label className="block text-sm font-medium text-slate-700">Title *<Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label><label className="block text-sm font-medium text-slate-700">Department *<Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></label><label className="block text-sm font-medium text-slate-700">Openings *<Input type="number" min="1" value={form.openings} onChange={(e) => setForm({ ...form, openings: Number(e.target.value) })} /></label><label className="block text-sm font-medium text-slate-700">Requirements<textarea value={form.requirements} onChange={(e) => setForm({ ...form, requirements: e.target.value })} rows={3} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label><label className="block text-sm font-medium text-slate-700">Description<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label><div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving...' : job ? 'Save Changes' : 'Create Job Posting'}</Button></div></form></Modal>;
 };
 
-const CandidateCard = ({ candidate, ...props }: { candidate: Candidate, [key: string]: any }) => (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing mb-3 group">
-        <div className="flex justify-between items-start mb-2">
-            <h4 className="font-bold text-slate-800 text-sm">{candidate.name}</h4>
-            <button className="text-slate-400 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                <MoreHorizontal size={14} />
-            </button>
-        </div>
-        <p className="text-xs text-slate-500 mb-3">{candidate.role}</p>
-        <div className="flex items-center gap-2 mb-3">
-             <Badge variant="blue" className="bg-blue-50 text-blue-600 border-none px-1.5 py-0.5 rounded text-[10px]">{candidate.tag}</Badge>
-        </div>
-        <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-3">
-            <div className="flex items-center gap-3 text-slate-400">
-                <MessageSquare size={12} className="hover:text-blue-500 cursor-pointer"/>
-                <Paperclip size={12} className="hover:text-blue-500 cursor-pointer"/>
-            </div>
-            <span className="text-[10px] text-slate-400 font-medium">{candidate.date}</span>
-        </div>
-    </div>
-);
+const CandidateModal = ({ jobs, onClose, onSubmit, busy }: { jobs: RecruitmentJobPosting[]; onClose: () => void; onSubmit: (data: CreateRecruitmentCandidateDto) => Promise<void>; busy: boolean }) => {
+  const [form, setForm] = useState<CreateRecruitmentCandidateDto>({ name: '', email: '', phone: '', jobPostingId: jobs[0]?.id ?? 0 }); const [error, setError] = useState('');
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (!form.name.trim() || !form.email.trim() || !form.jobPostingId) { setError('Name, email, and job posting are required.'); return; } try { await onSubmit(form); onClose(); } catch (err) { setError(errorText(err, 'Failed to create candidate')); } };
+  return <Modal title="Add Candidate" onClose={onClose}><form onSubmit={submit} className="space-y-4">{error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}<label className="block text-sm font-medium text-slate-700">Name *<Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label className="block text-sm font-medium text-slate-700">Email *<Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label><label className="block text-sm font-medium text-slate-700">Phone<Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label><label className="block text-sm font-medium text-slate-700">Job Posting *<select value={form.jobPostingId} onChange={(e) => setForm({ ...form, jobPostingId: Number(e.target.value) })} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm">{jobs.map((job) => <option key={job.id} value={job.id}>{job.title}</option>)}</select></label><div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving...' : 'Add Candidate'}</Button></div></form></Modal>;
+};
 
-const KanbanColumn = ({ title, count, candidates, color }: { title: string, count: number, candidates: Candidate[], color: string }) => (
-    <div className="flex-shrink-0 w-72 flex flex-col h-full">
-        <div className={`flex items-center justify-between mb-3 px-1`}>
-            <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${color}`}></div>
-                <h3 className="font-bold text-slate-700 text-sm">{title}</h3>
-                <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-bold">{count}</span>
-            </div>
-            <Plus size={14} className="text-slate-400 cursor-pointer hover:text-slate-800" />
-        </div>
-        <div className="bg-slate-100/50 rounded-xl p-2 h-full min-h-[500px] border border-slate-100/50">
-            {candidates.map(c => <CandidateCard key={c.id} candidate={c} />)}
-            {candidates.length === 0 && (
-                <div className="h-24 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center text-slate-400 text-xs">
-                    Drop here
-                </div>
-            )}
-        </div>
-    </div>
-);
+const CandidateDetailsModal = ({ candidate, onClose }: { candidate: RecruitmentCandidate; onClose: () => void }) => <Modal title="Candidate Details" onClose={onClose}><div className="space-y-3 text-sm"><div><p className="text-xs font-semibold uppercase text-slate-400">Name</p><p className="font-semibold text-slate-800">{candidate.name}</p></div><div><p className="text-xs font-semibold uppercase text-slate-400">Email</p><p className="text-slate-600">{candidate.email}</p></div><div><p className="text-xs font-semibold uppercase text-slate-400">Phone</p><p className="text-slate-600">{candidate.phone || 'Not provided'}</p></div><div><p className="text-xs font-semibold uppercase text-slate-400">Job</p><p className="text-slate-600">{candidate.jobTitle || 'Job posting'}</p></div><div><p className="text-xs font-semibold uppercase text-slate-400">Status</p><Badge variant="blue">{label(candidate.status)}</Badge></div>{candidate.interviews?.length ? <div><p className="text-xs font-semibold uppercase text-slate-400">Interviews</p>{candidate.interviews.map((interview) => <p key={interview.id} className="text-slate-600">{new Date(interview.scheduledAt).toLocaleString()} with {interview.interviewer}</p>)}</div> : null}</div></Modal>;
+
+const InterviewModal = ({ candidate, onClose, onSubmit, busy }: { candidate: RecruitmentCandidate; onClose: () => void; onSubmit: (data: { candidateId: number; scheduledAt: string; interviewer: string }) => Promise<void>; busy: boolean }) => {
+  const [scheduledAt, setScheduledAt] = useState(''); const [interviewer, setInterviewer] = useState(''); const [error, setError] = useState('');
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (!scheduledAt || !interviewer.trim()) { setError('Date, time, and interviewer are required.'); return; } try { await onSubmit({ candidateId: candidate.id, scheduledAt, interviewer }); onClose(); } catch (err) { setError(errorText(err, 'Failed to schedule interview')); } };
+  return <Modal title={`Schedule interview: ${candidate.name}`} onClose={onClose}><form onSubmit={submit} className="space-y-4">{error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}<label className="block text-sm font-medium text-slate-700">Date and time *<Input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} /></label><label className="block text-sm font-medium text-slate-700">Interviewer *<Input value={interviewer} onChange={(e) => setInterviewer(e.target.value)} /></label><div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Scheduling...' : 'Schedule Interview'}</Button></div></form></Modal>;
+};
+
+const FeedbackModal = ({ interview, onClose, onSubmit, busy }: { interview: RecruitmentInterview; onClose: () => void; onSubmit: (feedback: string) => Promise<void>; busy: boolean }) => {
+  const [feedback, setFeedback] = useState(interview.feedback ?? ''); const [error, setError] = useState('');
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (!feedback.trim()) { setError('Feedback is required.'); return; } try { await onSubmit(feedback); onClose(); } catch (err) { setError(errorText(err, 'Failed to submit feedback')); } };
+  return <Modal title="Submit Interview Feedback" onClose={onClose}><form onSubmit={submit} className="space-y-4">{error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}<p className="text-sm text-slate-500">Interview with {interview.interviewer} on {new Date(interview.scheduledAt).toLocaleString()}</p><textarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={5} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /><div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Submitting...' : 'Submit Feedback'}</Button></div></form></Modal>;
+};
 
 const Recruitment = () => {
-  return (
-    <div className="p-6 md:p-8 max-w-full h-[calc(100vh-64px)] flex flex-col">
-      <div className="flex justify-between items-center mb-6 flex-shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Recruitment Pipeline</h1>
-          <p className="text-slate-500 text-sm">Manage candidates and job openings</p>
-        </div>
-        <div className="flex gap-2">
-            <Button variant="outline">Pipeline View</Button>
-            <Button className="gap-2"><Plus size={16}/> Add Candidate</Button>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-x-auto pb-4">
-        <div className="flex gap-4 h-full min-w-max">
-            <KanbanColumn title="Applied" count={3} candidates={KANBAN_DATA["Applied"]} color="bg-slate-400" />
-            <KanbanColumn title="Screening" count={1} candidates={KANBAN_DATA["Screening"]} color="bg-blue-400" />
-            <KanbanColumn title="Interview" count={1} candidates={KANBAN_DATA["Interview"]} color="bg-purple-400" />
-            <KanbanColumn title="Offer Sent" count={0} candidates={[]} color="bg-orange-400" />
-            <KanbanColumn title="Hired" count={0} candidates={[]} color="bg-emerald-400" />
-        </div>
-      </div>
-    </div>
-  );
+  const { user } = useAuth(); const canManage = Boolean(user && MANAGEMENT_ROLES.includes(user.role));
+  const [tab, setTab] = useState<'jobs' | 'candidates'>('jobs'); const [jobs, setJobs] = useState<RecruitmentJobPosting[]>([]); const [candidates, setCandidates] = useState<RecruitmentCandidate[]>([]); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [success, setSuccess] = useState(''); const [modal, setModal] = useState<'job' | 'candidate' | 'interview' | 'feedback' | 'details' | null>(null); const [editingJob, setEditingJob] = useState<RecruitmentJobPosting>(); const [selectedCandidate, setSelectedCandidate] = useState<RecruitmentCandidate | null>(null); const [selectedInterview, setSelectedInterview] = useState<RecruitmentInterview | null>(null);
+  const load = async () => { setLoading(true); setError(''); try { const [jobData, candidateData] = await Promise.all([api.getJobs(), api.getCandidates()]); setJobs(Array.isArray(jobData) ? jobData : []); setCandidates(Array.isArray(candidateData) ? candidateData : []); } catch (err) { setError(errorText(err, 'Failed to load recruitment data')); } finally { setLoading(false); } };
+  useEffect(() => { void load(); }, []);
+  const mutate = async (action: () => Promise<void>, message: string) => { setBusy(true); setError(''); setSuccess(''); try { await action(); setSuccess(message); } catch (err) { setError(errorText(err, 'Recruitment action failed')); throw err; } finally { setBusy(false); } };
+  const createJob = (data: CreateRecruitmentJobDto | UpdateRecruitmentJobDto) => mutate(async () => { const saved = editingJob ? await api.updateJob(editingJob.id, data) : await api.createJob(data as CreateRecruitmentJobDto); setJobs((current) => editingJob ? current.map((job) => job.id === saved.id ? saved : job) : [...current, saved]); }, editingJob ? 'Job posting updated successfully' : 'Job posting created successfully');
+  const deleteJob = (id: number) => { if (!window.confirm('Are you sure you want to delete this job posting?')) return; void mutate(async () => { await api.deleteJob(id); setJobs((current) => current.filter((job) => job.id !== id)); }, 'Job posting deleted successfully').catch(() => undefined); };
+  const createCandidate = (data: CreateRecruitmentCandidateDto) => mutate(async () => { const created = await api.createCandidate(data); setCandidates((current) => [...current, created]); }, 'Candidate added successfully');
+  const deleteCandidate = (id: number) => { if (!window.confirm('Are you sure you want to delete this candidate?')) return; void mutate(async () => { await api.deleteCandidate(id); setCandidates((current) => current.filter((candidate) => candidate.id !== id)); }, 'Candidate deleted successfully').catch(() => undefined); };
+  const updateStatus = (candidate: RecruitmentCandidate, status: RecruitmentCandidateStatus) => mutate(async () => { const updated = await api.updateCandidateStatus(candidate.id, status); setCandidates((current) => current.map((item) => item.id === candidate.id ? updated : item)); }, 'Candidate status updated successfully').catch(() => undefined);
+  const schedule = (data: { candidateId: number; scheduledAt: string; interviewer: string }) => mutate(async () => { const interview = await api.scheduleInterview(data); setCandidates((current) => current.map((item) => item.id === data.candidateId ? { ...item, interviews: [...(item.interviews ?? []), interview], status: 'INTERVIEW' } : item)); }, 'Interview scheduled successfully');
+  const feedback = (value: string) => mutate(async () => { if (!selectedInterview) return; const updated = await api.submitInterviewFeedback(selectedInterview.id, { feedback: value }); setCandidates((current) => current.map((item) => ({ ...item, interviews: item.interviews?.map((interview) => interview.id === updated.id ? updated : interview) }))); }, 'Interview feedback submitted successfully');
+  if (loading) return <div className="p-8 text-center text-slate-500">Loading recruitment...</div>;
+  return <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h1 className="text-2xl font-bold text-slate-900">Recruitment</h1><p className="text-sm text-slate-500">Manage job openings and candidate progress</p></div>{canManage && <div className="flex gap-2"><Button onClick={() => setModal('candidate')} disabled={!jobs.length}><UserPlus size={16} className="mr-2" />Add Candidate</Button><Button onClick={() => { setEditingJob(undefined); setModal('job'); }} variant="outline"><Plus size={16} className="mr-2" />Create Job Posting</Button></div>}</div>{error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}{success && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</p>}<div className="flex gap-1 border-b border-slate-200"><button className={`border-b-2 px-4 py-3 text-sm font-semibold ${tab === 'jobs' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('jobs')}>Job Postings ({jobs.length})</button><button className={`border-b-2 px-4 py-3 text-sm font-semibold ${tab === 'candidates' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('candidates')}>Candidates ({candidates.length})</button></div>{tab === 'jobs' ? <div className="grid gap-4 md:grid-cols-2">{jobs.length ? jobs.map((job) => <Card key={job.id}><CardHeader className="flex flex-row items-start justify-between"><div><CardTitle className="text-base">{job.title}</CardTitle><p className="mt-1 text-sm text-slate-500">{job.department}</p></div><div className="flex items-center gap-2"><Badge variant={job.status === 'OPEN' ? 'success' : job.status === 'DRAFT' ? 'warning' : 'default'}>{job.status}</Badge>{canManage && <><Button size="xs" variant="outline" onClick={() => { setEditingJob(job); setModal('job'); }}>Edit</Button><button type="button" aria-label={`Delete ${job.title}`} title="Delete job posting" onClick={() => deleteJob(job.id)} disabled={busy} className="rounded-lg p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-50"><Trash2 size={16} /></button></>}</div></CardHeader><CardContent className="pt-2"><p className="text-sm text-slate-600">{job.remainingOpenings ?? job.openings} remaining openings</p><p className="mt-2 line-clamp-2 text-xs text-slate-500">{job.description || 'No description provided.'}</p></CardContent></Card>) : <Card className="md:col-span-2"><CardContent className="py-12 text-center text-sm text-slate-500">No job postings found.</CardContent></Card>}</div> : <div className="overflow-x-auto pb-4"><div className="flex min-w-max gap-4">{STAGES.map((stage) => { const items = candidates.filter((candidate) => candidate.status === stage); return <section key={stage} className="w-72"><div className="mb-3 flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${STAGE_COLORS[stage]}`} /><h2 className="text-sm font-bold text-slate-700">{label(stage)}</h2><span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">{items.length}</span></div><div className="min-h-80 rounded-xl border border-slate-200 bg-slate-50/70 p-2">{items.map((candidate) => <Card key={candidate.id} className="mb-3"><CardContent className="p-4"><div className="mb-2 flex items-start justify-between"><h3 className="text-sm font-bold text-slate-800">{candidate.name}</h3><Badge variant="blue">{label(candidate.status)}</Badge></div><p className="flex items-center gap-1 text-xs text-slate-500"><Mail size={12} />{candidate.email}</p>{candidate.phone && <p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><Phone size={12} />{candidate.phone}</p>}<p className="mt-2 text-xs font-medium text-slate-600">{candidate.jobTitle || jobs.find((job) => job.id === candidate.jobPostingId)?.title || 'Job posting'}</p><div className="mt-4 flex flex-wrap gap-2"><Button size="xs" variant="outline" onClick={() => { setSelectedCandidate(candidate); setModal('details'); }}><Eye size={12} className="mr-1" />Details</Button>{canManage && <><select aria-label={`Update ${candidate.name} status`} value={candidate.status} onChange={(event) => void updateStatus(candidate, event.target.value as RecruitmentCandidateStatus)} disabled={busy} className="h-8 flex-1 rounded border border-slate-200 bg-white px-2 text-xs">{STAGES.map((option) => <option key={option} value={option}>{label(option)}</option>)}</select><button type="button" aria-label={`Delete ${candidate.name}`} title="Delete candidate" onClick={() => deleteCandidate(candidate.id)} disabled={busy} className="rounded-lg p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-50"><Trash2 size={16} /></button>{(candidate.status === 'INTERVIEW' || candidate.interviews?.length) && <Button size="xs" variant="outline" onClick={() => { setSelectedCandidate(candidate); setModal('interview'); }}><Calendar size={12} /></Button>}{candidate.interviews?.map((interview) => <Button key={interview.id} size="xs" variant="outline" onClick={() => { setSelectedInterview(interview); setModal('feedback'); }}>{interview.feedback ? 'Edit feedback' : 'Feedback'}</Button>)}</>}</div></CardContent></Card>)}{!items.length && <p className="py-10 text-center text-xs text-slate-400">No candidates</p>}</div></section>; })}</div></div>}{modal === 'job' && <JobModal job={editingJob} onClose={() => { setModal(null); setEditingJob(undefined); }} onSubmit={createJob} busy={busy} />}{modal === 'candidate' && <CandidateModal jobs={jobs.filter((job) => job.status === 'OPEN')} onClose={() => setModal(null)} onSubmit={createCandidate} busy={busy} />}{modal === 'details' && selectedCandidate && <CandidateDetailsModal candidate={selectedCandidate} onClose={() => setModal(null)} />}{modal === 'interview' && selectedCandidate && <InterviewModal candidate={selectedCandidate} onClose={() => setModal(null)} onSubmit={schedule} busy={busy} />}{modal === 'feedback' && selectedInterview && <FeedbackModal interview={selectedInterview} onClose={() => setModal(null)} onSubmit={feedback} busy={busy} />}</div>;
 };
 
 export default Recruitment;

@@ -153,7 +153,7 @@ export const Dialog = ({ open, onOpenChange, children }: DialogProps) => {
 
   const handleBackdropClick = () => onOpenChange(false);
   
-  const handleBackdropKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleBackdropKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (e.key === 'Escape') onOpenChange(false);
   };
 

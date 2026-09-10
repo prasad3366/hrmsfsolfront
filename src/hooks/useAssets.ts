@@ -89,6 +89,17 @@ export const useAssets = () => {
     }
   }, [fetchAssets]);
 
+  const updateAsset = useCallback(async (assetId: number, data: { name: string; description?: string }) => {
+    setIsLoading(true);
+    try {
+      const result = await ApiService.updateAsset(assetId, data);
+      setAssets((previous) => previous.map((asset) => asset.id === assetId ? result : asset));
+      return result;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   return {
     assets,
     isLoading,
@@ -98,5 +109,6 @@ export const useAssets = () => {
     createAsset,
     assignAsset,
     returnAsset,
+    updateAsset,
   };
 };

@@ -1,0 +1,107 @@
+PHASE D2 - DASHBOARD API ERROR-STATE HANDLING
+IMPLEMENTATION REPORT
+
+Date
+----
+2026-09-04
+
+Exact files changed
+-------------------
+
+- src/modules/dashboard/AdminDashboard.tsx
+  Added an explicit dashboard error state for employee, WFH, and payroll data
+  failures. Employee metrics and recent joiners no longer present a silent
+  successful-looking state when the employee request fails.
+- src/modules/dashboard/HRDashboard.tsx
+  Added explicit error state for employee, WFH, leave, attendance, and
+  helpdesk requests. Helpdesk API fallback remains available, but an error
+  state is now shown instead of silently presenting fallback/empty data.
+- src/modules/dashboard/ManagerDashboard.tsx
+  Added explicit error state for employee, WFH, leave, and attendance requests.
+  Removed the failed employee-request fallback to mock employee data and
+  stopped failed employee metrics/performance from appearing as valid defaults.
+- PHASE_D2_DASHBOARD_API_ERROR_STATE_IMPLEMENTATION_REPORT.text
+  Added this report.
+
+Files intentionally unchanged
+- src/modules/dashboard/DashboardRouter.tsx
+- src/modules/dashboard/DashboardRouter.test.tsx
+- API services and hooks
+- Attendance, Leave, Employees, Employee 360, backend, authorization, schema,
+  migrations, and unrelated modules
+
+Behavior changed
+----------------
+
+Existing Dashboard API errors now produce an explicit dashboard-level error
+banner while preserving the existing card structure and successful rendering.
+The error state covers the Dashboard-owned employee requests and the existing
+hook errors consumed by the Admin, HR, and Manager dashboards.
+
+The Manager dashboard no longer replaces failed employee data with
+MOCK_EMPLOYEES or derives task/employee metrics from that fallback. Its affected
+metrics show Error and the employee-dependent performance section does not
+fall back to mock data after an API failure.
+
+Successful responses remain unchanged. Existing loading states and D1 role
+routing/visibility remain unchanged.
+
+API calls reviewed
+------------------
+
+- AdminDashboard: getAllEmployees(), fetchAllWfhRequests(), usePayroll data.
+- HRDashboard: getAllEmployees(), getHelpdeskTickets(), fetchAllWfhRequests(),
+  fetchPendingLeaves(), and useAttendance({ scope: 'all' }).
+- ManagerDashboard: getAllEmployees(), fetchAllWfhRequests(),
+  fetchPendingLeaves(), and useAttendance({ scope: 'all' }).
+- EmployeeDashboard continues to use its existing hooks and was not modified
+  because it already exposes loading/error behavior through its existing child
+  sections; no unrelated Dashboard redesign was introduced.
+
+Tests
+-----
+
+Command:
+- npx.cmd vitest run src/modules/dashboard/DashboardRouter.test.tsx
+- Result: PASS, 1 test file and 9 tests passed.
+
+This existing focused Dashboard test verifies approved role routing for
+SUPER_ADMIN, CEO, HR, FINANCE_MANAGER, IT_MANAGER, SALES_MANAGER, and EMPLOYEE,
+plus unknown-role and unauthenticated behavior.
+
+The repository has no Dashboard component test harness or testing-library
+dependency. Therefore no new framework or dependency was added solely to test
+rendered loading/success/failure states. The existing route test confirms role
+behavior; changed-file diagnostics and the production build validate the
+implementation. No test changes were necessary.
+
+Build
+-----
+
+- npm.cmd run build
+- Result: PASS.
+
+Existing warnings were not changed:
+- /index.css does not exist at build time.
+- The generated JavaScript chunk is larger than 500 kB.
+
+Diagnostics
+-----------
+
+Changed Dashboard files and existing Dashboard route test:
+- No diagnostics reported in AdminDashboard.tsx.
+- No diagnostics reported in HRDashboard.tsx.
+- No diagnostics reported in ManagerDashboard.tsx.
+- No diagnostics reported in DashboardRouter.tsx.
+- No diagnostics reported in DashboardRouter.test.tsx.
+
+Non-impact confirmation
+-----------------------
+
+- Dashboard success behavior is preserved.
+- Dashboard loading behavior is preserved.
+- D1 role-based Dashboard routing and visibility are preserved.
+- Backend APIs and authorization are untouched.
+- Leave, Attendance, Employees, and Employee 360 behavior are untouched.
+- No schema, migration, authentication, or business-rule changes were made.
+- Existing unrelated dirty-worktree changes were preserved.

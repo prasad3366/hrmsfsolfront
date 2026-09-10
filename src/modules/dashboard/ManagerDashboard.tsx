@@ -7,7 +7,6 @@ import {
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
-import { MOCK_EMPLOYEES } from '../../mock-data';
 import { useWfh } from '../../hooks/useWfh';
 import { useLeave } from '../../hooks/useLeave';
 import { useAttendance } from '../../hooks/useAttendance';
@@ -124,11 +123,11 @@ const buildRecentAttendance = (attendanceRecords: any[]) => {
 };
 
 const calculateTeamAttendance = (attendanceRecords: any[]) => {
-  if (attendanceRecords.length === 0) return 88;
+  if (attendanceRecords.length === 0) return null;
 
   const today = new Date().toDateString();
   const todayRecords = attendanceRecords.filter(record => new Date(record.date).toDateString() === today);
-  if (todayRecords.length === 0) return 88;
+  if (todayRecords.length === 0) return null;
 
   const presentCount = todayRecords.filter(record => record.status === 'PRESENT' || (record.punchIn && !record.punchOut)).length;
   return Math.round((presentCount / todayRecords.length) * 100);
@@ -143,14 +142,6 @@ const buildTaskData = (completedTasks: number, activeTasks: number) => {
   }));
 };
 
-const buildPerformanceData = (employees: any[]) => {
-  const dataSource = employees.length > 0 ? employees : MOCK_EMPLOYEES;
-  return dataSource.slice(0, 5).map((emp, index) => ({
-    name: (emp.firstName || emp.name || 'Employee').split(' ')[0],
-    productivity: 75 + Math.floor(Math.random() * 25),
-  }));
-};
-
 const filterActiveWfhRequests = (requests: any[]): any[] => {
   const today = new Date();
   return requests.filter(req => {
@@ -161,25 +152,26 @@ const filterActiveWfhRequests = (requests: any[]): any[] => {
 
 const ManagerDashboard = () => {
   const navigate = useNavigate();
-  const { wfhRequests, fetchAllWfhRequests } = useWfh();
-  const { pendingLeaves, fetchPendingLeaves, approveLeave } = useLeave();
-  const { records: attendanceRecords, isLoading: isAttendanceLoading } = useAttendance({ scope: 'all' });
+  const { wfhRequests, fetchAllWfhRequests, error: wfhError } = useWfh();
+  const { pendingLeaves, fetchPendingLeaves, approveLeave, error: leaveError } = useLeave();
+  const { records: attendanceRecords, isLoading: isAttendanceLoading, error: attendanceError } = useAttendance({ scope: 'all' });
   const [employees, setEmployees] = useState<any[]>([]);
-  const [teamMembers, setTeamMembers] = useState<number>(12);
-  const [activeTasks, setActiveTasks] = useState<number>(34);
-  const [completedTasks, setCompletedTasks] = useState<number>(128);
+  const [teamMembers, setTeamMembers] = useState<number | null>(null);
+  const [activeTasks, setActiveTasks] = useState<number | null>(null);
+  const [completedTasks, setCompletedTasks] = useState<number | null>(null);
   const [employeeMap, setEmployeeMap] = useState<Record<string, string>>({});
   const [attendanceTab, setAttendanceTab] = useState<'inside' | 'outside' | 'wfh'>('inside');
   const [isGeneratePayslipOpen, setIsGeneratePayslipOpen] = useState(false);
   const [isExportAttendanceOpen, setIsExportAttendanceOpen] = useState(false);
+  const [employeeError, setEmployeeError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAllWfhRequests();
     fetchPendingLeaves();
     
     ApiService.getAllEmployees()
-      .then((data) => {
-        const employeeList = data || [];
+      .then((response) => {
+        const employeeList = Array.isArray(response) ? response : response?.data ?? [];
         setEmployees(employeeList);
         const activeEmployeeCount = employeeList.filter(isEmployeeActive).length;
         setTeamMembers(activeEmployeeCount);
@@ -189,11 +181,8 @@ const ManagerDashboard = () => {
       })
       .catch((err) => {
         console.error('Failed to fetch team data', err);
-        setEmployees(MOCK_EMPLOYEES);
-        const activeEmployeeCount = MOCK_EMPLOYEES.filter(isEmployeeActive).length;
-        setTeamMembers(activeEmployeeCount);
-        setActiveTasks(Math.floor(activeEmployeeCount * 2.8));
-        setCompletedTasks(activeEmployeeCount * 10);
+        setEmployeeError(err instanceof Error ? err.message : 'Failed to load team data');
+        setEmployees([]);
       });
   }, [fetchAllWfhRequests, fetchPendingLeaves]);
 
@@ -208,18 +197,18 @@ const ManagerDashboard = () => {
   const recentAttendance = useMemo(() => buildRecentAttendance(attendanceRecords), [attendanceRecords]);
 
   // Calculate dynamic task data
-  const taskData = useMemo(() => buildTaskData(completedTasks, activeTasks), [completedTasks, activeTasks]);
+  const taskData = useMemo(() => activeTasks == null || completedTasks == null ? [] : buildTaskData(completedTasks, activeTasks), [completedTasks, activeTasks]);
 
   // Dynamic performance data based on team members
-  const performanceData = useMemo(() => buildPerformanceData(employees), [employees]);
+  const performanceData: any[] = [];
 
   return (
   <div className="space-y-8">
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <StatCard title="Team Members" value={teamMembers} icon={Users} trend="up" subtext="2 new" color="blue" delay={0} />
-      <StatCard title="Active Tasks" value={activeTasks} icon={Layers} trend="up" subtext="5 more" color="purple" delay={100} />
-      <StatCard title="Completed Tasks" value={completedTasks} icon={CheckCircle} trend="up" subtext="18% up" color="green" delay={200} />
-      <StatCard title="Team Attendance" value={`${teamAttendance}%`} icon={Calendar} trend="down" subtext="2% down" color="orange" delay={300} />
+      <StatCard title="Team Members" value={employeeError ? 'Error' : teamMembers == null ? 'Not available' : teamMembers} icon={Users} trend={teamMembers == null ? null : 'up'} subtext={teamMembers == null ? 'Not provided' : 'Current API data'} color="blue" delay={0} />
+      <StatCard title="Active Tasks" value="Not available" icon={Layers} trend={null} subtext="Not provided by the API" color="purple" delay={100} />
+      <StatCard title="Completed Tasks" value="Not available" icon={CheckCircle} trend={null} subtext="Not provided by the API" color="green" delay={200} />
+      <StatCard title="Team Attendance" value={attendanceError ? 'N/A' : teamAttendance == null ? 'N/A' : `${teamAttendance}%`} icon={Calendar} trend={null} subtext={teamAttendance == null ? 'Unavailable' : 'Current API data'} color="orange" delay={300} />
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -234,14 +223,14 @@ const ManagerDashboard = () => {
         <CardContent className="pt-6">
           <div className="h-[280px] w-full min-h-[220px] min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={taskData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+              {taskData.length === 0 ? <div className="flex h-full items-center justify-center text-sm text-slate-500">Task history not available</div> : <BarChart data={taskData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                 <XAxis dataKey="week" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
                 <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
                 <Bar dataKey="completed" fill="#2563EB" radius={[8, 8, 0, 0]} />
                 <Bar dataKey="pending" fill="#BFDBFE" radius={[8, 8, 0, 0]} />
-              </BarChart>
+              </BarChart>}
             </ResponsiveContainer>
           </div>
         </CardContent>
@@ -258,13 +247,13 @@ const ManagerDashboard = () => {
         <CardContent className="pt-6">
           <div className="h-[280px] w-full min-h-[220px] min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={performanceData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+              {performanceData.length === 0 ? <div className="flex h-full items-center justify-center text-sm text-slate-500">Performance data not available</div> : <BarChart data={performanceData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
                 <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
                 <Bar dataKey="productivity" fill="#8B5CF6" radius={[8, 8, 0, 0]} />
-              </BarChart>
+              </BarChart>}
             </ResponsiveContainer>
           </div>
         </CardContent>
@@ -288,7 +277,7 @@ const ManagerDashboard = () => {
                     </TableRow>
                 </TableHeader>
                 <tbody>
-                    {(employees.length > 0 ? employees : MOCK_EMPLOYEES).slice(0, 4).map(emp => (
+                    {employeeError ? <TableRow><TableCell colSpan={4} className="text-center text-sm text-slate-500">No employee data available.</TableCell></TableRow> : employees.slice(0, 4).map(emp => (
                         <TableRow key={emp.id} className="hover:bg-slate-50 transition-colors">
                             <TableCell className="py-4">
                                 <div className="flex items-center gap-3">
@@ -297,7 +286,7 @@ const ManagerDashboard = () => {
                                 </div>
                             </TableCell>
                             <TableCell className="py-4 text-sm font-medium text-slate-600">{emp.designation}</TableCell>
-                            <TableCell className="py-4 text-sm font-semibold text-slate-900">7/10</TableCell>
+                            <TableCell className="py-4 text-sm font-semibold text-slate-500">Not provided</TableCell>
                             <TableCell className="py-4">
                         {isEmployeeActive(emp) ? (
                           <span className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full font-bold">Active</span>

@@ -8,12 +8,153 @@ export interface LoginResponse {
   role: string;
   dashboard: string;
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string;
 }
 
 export interface AuthTokens {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string;
+}
+
+const getAuthTokens = (payload: any): AuthTokens => {
+  const accessToken = payload?.accessToken;
+  const refreshToken = payload?.refreshToken;
+
+  if (!accessToken) {
+    throw new Error('Login response did not include an access token');
+  }
+
+  return { accessToken, refreshToken };
+};
+
+export interface EmployeeDirectoryQuery {
+  search?: string;
+  department?: string;
+  status?: 'ACTIVE' | 'INACTIVE' | 'ON_LEAVE';
+  sortBy?: 'name' | 'empCode' | 'department' | 'status' | 'dateOfJoining';
+  sortDirection?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+}
+
+export interface EmployeeDirectoryResponse {
+  data: any[];
+  meta: { page: number; pageSize: number; total: number; totalPages: number };
+  statistics: {
+    total: number;
+    active: number;
+    newJoiners: number;
+    onLeave: number;
+    probation: number;
+    noticePeriod: number;
+  };
+}
+
+export const normalizeEmployeeDirectoryResponse = (payload: unknown): EmployeeDirectoryResponse => {
+  const envelope = Array.isArray(payload) ? {} : (payload as Partial<EmployeeDirectoryResponse> | null) ?? {};
+  return {
+    data: Array.isArray(payload) ? payload : Array.isArray(envelope.data) ? envelope.data : [],
+    meta: envelope.meta ?? { page: 1, pageSize: 25, total: 0, totalPages: 0 },
+    statistics: envelope.statistics ?? { total: 0, active: 0, newJoiners: 0, onLeave: 0, probation: 0, noticePeriod: 0 },
+  };
+};
+
+export interface Employee360Profile {
+  id: number;
+  empCode: string;
+  firstName: string;
+  lastName: string;
+  department: string;
+  designation: string;
+  employmentType?: string | null;
+  sourceOfHire?: string | null;
+  currentExperience?: number | null;
+  isExperienced?: boolean | null;
+  reportingManager?: string | null;
+  status: string;
+  dateOfJoining?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  user?: { id: number; email: string; role: string; isActive: boolean };
+  team?: {
+    id: number;
+    name: string;
+    manager?: { id: number; firstName: string; lastName: string } | null;
+  } | null;
+}
+
+export interface Employee360Hierarchy {
+  employeeId: number;
+  team: { id: number; name: string } | null;
+  manager: { employeeId: number; name: string; designation: string } | null;
+  reportingRelationship: { type: string; managerEmployeeId: number } | null;
+}
+
+export interface Employee360Attendance {
+  month: string;
+  workingDays: number;
+  presentDays: number;
+  halfDays: number;
+  leaveDays: number;
+  absentDays: number;
+  presentEquivalentDays: number;
+  attendancePercentage: number;
+}
+
+export interface Employee360Leave {
+  employeeId: number;
+  status: string;
+  currentLeaveStatus: {
+    status: string;
+    leaveType?: string;
+    startDate?: string;
+    endDate?: string;
+    totalDays?: number;
+  };
+  balanceSummary: Array<{
+    leaveType: string;
+    allocated: number;
+    used: number;
+    carryForward: number;
+    remaining: number;
+  }>;
+  leaveCounts: {
+    total: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+  };
+  recentHistory: Array<{
+    id: number;
+    status: string;
+    leaveType: string;
+    startDate: string;
+    endDate: string;
+    totalDays: number;
+    durationType: string;
+  }>;
+}
+
+export interface Employee360Document {
+  id: number;
+  fileName?: string | null;
+  mimeType?: string | null;
+  documentType?: { name?: string | null } | null;
+  documentTypeId?: number | string | null;
+  employeeId?: number | null;
+  status?: string | null;
+  uploadedAt?: string | null;
+  verifiedAt?: string | null;
+}
+
+export interface Employee360Payroll {
+  month: number;
+  year: number;
+  status: string;
+  grossSalary: number;
+  deductions: number;
+  netSalary: number;
+  latestSalaryEffectiveDate?: string | null;
 }
 
 // Attendance Types
@@ -45,6 +186,18 @@ export interface AttendanceRecord {
     designation?: string;
   };
   isCurrentUser?: boolean; // Indicates if the record belongs to the current user
+}
+
+export interface AttendanceHistoryResponse {
+  data: AttendanceRecord[];
+  meta: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    month: number;
+    year: number;
+  };
 }
 
 export interface MonthlyAttendanceSummary {
@@ -83,7 +236,7 @@ export interface CreateEmployeeDto {
   empCode: string;
   department: string;
   designation: string;
-  role: 'ADMIN' | 'HR' | 'MANAGER' | 'EMPLOYEE';
+  role: 'SUPER_ADMIN' | 'CEO' | 'HR' | 'FINANCE_MANAGER' | 'IT_MANAGER' | 'SALES_MANAGER' | 'EMPLOYEE';
   employmentType?: 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN';
   status?: 'ACTIVE' | 'INACTIVE' | 'TERMINATED' | 'ON_LEAVE';
   sourceOfHire?: string;
@@ -133,18 +286,19 @@ export interface AssignAssetDto {
 export interface AssetAssignment {
   id: number;
   assetId: number;
-  employeeId: number;
+  assignedTo: number;
   assignedAt: string;
-  returnedAt?: string;
+  unassignedAt?: string | null;
+  user?: Asset['user'];
 }
 
 export interface Asset {
   id: number;
   name: string;
   description?: string;
-  assignedTo?: number;
+  assignedTo?: number | null;
   assignedAt?: string | null;
-  status: 'ASSIGNED' | 'RETURNED';
+  status: 'AVAILABLE' | 'ASSIGNED' | 'RETURNED';
   returnedAt?: string | null;
   createdAt: string;
   user?: {
@@ -161,6 +315,17 @@ export interface Asset {
     };
   };
 }
+
+const normalizeAssetResponse = (payload: unknown): Asset[] => {
+  if (Array.isArray(payload)) return payload as Asset[];
+  if (!payload || typeof payload !== 'object') return [];
+
+  const envelope = payload as { data?: unknown; assets?: unknown; items?: unknown };
+  if (Array.isArray(envelope.data)) return envelope.data as Asset[];
+  if (Array.isArray(envelope.assets)) return envelope.assets as Asset[];
+  if (Array.isArray(envelope.items)) return envelope.items as Asset[];
+  return [];
+};
 
 // WFH (Work From Home) Types
 export interface RequestWfhDto {
@@ -186,6 +351,26 @@ export interface WfhRequest {
     department: string;
   };
 }
+
+export const normalizeWfhResponse = (payload: unknown): WfhRequest[] => {
+  if (Array.isArray(payload)) return payload as WfhRequest[];
+
+  if (payload && typeof payload === 'object') {
+    const envelope = payload as { data?: unknown; requests?: unknown; results?: unknown; items?: unknown };
+    for (const value of [envelope.data, envelope.requests, envelope.results, envelope.items]) {
+      if (Array.isArray(value)) return value as WfhRequest[];
+      if (value && typeof value === 'object') {
+        try {
+          return normalizeWfhResponse(value);
+        } catch {
+          // Check the next supported response envelope.
+        }
+      }
+    }
+  }
+
+  throw new Error('Unexpected WFH response format');
+};
 
 // Leave Types
 export interface CreateLeaveDto {
@@ -266,7 +451,6 @@ export interface Holiday {
   isOptional: boolean;
   location?: string;
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface CreateHolidayDto {
@@ -339,6 +523,7 @@ export interface EmployeeSalary {
   id: number;
   employeeId: number;
   structureId: number;
+  structure?: { id?: number; name?: string } | null;
   annualCTC: number;
   monthlyCTC: number;
   effectiveFrom: string;
@@ -400,6 +585,164 @@ export interface AddMembersDto {
   employeeIds: number[];
 }
 
+export type RecruitmentCandidateStatus = 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFERED' | 'HIRED' | 'REJECTED';
+
+export interface RecruitmentJobPosting {
+  id: number;
+  title: string;
+  department: string;
+  requirements: string;
+  description: string;
+  openings: number;
+  remainingOpenings?: number;
+  status: 'OPEN' | 'CLOSED' | 'DRAFT';
+}
+
+export interface CreateRecruitmentJobDto {
+  title: string;
+  department: string;
+  requirements: string;
+  description: string;
+  openings: number;
+}
+
+export type UpdateRecruitmentJobDto = Partial<CreateRecruitmentJobDto>;
+
+export interface RecruitmentInterview {
+  id: number;
+  scheduledAt: string;
+  interviewer: string;
+  notes?: string;
+  feedback?: string;
+}
+
+export interface RecruitmentCandidate {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  jobPostingId: number;
+  jobTitle?: string;
+  status: RecruitmentCandidateStatus;
+  interviews?: RecruitmentInterview[];
+}
+
+export interface CreateRecruitmentCandidateDto {
+  name: string;
+  email: string;
+  phone: string;
+  jobPostingId: number;
+}
+
+export interface ScheduleRecruitmentInterviewDto {
+  candidateId: number;
+  scheduledAt: string;
+  interviewer: string;
+}
+
+export interface RecruitmentInterviewFeedbackDto {
+  feedback: string;
+}
+
+export type TrainingProgramStatus = 'UPCOMING' | 'IN_PROGRESS' | 'COMPLETED';
+
+export interface TrainingEnrollment {
+  id: number;
+  employeeId: number;
+  employeeName?: string;
+  employee?: { id: number; firstName?: string; lastName?: string; name?: string };
+  status: 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED';
+}
+
+export interface TrainingProgram {
+  id: number;
+  title: string;
+  description?: string;
+  trainer: string;
+  department: string;
+  startDate: string;
+  endDate: string;
+  status: TrainingProgramStatus;
+  enrolledCount?: number;
+  enrollments?: TrainingEnrollment[];
+}
+
+export interface CreateTrainingProgramDto {
+  title: string;
+  description: string;
+  trainer: string;
+  department: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface EnrollEmployeesDto {
+  trainingProgramId: number;
+  employeeIds: number[];
+}
+
+export interface UpdateEnrollmentStatusDto {
+  status: TrainingEnrollment['status'];
+}
+
+export type AnnouncementCategory = 'POLICY' | 'HOLIDAY' | 'GENERAL' | 'EVENT';
+export type AnnouncementPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
+export interface Announcement {
+  id: number;
+  title: string;
+  content: string;
+  category: AnnouncementCategory;
+  priority: AnnouncementPriority;
+  targetDepartment?: string | null;
+  isPinned?: boolean;
+  expiresAt?: string | null;
+  createdAt?: string;
+  isRead?: boolean;
+  read?: boolean;
+  author?: { name?: string; firstName?: string; lastName?: string };
+}
+
+export interface CreateAnnouncementDto {
+  title: string;
+  content: string;
+  category: AnnouncementCategory;
+  priority: AnnouncementPriority;
+  targetDepartment: string;
+  isPinned: boolean;
+  expiresAt: string;
+}
+
+export interface ReportsSummary {
+  totalEmployees?: number;
+  employees?: number;
+  todayAttendancePercentage?: number;
+  trainingCompletionRate?: number;
+  activeDepartments?: number;
+  [key: string]: unknown;
+}
+
+export interface HrmsSettings {
+  companyName?: string;
+  supportEmail?: string;
+  hrEmail?: string;
+  address?: string;
+  timezone?: string;
+  currencyCode?: string;
+  workDaysPerWeek?: number;
+  attendanceGracePeriod?: number;
+  [key: string]: unknown;
+}
+
+export interface PermissionRecord {
+  module: string;
+  role: string;
+  read: boolean;
+  write: boolean;
+  delete: boolean;
+  [key: string]: unknown;
+}
+
 class ApiService {
   private static instance: ApiService;
   private pendingRefresh: Promise<void> | null = null;
@@ -421,28 +764,100 @@ class ApiService {
     return ApiService.instance;
   }
 
+  private getToken(): string | null {
+    return localStorage.getItem('accessToken') || localStorage.getItem('token');
+  }
+
+  private getAuthorizationHeaders(): HeadersInit {
+    const token = this.getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
   private getAuthHeaders(): HeadersInit {
-    const token = localStorage.getItem('accessToken');
     return {
       'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
+      ...this.getAuthorizationHeaders(),
     };
+  }
+
+  async post<T>(path: string, payload: unknown): Promise<T> {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      const error = new Error(errorData?.message || `Request failed with status ${response.status}`) as Error & {
+        response?: { data?: unknown };
+      };
+      error.response = { data: errorData };
+      throw error;
+    }
+
+    return await response.json() as T;
+  }
+
+  async get<T>(path: string): Promise<T> {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+    return await response.json() as T;
+  }
+
+  async patch<T>(path: string, payload: unknown): Promise<T> {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+    return await response.json() as T;
+  }
+
+  async delete<T = void>(path: string): Promise<T> {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+    if (response.status === 204) return undefined as T;
+    return await response.json() as T;
   }
 
   private clearAuthTokens(): void {
     localStorage.removeItem('accessToken');
+    localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
   }
 
   private withFreshAuthHeaders(headers?: HeadersInit): HeadersInit {
     const merged = new Headers(headers ?? {});
-    const authHeaders = new Headers(this.getAuthHeaders());
+    const authHeaders = new Headers(this.getAuthorizationHeaders());
 
     for (const [key, value] of authHeaders.entries()) {
       merged.set(key, value);
     }
 
     return merged;
+  }
+
+  private withAuthHeaderIfNeeded(url: string, init: RequestInit): RequestInit {
+    if (url.includes('/auth/login') || url.includes('/auth/forgot-password')) {
+      return init;
+    }
+
+    const token = this.getToken();
+    if (!token) {
+      return init;
+    }
+
+    const headers = new Headers(init.headers ?? {});
+    headers.set('Authorization', `Bearer ${token}`);
+    return { ...init, headers };
   }
 
   private getRequestRetryKey(input: RequestInfo | URL, init?: RequestInit): string {
@@ -472,9 +887,11 @@ class ApiService {
         throw new Error('Token refresh failed');
       }
 
-      const data = await response.json();
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
+      const tokens = getAuthTokens(await response.json());
+      localStorage.setItem('accessToken', tokens.accessToken);
+      if (tokens.refreshToken) {
+        localStorage.setItem('refreshToken', tokens.refreshToken);
+      }
     } catch (error) {
       this.clearAuthTokens();
       throw error instanceof Error ? error : new Error('Token refresh failed');
@@ -495,7 +912,7 @@ class ApiService {
       return this.originalFetch(input, init);
     }
 
-    const response = await this.originalFetch(input, init);
+    const response = await this.originalFetch(input, this.withAuthHeaderIfNeeded(url, init));
 
     if (response.status !== 401) {
       this.retriedRequests.delete(retryKey);
@@ -553,12 +970,15 @@ class ApiService {
       }
 
       const data: LoginResponse = await response.json();
+      const tokens = getAuthTokens(data);
       
       // Store tokens
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
+      localStorage.setItem('accessToken', tokens.accessToken);
+      if (tokens.refreshToken) {
+        localStorage.setItem('refreshToken', tokens.refreshToken);
+      }
       
-      return data;
+      return { ...data, ...tokens };
     } catch (error) {
       console.error('Login exception:', error);
       throw new Error(error instanceof Error ? error.message : 'Login failed. Please try again.');
@@ -577,13 +997,15 @@ class ApiService {
         throw new Error('Token refresh failed');
       }
 
-      const data = await response.json();
+      const tokens = getAuthTokens(await response.json());
       
       // Update tokens
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
+      localStorage.setItem('accessToken', tokens.accessToken);
+      if (tokens.refreshToken) {
+        localStorage.setItem('refreshToken', tokens.refreshToken);
+      }
       
-      return data;
+      return tokens;
     } catch {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
@@ -701,18 +1123,54 @@ class ApiService {
     }
   }
 
-  async getMyAttendance(): Promise<AttendanceRecord[]> {
+  async getMyAttendance(
+    month: number,
+    year: number,
+    page = 1,
+    pageSize = 10,
+  ): Promise<AttendanceHistoryResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/attendance/my-history`, {
+      const response = await fetch(
+        `${API_BASE_URL}/attendance/my-history?month=${month}&year=${year}&page=${page}&pageSize=${pageSize}`,
+        {
         method: 'GET',
         headers: this.getAuthHeaders(),
-      });
+        },
+      );
 
       if (!response.ok) {
         throw new Error('Failed to fetch attendance');
       }
 
-      return await response.json();
+      const payload = await response.json();
+      const normalizeRecord = (record: any): AttendanceRecord => {
+        const normalized = { ...record };
+        if (record.punchIn === undefined && record.clockIn !== undefined) {
+          normalized.punchIn = record.clockIn;
+        }
+        if (record.punchOut === undefined && record.clockOut !== undefined) {
+          normalized.punchOut = record.clockOut;
+        }
+        return normalized;
+      };
+      if (Array.isArray(payload)) {
+        return {
+          data: payload.map(normalizeRecord),
+          meta: {
+            page,
+            pageSize,
+            total: payload.length,
+            totalPages: payload.length > 0 ? 1 : 0,
+            month,
+            year,
+          },
+        };
+      }
+
+      return {
+        ...payload,
+        data: Array.isArray(payload.data) ? payload.data.map(normalizeRecord) : [],
+      } as AttendanceHistoryResponse;
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch attendance');
     }
@@ -735,12 +1193,25 @@ class ApiService {
     }
   }
 
-  async getEmployeeAttendance(employeeId: number): Promise<AttendanceRecord[]> {
+  async getEmployeeAttendance(
+    employeeId: number,
+    month?: number,
+    year?: number,
+    status?: string,
+  ): Promise<AttendanceRecord[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/attendance/employee/${employeeId}`, {
+      const params = new URLSearchParams();
+      if (month !== undefined) params.set('month', String(month));
+      if (year !== undefined) params.set('year', String(year));
+      if (status) params.set('status', status);
+      const query = params.toString();
+      const response = await fetch(
+        `${API_BASE_URL}/attendance/employee/${employeeId}/monthly${query ? `?${query}` : ''}`,
+        {
         method: 'GET',
         headers: this.getAuthHeaders(),
-      });
+        },
+      );
 
       if (!response.ok) {
         throw new Error('Failed to fetch employee attendance');
@@ -860,27 +1331,31 @@ class ApiService {
         throw new Error('Failed to fetch WFH requests');
       }
 
-      return await response.json();
+      return normalizeWfhResponse(await response.json());
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch WFH requests');
     }
   }
 
   async getAllWfhRequests(): Promise<WfhRequest[]> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/wfh/all`, {
-        method: 'GET',
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch WFH requests');
+    const endpoints = ['/wfh/all', '/wfh/requests'];
+    let lastError: Error | null = null;
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+          method: 'GET',
+          headers: this.getAuthHeaders(),
+        });
+        if (!response.ok) {
+          lastError = new Error(`WFH endpoint returned ${response.status}`);
+          continue;
+        }
+        return normalizeWfhResponse(await response.json());
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Failed to fetch WFH requests');
       }
-
-      return await response.json();
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to fetch WFH requests');
     }
+    throw new Error('Failed to fetch WFH requests');
   }
 
   async approveWfh(requestId: number): Promise<WfhRequest> {
@@ -1238,19 +1713,347 @@ class ApiService {
     }
   }
 
-  async getAllEmployees(): Promise<any[]> {
+  async getAllEmployees(query?: EmployeeDirectoryQuery): Promise<any> {
     try {
       const headers = this.getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/employees`, { method: 'GET', headers });
+      const params = new URLSearchParams();
+      Object.entries(query ?? {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') params.set(key, String(value));
+      });
+      const queryString = params.toString();
+      const response = await fetch(`${API_BASE_URL}/employees${queryString ? `?${queryString}` : ''}`, { method: 'GET', headers });
 
       if (!response.ok) {
         throw new Error('Failed to fetch employees from API endpoint');
       }
 
-      return await response.json();
+      return normalizeEmployeeDirectoryResponse(await response.json());
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch employees');
     }
+  }
+
+  async getAttendanceEmployees(searchQuery?: string): Promise<EmployeeDirectoryResponse> {
+    const search = searchQuery?.trim();
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    const attendanceEmployeesEndpoint = `${API_BASE_URL}/attendance/employees`;
+
+    try {
+      const response = await fetch(`${attendanceEmployeesEndpoint}${params.toString() ? `?${params.toString()}` : ''}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch employees from API endpoint');
+      return normalizeEmployeeDirectoryResponse(await response.json());
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch employees');
+    }
+  }
+
+  private async getEmployee360Resource<T>(
+    employeeId: number,
+    path: string,
+    errorMessage: string,
+  ): Promise<T> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees/${employeeId}/360${path}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) throw new Error(errorMessage);
+      return await response.json() as T;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : errorMessage);
+    }
+  }
+
+  async getJobs(): Promise<RecruitmentJobPosting[]> {
+    const response = await fetch(`${API_BASE_URL}/recruitment/jobs`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch job postings');
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  }
+
+  async createJob(data: CreateRecruitmentJobDto): Promise<RecruitmentJobPosting> {
+    return this.post<RecruitmentJobPosting>('/recruitment/jobs', data);
+  }
+
+  async deleteJob(id: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/recruitment/jobs/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete job posting');
+  }
+
+  async updateJob(id: number, data: UpdateRecruitmentJobDto): Promise<RecruitmentJobPosting> {
+    const response = await fetch(`${API_BASE_URL}/recruitment/jobs/${id}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update job posting');
+    return await response.json();
+  }
+
+  async getCandidates(jobPostingId?: number): Promise<RecruitmentCandidate[]> {
+    const query = jobPostingId == null ? '' : `?jobPostingId=${jobPostingId}`;
+    const response = await fetch(`${API_BASE_URL}/recruitment/candidates${query}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch candidates');
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  }
+
+  async createCandidate(data: CreateRecruitmentCandidateDto): Promise<RecruitmentCandidate> {
+    const response = await fetch(`${API_BASE_URL}/recruitment/candidates`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create candidate');
+    return await response.json();
+  }
+
+  async deleteCandidate(id: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/recruitment/candidates/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete candidate');
+  }
+
+  async updateCandidateStatus(id: number, status: RecruitmentCandidateStatus): Promise<RecruitmentCandidate> {
+    const response = await fetch(`${API_BASE_URL}/recruitment/candidates/${id}/status`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) throw new Error('Failed to update candidate status');
+    return await response.json();
+  }
+
+  async scheduleInterview(data: ScheduleRecruitmentInterviewDto): Promise<RecruitmentInterview> {
+    const response = await fetch(`${API_BASE_URL}/recruitment/interviews`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to schedule interview');
+    return await response.json();
+  }
+
+  async submitInterviewFeedback(id: number, data: RecruitmentInterviewFeedbackDto): Promise<RecruitmentInterview> {
+    const response = await fetch(`${API_BASE_URL}/recruitment/interviews/${id}/feedback`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to submit interview feedback');
+    return await response.json();
+  }
+
+  async getTrainingPrograms(): Promise<TrainingProgram[]> {
+    const response = await fetch(`${API_BASE_URL}/training/programs`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch training programs');
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  }
+
+  async createTrainingProgram(data: CreateTrainingProgramDto): Promise<TrainingProgram> {
+    return this.post<TrainingProgram>('/training/programs', data);
+  }
+
+  async updateTrainingProgram(id: number, data: Partial<CreateTrainingProgramDto>): Promise<TrainingProgram> {
+    const response = await fetch(`${API_BASE_URL}/training/programs/${id}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update training program');
+    return await response.json();
+  }
+
+  async deleteTrainingProgram(id: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/training/programs/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete training program');
+  }
+
+  async enrollEmployees(data: EnrollEmployeesDto): Promise<TrainingEnrollment[]> {
+    return this.post<TrainingEnrollment[]>('/training/enroll', data);
+  }
+
+  async updateEnrollmentStatus(id: number, data: UpdateEnrollmentStatusDto): Promise<TrainingEnrollment> {
+    const response = await fetch(`${API_BASE_URL}/training/enrollments/${id}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update enrollment status');
+    return await response.json();
+  }
+
+  async getAnnouncements(): Promise<Announcement[]> {
+    const response = await fetch(`${API_BASE_URL}/announcements/feed`, { method: 'GET', headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch announcements');
+    const payload = await response.json();
+    const data = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload?.announcements)
+          ? payload.announcements
+          : Array.isArray(payload?.items)
+            ? payload.items
+            : [];
+
+    return data.map((announcement: any) => ({
+      ...announcement,
+      category: String(announcement?.category || 'GENERAL').toUpperCase() as AnnouncementCategory,
+      isPinned: announcement?.isPinned === true
+        || String(announcement?.isPinned || announcement?.pinStatus || '').toUpperCase() === 'PINNED',
+    }));
+  }
+
+  async getReportsSummary(): Promise<ReportsSummary> {
+    const response = await fetch(`${API_BASE_URL}/reports/summary`, { method: 'GET', headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch reports summary');
+    const data = await response.json();
+    return data && typeof data === 'object' ? data : {};
+  }
+
+  async exportEmployeeReport(): Promise<Record<string, unknown>[]> {
+    const response = await fetch(`${API_BASE_URL}/reports/export/employees`, { method: 'GET', headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to export employee report');
+    const data = await response.json();
+    return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+  }
+
+  async exportAttendanceReport(): Promise<Record<string, unknown>[]> {
+    const response = await fetch(`${API_BASE_URL}/reports/export/attendance`, { method: 'GET', headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to export attendance report');
+    const data = await response.json();
+    return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+  }
+
+  async exportTrainingReport(): Promise<Record<string, unknown>[]> {
+    const response = await fetch(`${API_BASE_URL}/reports/export/training`, { method: 'GET', headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to export training report');
+    const data = await response.json();
+    return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+  }
+
+  async getSettings(): Promise<HrmsSettings> {
+    const response = await fetch(`${API_BASE_URL}/settings`, { method: 'GET', headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch settings');
+    const data = await response.json();
+    return data && typeof data === 'object' ? (data.data && typeof data.data === 'object' ? data.data : data) : {};
+  }
+
+  async updateSettings(data: HrmsSettings): Promise<HrmsSettings> {
+    const response = await fetch(`${API_BASE_URL}/settings`, { method: 'PATCH', headers: this.getAuthHeaders(), body: JSON.stringify(data) });
+    if (!response.ok) throw new Error('Failed to update settings');
+    return await response.json();
+  }
+
+  async getPermissions(): Promise<PermissionRecord[]> {
+    const response = await fetch(`${API_BASE_URL}/settings/permissions`, { method: 'GET', headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch permissions');
+    const data = await response.json();
+    return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : Array.isArray(data?.permissions) ? data.permissions : [];
+  }
+
+  async updatePermission(data: PermissionRecord): Promise<PermissionRecord> {
+    const response = await fetch(`${API_BASE_URL}/settings/permissions`, { method: 'PATCH', headers: this.getAuthHeaders(), body: JSON.stringify(data) });
+    if (!response.ok) throw new Error('Failed to update permission');
+    return await response.json();
+  }
+
+  async createAnnouncement(data: CreateAnnouncementDto): Promise<Announcement> {
+    return this.post<Announcement>('/announcements', data);
+  }
+
+  async updateAnnouncement(id: number, data: CreateAnnouncementDto): Promise<Announcement> {
+    const response = await fetch(`${API_BASE_URL}/announcements/${id}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update announcement');
+    return await response.json();
+  }
+
+  async deleteAnnouncement(id: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/announcements/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete announcement');
+  }
+
+  async markAnnouncementAsRead(id: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/announcements/${id}/read`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) throw new Error('Failed to mark announcement as read');
+  }
+
+  async getEmployee360(employeeId: number): Promise<Employee360Profile> {
+    return this.getEmployee360Resource<Employee360Profile>(employeeId, '', 'Failed to fetch employee 360 profile');
+  }
+
+  async getEmployee360Attendance(employeeId: number, month: string): Promise<Employee360Attendance> {
+    return this.getEmployee360Resource<Employee360Attendance>(
+      employeeId,
+      `/attendance?month=${encodeURIComponent(month)}`,
+      'Failed to fetch employee 360 attendance',
+    );
+  }
+
+  async getEmployee360Leave(employeeId: number): Promise<Employee360Leave> {
+    return this.getEmployee360Resource<Employee360Leave>(employeeId, '/leave', 'Failed to fetch employee 360 leave');
+  }
+
+  async getEmployee360Hierarchy(employeeId: number): Promise<Employee360Hierarchy> {
+    return this.getEmployee360Resource<Employee360Hierarchy>(employeeId, '/hierarchy', 'Failed to fetch employee 360 hierarchy');
+  }
+
+  async getEmployee360Assets(employeeId: number): Promise<Asset[]> {
+    return this.getEmployee360Resource<Asset[]>(employeeId, '/assets', 'Failed to fetch employee 360 assets');
+  }
+
+  async getEmployee360Documents(employeeId: number): Promise<Employee360Document[]> {
+    const response = await fetch(`${API_BASE_URL}/employees/${employeeId}/360/documents`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch employee 360 documents');
+    }
+
+    const payload = await response.json();
+    return Array.isArray(payload) ? payload : payload?.data || payload?.documents || [];
+  }
+
+  async getEmployee360Payroll(employeeId: number): Promise<Employee360Payroll[]> {
+    return this.getEmployee360Resource<Employee360Payroll[]>(employeeId, '/payroll', 'Failed to fetch employee 360 payroll');
   }
 
   // =========== HRMS / Documents Endpoints (match backend /hrms/* routes) ===========
@@ -1293,12 +2096,10 @@ class ApiService {
       documentTypeIds.forEach((id) => form.append('documentTypeIds', String(id)));
       files.forEach((f) => form.append('files', f));
 
-      const token = localStorage.getItem('accessToken');
-
       const url = `${API_BASE_URL}/hrms/upload-multiple`;
       let response = await fetch(url, {
         method: 'POST',
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: this.getAuthorizationHeaders(),
         body: form,
       });
 
@@ -1307,7 +2108,7 @@ class ApiService {
         const altUrl = `${altBase}/hrms/upload-multiple`;
         response = await fetch(altUrl, {
           method: 'POST',
-          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          headers: this.getAuthorizationHeaders(),
           body: form,
         });
       }
@@ -1385,12 +2186,21 @@ class ApiService {
     }
   }
 
-  async updateDocumentStatus(documentId: number, status: string, role: string): Promise<any> {
+  async updateDocumentStatus(
+    documentId: number,
+    status: string,
+    role: string,
+    rejectionReason?: string,
+  ): Promise<any> {
     try {
       const response = await fetch(`${API_BASE_URL}/hrms/document-status/${documentId}`, {
         method: 'PATCH',
         headers: this.getAuthHeaders(),
-        body: JSON.stringify({ status, role }),
+        body: JSON.stringify({
+          status,
+          role,
+          ...(rejectionReason !== undefined ? { remarks: rejectionReason } : {}),
+        }),
       });
 
       if (!response.ok) {
@@ -1668,16 +2478,6 @@ class ApiService {
       if (employeeId) return { employeeId };
     }
 
-    // Fallback: Use getAllEmployees and search for current user
-    try {
-      const list = await this.getAllEmployees();
-      if (list?.length > 0 && list[0].id) {
-        return { employeeId: list[0].id };
-      }
-    } catch (error) {
-      console.debug('Failed fallback getAllEmployees for employeeId', error);
-    }
-
     throw new Error('Failed to get employee ID');
   }
 
@@ -1713,7 +2513,7 @@ class ApiService {
         throw new Error('Failed to fetch assets');
       }
 
-      return await response.json();
+      return normalizeAssetResponse(await response.json());
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch assets');
     }
@@ -1730,34 +2530,21 @@ class ApiService {
         throw new Error('Failed to fetch my assets');
       }
 
-      return await response.json();
+      return normalizeAssetResponse(await response.json());
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch my assets');
     }
   }
 
-  async getMyAssetsByUserId(userId: number): Promise<Asset[]> {
+  async getMyAssetsByUserId(_userId: number): Promise<Asset[]> {
     try {
-      // Get all assets and filter by assignedTo userId on the frontend
-      // since the backend doesn't have a specific endpoint for this
-      const response = await fetch(`${API_BASE_URL}/assets`, {
-        method: 'GET',
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch assets');
-      }
-
-      const allAssets = await response.json();
-      // Filter assets assigned to the specific user
-      return allAssets.filter((asset: Asset) => asset.assignedTo === userId);
+      return await this.getMyAssets();
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch assets for user');
     }
   }
 
-  async assignAsset(assignment: AssignAssetDto): Promise<AssetAssignment> {
+  async assignAsset(assignment: AssignAssetDto): Promise<Asset> {
     try {
       const response = await fetch(`${API_BASE_URL}/assets/assign`, {
         method: 'POST',
@@ -1792,6 +2579,32 @@ class ApiService {
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to return asset');
     }
+  }
+
+  async updateAsset(assetId: number, data: { name: string; description?: string }): Promise<Asset> {
+    const response = await fetch(`${API_BASE_URL}/assets/${assetId}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to update asset');
+    }
+    return await response.json();
+  }
+
+  async getAssetHistory(assetId: number): Promise<AssetAssignment[]> {
+    const response = await fetch(`${API_BASE_URL}/assets/${assetId}/history`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to fetch asset history');
+    }
+    const payload = await response.json();
+    return Array.isArray(payload) ? payload : Array.isArray(payload.data) ? payload.data : [];
   }
 
   // =========== PAYROLL ENDPOINTS ===========
@@ -1919,6 +2732,31 @@ class ApiService {
     }
   }
 
+  async getUnassignedEmployees(): Promise<any[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/salary/unassigned-employees`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch unassigned employees');
+
+      const payload = await response.json();
+      const employees = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload?.employees)
+            ? payload.employees
+            : [];
+      console.log('Unassigned employees response:', employees);
+      return employees;
+    } catch (error) {
+      console.error('Failed to fetch unassigned employees:', error);
+      return [];
+    }
+  }
+
   async getEmployeeSalaries(employeeId: number): Promise<EmployeeSalary[]> {
     if (!employeeId || employeeId <= 0) {
       return [];
@@ -1939,7 +2777,28 @@ class ApiService {
       }
 
       const data = await response.json();
-      return Array.isArray(data) ? data : [];
+      console.log('Salary Assignment Response:', data);
+      const salaryRecords = Array.isArray(data)
+        ? data
+        : data?.annualCTC || data?.annualCtc || data?.ctc || data?.id
+          ? [data]
+          : Array.isArray(data?.data)
+            ? data.data
+            : data?.data?.salary
+              ? [data.data.salary]
+              : data?.salary
+                ? [data.salary]
+                : data?.assignment
+                  ? [data.assignment]
+                  : [];
+
+      return salaryRecords.map((salary: any) => ({
+        ...salary,
+        annualCTC: salary?.annualCTC ?? salary?.annualCtc ?? salary?.ctc ?? 0,
+        monthlyCTC: salary?.monthlyCTC ?? salary?.monthlyCtc ?? salary?.monthlySalary ?? 0,
+        structureId: salary?.structureId ?? salary?.structure?.id ?? 0,
+        effectiveFrom: salary?.effectiveFrom ?? salary?.effectiveDate ?? salary?.createdAt ?? '',
+      }));
     } catch (error) {
       console.warn(`Error fetching employee salaries for ${employeeId}:`, error);
       return [];
@@ -2179,7 +3038,7 @@ class ApiService {
     yearStart: number,
   ): Promise<{ message: string }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/leaves/carry-forward/request`, {
+      const response = await fetch(`${API_BASE_URL}/leaves/carry-forward`, {
         method: 'POST',
         headers: this.getAuthHeaders(),
         body: JSON.stringify({
@@ -2256,7 +3115,7 @@ class ApiService {
   async approveHelpdeskTicket(ticketId: string): Promise<any> {
     try {
       const response = await fetch(`${API_BASE_URL}/helpdesk/tickets/${ticketId}/approve`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: this.getAuthHeaders(),
       });
 
@@ -2274,7 +3133,7 @@ class ApiService {
   async resolveHelpdeskTicket(ticketId: string): Promise<any> {
     try {
       const response = await fetch(`${API_BASE_URL}/helpdesk/tickets/${ticketId}/resolve`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: this.getAuthHeaders(),
       });
 

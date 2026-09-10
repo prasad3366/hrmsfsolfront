@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, MoreHorizontal, Search, Filter, Download } from 'lucide-react';
+import { Plus, MoreHorizontal, Search, Filter, Download, History } from 'lucide-react';
 import {
   Button,
   Input,
@@ -15,9 +15,13 @@ import {
   Badge,
 } from '../../components/ui/components';
 import { useAssets } from '../../hooks/useAssets';
+import ApiService, { type Asset } from '../../services/api';
 import { CreateAssetModal } from '../../components/assets/CreateAssetModal';
 import { AssignAssetModal } from '../../components/assets/AssignAssetModal';
+import { getAssetActions } from './asset-actions';
 import { useNotifications } from '../../context/NotificationContext';
+import { useAuth } from '../../context/AuthContext';
+import { EditAssetModal } from '../../components/assets/EditAssetModal';
 
 const getAssetAssignedLabel = (asset: any): string => {
   if (asset.user?.firstName && asset.user?.lastName) {
@@ -59,17 +63,25 @@ const renderAssetStatusBadge = (asset: any) => {
 
 const Assets = () => {
   const navigate = useNavigate();
-  const { assets, isLoading, fetchAssets, createAsset, assignAsset, returnAsset } = useAssets();
+  const { user } = useAuth();
+  const { assets, isLoading, error, fetchAssets, fetchMyAssets, createAsset, assignAsset, returnAsset, updateAsset } = useAssets();
   const { addNotification } = useNotifications();
+  const isAssetAdministrator = ['SUPER_ADMIN', 'CEO', 'HR'].includes(user?.role ?? '');
   
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null);
+  const [assignmentMode, setAssignmentMode] = useState<'assign' | 'reassign'>('assign');
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
 
   useEffect(() => {
-    fetchAssets();
-  }, [fetchAssets]);
+    if (isAssetAdministrator) {
+      fetchAssets();
+    } else {
+      fetchMyAssets();
+    }
+  }, [fetchAssets, fetchMyAssets, isAssetAdministrator]);
 
   const filteredAssets = (assets || []).filter((asset) =>
     asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -78,6 +90,8 @@ const Assets = () => {
 
   const assetContent = isLoading ? (
     <div className="p-8 text-center text-slate-500">Loading assets...</div>
+  ) : error ? (
+    <div className="p-8 text-center text-red-600">{error}</div>
   ) : filteredAssets.length === 0 ? (
     <div className="p-8 text-center text-slate-500">
       {searchTerm ? 'No assets found matching your search.' : 'No assets created yet.'}
@@ -110,19 +124,33 @@ const Assets = () => {
             </TableCell>
             <TableCell className="text-right">
               <div className="flex gap-2 justify-end">
-                {asset.status !== 'RETURNED' && !asset.assignedTo && (
+                {isAssetAdministrator && getAssetActions(asset as Asset).includes('assign') && (
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => {
                       setSelectedAssetId(asset.id);
+                      setAssignmentMode('assign');
                       setIsAssignModalOpen(true);
                     }}
                   >
                     Assign
                   </Button>
                 )}
-                {asset.status !== 'RETURNED' && asset.assignedTo && (
+                {isAssetAdministrator && getAssetActions(asset as Asset).includes('reassign') && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedAssetId(asset.id);
+                      setAssignmentMode('reassign');
+                      setIsAssignModalOpen(true);
+                    }}
+                  >
+                    Reassign
+                  </Button>
+                )}
+                {isAssetAdministrator && getAssetActions(asset as Asset).includes('return') && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -131,9 +159,24 @@ const Assets = () => {
                     Return
                   </Button>
                 )}
-                <Button variant="ghost" size="icon">
-                  <MoreHorizontal size={18} />
-                </Button>
+                {isAssetAdministrator && (
+                  <Button variant="ghost" size="icon" aria-label="Edit asset" onClick={() => setEditingAsset(asset as Asset)}>
+                    <MoreHorizontal size={18} />
+                  </Button>
+                )}
+                {isAssetAdministrator && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="View assignment history"
+                    onClick={async () => {
+                      const history = await ApiService.getAssetHistory(asset.id);
+                      window.alert(history.map((entry) => `${entry.user?.email || `User #${entry.assignedTo}`} - ${new Date(entry.assignedAt).toLocaleString()}`).join('\n') || 'No assignment history.');
+                    }}
+                  >
+                    <History size={18} />
+                  </Button>
+                )}
               </div>
             </TableCell>
           </TableRow>
@@ -221,9 +264,11 @@ const Assets = () => {
           <Button variant="outline" className="gap-2">
             <Download size={16} /> Export
           </Button>
-          <Button onClick={() => setIsCreateModalOpen(true)} className="gap-2">
-            <Plus size={16} /> Add Asset
-          </Button>
+          {isAssetAdministrator && (
+            <Button onClick={() => setIsCreateModalOpen(true)} className="gap-2">
+              <Plus size={16} /> Add Asset
+            </Button>
+          )}
         </div>
       </div>
 
@@ -247,20 +292,31 @@ const Assets = () => {
         <CardContent className="p-0">{assetContent}</CardContent>
       </Card>
 
-      <CreateAssetModal
+      {isAssetAdministrator && <CreateAssetModal
         isOpen={isCreateModalOpen}
         isLoading={isLoading}
         onClose={() => setIsCreateModalOpen(false)}
         onSubmit={handleCreateAsset}
+      />}
+
+      <EditAssetModal
+        asset={editingAsset}
+        isLoading={isLoading}
+        onClose={() => setEditingAsset(null)}
+        onSubmit={async (data) => {
+          await updateAsset(editingAsset!.id, data);
+        }}
       />
 
       <AssignAssetModal
         isOpen={isAssignModalOpen}
         assetId={selectedAssetId ?? undefined}
+        mode={assignmentMode}
         isLoading={isLoading}
         onClose={() => {
           setIsAssignModalOpen(false);
           setSelectedAssetId(null);
+          setAssignmentMode('assign');
         }}
         onSubmit={handleAssignAsset}
       />

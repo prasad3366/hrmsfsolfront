@@ -110,16 +110,19 @@ const LeaveManagement = () => {
     totalPages: 1,
   });
 
+  const canManageLeave = ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER'].includes(user?.role ?? '');
+  const canApproveLeave = ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER'].includes(user?.role ?? '');
+
   // Initial data load
   useEffect(() => {
     fetchMyLeaveHistory();
     fetchMyLeaveBalance(financialYearStart);
-    if (user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER') {
+    if (canManageLeave) {
       fetchManagerLeaveHistory(managerLeavePage, managerLeaveLimit)
         .then((response) => setManagerLeavePagination(response.pagination))
         .catch(() => undefined);
     }
-  }, [user?.role, fetchMyLeaveHistory, fetchMyLeaveBalance, fetchManagerLeaveHistory, financialYearStart, managerLeavePage]);
+  }, [canManageLeave, fetchMyLeaveHistory, fetchMyLeaveBalance, fetchManagerLeaveHistory, financialYearStart, managerLeavePage]);
 
   // Show notifications
   useEffect(() => {
@@ -256,25 +259,27 @@ const LeaveManagement = () => {
           <Button className="gap-2" onClick={() => setIsApplyModalOpen(true)}>
             <Plus size={16} /> Apply Leave
           </Button>
-          <Button 
-            variant="secondary" 
-            className="gap-2" 
-            onClick={() => setIsCarryForwardModalOpen(true)}
-          >
-            <Gift size={16} /> Carry Forward
-          </Button>
+          {['SUPER_ADMIN', 'CEO', 'HR', 'EMPLOYEE'].includes(user?.role ?? '') && (
+            <Button 
+              variant="secondary"  
+              className="gap-2" 
+              onClick={() => setIsCarryForwardModalOpen(true)}
+            >
+              <Gift size={16} /> Carry Forward
+            </Button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        {myLeaveBalance && myLeaveBalance.length > 0 ? (
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {myLeaveBalance.length > 0 ? (
           myLeaveBalance.map((balance, idx) => (
             <LeaveBalanceCard
-              key={`${balance.leaveType}-${idx}`}
-              type={balance.leaveType}
+              key={balance.id}
               total={balance.allocated}
               used={balance.used}
               color={['blue', 'rose', 'purple', 'orange'][idx % 4]}
+              type={balance.leaveType}
             />
           ))
         ) : (
@@ -284,7 +289,7 @@ const LeaveManagement = () => {
         )}
       </div>
 
-      {(user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER') && (
+      {canApproveLeave && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2" hoverEffect>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -473,15 +478,17 @@ const LeaveManagement = () => {
         isSubmitting={isSubmitting}
       />
 
-      <ApproveRejectLeaveModal
-        isOpen={approveRejectModal.isOpen}
-        onClose={() => setApproveRejectModal({ ...approveRejectModal, isOpen: false })}
-        onApprove={() => handleApproveLeave(approveRejectModal.leaveId)}
-        onReject={(remarks) => handleRejectLeave(approveRejectModal.leaveId, remarks)}
-        actionType={approveRejectModal.action}
-        leaveDetails={approveRejectModal.leaveDetails}
-        isSubmitting={isSubmitting}
-      />
+      {canApproveLeave && (
+        <ApproveRejectLeaveModal
+          isOpen={approveRejectModal.isOpen}
+          onClose={() => setApproveRejectModal({ ...approveRejectModal, isOpen: false })}
+          onApprove={() => handleApproveLeave(approveRejectModal.leaveId)}
+          onReject={(remarks) => handleRejectLeave(approveRejectModal.leaveId, remarks)}
+          actionType={approveRejectModal.action}
+          leaveDetails={approveRejectModal.leaveDetails}
+          isSubmitting={isSubmitting}
+        />
+      )}
 
       <MedicalCertificateModal
         isOpen={certificateModal.isOpen}

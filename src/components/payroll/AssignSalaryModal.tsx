@@ -32,25 +32,28 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
   const [employees, setEmployees] = useState<any[]>([]);
   const [empLoading, setEmpLoading] = useState(false);
   const [empError, setEmpError] = useState<string | null>(null);
-    useEffect(() => {
-      if (isRaiseMode) return; // no dropdown to populate in raise mode
-      let mounted = true;
-      setEmpLoading(true);
-      ApiService.getAllEmployees()
-        .then((data) => {
-          if (mounted === false) return;
-          // Only show active employees who don't already have a salary assigned.
-          const unassigned = (data || []).filter(
-            (emp: any) => emp.status === 'ACTIVE' && (!emp.salaries || emp.salaries.length === 0),
-          );
-          setEmployees(unassigned);
-        })
-        .catch((err) => {
-          setEmpError('Failed to load employees');
-        })
-        .finally(() => setEmpLoading(false));
-      return () => { mounted = false; };
-    }, [isRaiseMode]);
+  useEffect(() => {
+    if (!isOpen || isRaiseMode) return;
+
+    let mounted = true;
+    setEmpLoading(true);
+    setEmpError(null);
+    ApiService.getUnassignedEmployees()
+      .then((unassignedEmployees) => {
+        if (mounted) setEmployees(Array.isArray(unassignedEmployees) ? unassignedEmployees : []);
+      })
+      .catch(() => {
+        if (mounted) {
+          setEmployees([]);
+          setEmpError(null);
+        }
+      })
+      .finally(() => {
+        if (mounted) setEmpLoading(false);
+      });
+
+    return () => { mounted = false; };
+  }, [isOpen, isRaiseMode]);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -100,6 +103,7 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
         annualCTC,
         structureId,
       });
+      window.dispatchEvent(new Event('salary-assigned'));
       
       // Show success message
       setSuccessMessage(isRaiseMode ? 'Raise assigned successfully!' : 'Salary assigned successfully!');
@@ -176,15 +180,14 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
                 >
                   <option value="">Select employee...</option>
                   {empLoading && <option>Loading...</option>}
-                  {empError && <option disabled>{empError}</option>}
-                  {!empLoading && !empError && employees.length === 0 && (
+                  {!empLoading && employees.length === 0 && (
                     <option disabled>No employees pending salary assignment</option>
                   )}
                   {employees.map((emp) => (
                     <option key={emp.id || emp.employeeId || emp.empCode}
                       value={emp.empCode}
                     >
-                      {(emp.firstName || emp.name || '') + (emp.lastName ? ' ' + emp.lastName : '')} {emp.empCode ? `(${emp.empCode})` : ''}
+                      {`${emp.firstName || ''} ${emp.lastName || ''}`.trim()} ({emp.empCode || '-'}) - {emp.designation || 'Designation unavailable'}
                     </option>
                   ))}
                 </select>

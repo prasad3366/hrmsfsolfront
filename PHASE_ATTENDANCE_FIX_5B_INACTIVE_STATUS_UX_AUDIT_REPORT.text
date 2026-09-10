@@ -1,0 +1,185 @@
+PHASE ATTENDANCE FIX 5B - INACTIVE EMPLOYEE STATUS UX
+READ-ONLY AUDIT REPORT
+
+Date
+----
+2026-09-04
+
+Verdict
+-------
+SAFE TO IMPLEMENT
+
+Confirmed issue
+---------------
+
+The stale-state issue exists in the current self-attendance flow.
+
+useAttendance.ts owns todayRecord. During fetchAttendance(), it first loads
+the current user's historical records and then requests GET
+/attendance/today-status through ApiService.getTodayStatus(). If that request
+fails, including a 401 or 403, the nested catch currently logs the error and
+keeps the previous todayRecord:
+
+- the old todayRecord is not cleared;
+- Attendance.tsx derives hasPunchedIn and hasPunchedOut from that old value;
+- the punch action button remains rendered;
+- the old label can remain Check Out or View;
+- PunchInOutModal receives the same stale todayRecord if opened.
+
+The API method correctly rejects non-OK responses, but it does not preserve the
+HTTP status in the thrown Error. That is not required for the minimal fix,
+because any failure to establish current self-status should invalidate the
+cached current-status value.
+
+There is a second stale-state variant when the historical
+/attendance/my-history request fails first: the outer fetchAttendance catch
+sets only the general error and also leaves any previous todayRecord intact.
+The same reset should therefore cover both the today-status failure path and
+the overall self-attendance failure path.
+
+Relevant current behavior
+--------------------------
+
+Today-status loading:
+- useAttendance sets shared isLoading to true while fetching history and
+  today-status.
+- Attendance.tsx returns a loading view while isLoading is true.
+- Once loading finishes, the action card is rendered regardless of whether
+  todayRecord exists.
+
+todayRecord state:
+- initialized as undefined in useAttendance.
+- set to the successful today-status response, or undefined when the API
+  returns null.
+- currently preserved after a today-status exception.
+
+401/403 handling:
+- ApiService.getTodayStatus() throws for every non-OK response other than 404.
+- 401 and 403 therefore reach the hook catch.
+- The hook currently logs the error and intentionally keeps the previous state.
+- No dedicated 401/403 reset exists in Attendance.tsx or the hook.
+
+Punch button and modal:
+- Attendance.tsx always renders the action button after loading.
+- Its label is derived from todayRecord: Check In, Check Out, or View.
+- Opening the button passes todayRecord to PunchInOutModal.
+- The modal independently derives its punch state from todayRecord and may
+  expose Punch Out or Completed based on stale data.
+- Punch-in and punch-out API contracts are not changed by the proposed fix.
+
+Exact file that would change
+----------------------------
+
+Smallest implementation boundary:
+- src/hooks/useAttendance.ts
+
+No change is required to Attendance.tsx, api.ts, PunchInOutModal.tsx, or any
+backend file. The hook is the owning state/reset boundary and is shared by the
+self-attendance screen without introducing new authorization logic.
+
+Minimal proposed change
+-----------------------
+
+Clear todayRecord whenever the current self-attendance refresh cannot establish
+a valid current status:
+
+1. In the nested catch around getTodayStatus(), call
+   setTodayRecord(undefined) before or alongside the existing warning.
+2. In the outer fetchAttendance catch, call setTodayRecord(undefined) before
+   setting the existing general error.
+
+Do not change the API method, HTTP status handling, punch methods, records
+state, or any authorization condition. Do not add a frontend interpretation of
+inactive status. The backend remains responsible for returning 401/403.
+
+State/UX behavior before vs after
+----------------------------------
+
+Before:
+- A previous successful todayRecord can survive a later 401/403 from
+  /attendance/today-status.
+- After loading ends, the action card remains visible with a stale Check Out or
+  View label.
+- Opening the modal can expose stale current-status controls.
+- A history-request failure can produce the same stale action state.
+
+After:
+- A failed current-status refresh clears todayRecord.
+- Attendance.tsx derives false punch flags and displays Check In rather than
+  stale Check Out/View; the existing action card remains structurally present.
+- The modal receives no stale status and defaults to Punch In if opened.
+- The existing attendance error remains available in the historical-records
+  area; historical records are not cleared or altered by this reset.
+- A successful response still replaces todayRecord exactly as before.
+- A successful 404 response still maps to null/undefined exactly as before.
+
+This is the smallest state-safety fix. A larger UX change could hide or disable
+the action card when current status is unavailable, but that would alter the
+existing UI more than necessary and is not recommended for Fix 5B.
+
+Tests required
+--------------
+
+Existing focused tests cover API request behavior but no focused test currently
+proves that useAttendance clears todayRecord after a rejected today-status
+request.
+
+Minimum recommended coverage:
+- Add one focused hook/component-level test with a previously populated
+  todayRecord, a successful history response, and a 401 or 403 today-status
+  rejection; assert that the returned todayRecord is undefined after refresh.
+- Add the equivalent assertion for a rejected history request only if the outer
+  catch reset is implemented, since that is a separate stale-state path.
+- Verify the successful status path and successful 404/null path remain
+  unchanged.
+- Preserve existing punch-in, punch-out, historical attendance, and summary
+  tests.
+
+The repository currently has no React testing-library or hook test harness.
+Adding a full component-test dependency would exceed the minimum scope. The
+smallest practical test should use the project's existing test tooling if a
+hook harness is already available in the test environment; otherwise this
+behavior needs a narrowly scoped hook test setup before automated coverage can
+be added.
+
+Regression risks
+----------------
+
+- Clearing todayRecord on a transient status-network failure may show Check In
+  until a later successful refresh, but this is safer than exposing stale
+  punch controls after current status is unavailable.
+- The action button remains visible by design; only its stale status input is
+  removed. This preserves existing Attendance layout and interaction shape.
+- Historical attendance records remain untouched.
+- The modal's existing local state behavior is untouched.
+- No request is retried, so there is no new request loop or race introduced by
+  the reset itself.
+
+Explicit non-impact confirmation
+---------------------------------
+
+The proposed frontend-only reset does not change:
+- backend authorization;
+- JWT or authentication behavior;
+- inactive-employee backend punch/status defense;
+- attendance business rules;
+- punch-in or punch-out API contracts;
+- historical attendance data or loading;
+- manager/team scoping;
+- Employee 360 attendance;
+- unrelated frontend modules.
+
+It only invalidates cached current self-status when the current refresh fails.
+The backend remains authoritative for whether an inactive employee may punch
+or read current status.
+
+Audit-only confirmation
+------------------------
+
+- No source files modified.
+- No tests modified.
+- No implementation code added.
+- No backend, schema, migration, authorization, or API changes made.
+- No unrelated TypeScript errors, /index.css warning, or bundle-size warning
+  was investigated or changed.
+- Existing dirty worktree preserved.

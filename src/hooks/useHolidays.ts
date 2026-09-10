@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
 import api, { Holiday, CreateHolidayDto, UpdateHolidayDto } from '../services/api';
+import { addHoliday, removeHoliday, replaceHoliday } from '../modules/holidays/holiday-state';
 
 export const useHolidays = () => {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [myHolidays, setMyHolidays] = useState<Holiday[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -16,7 +17,7 @@ export const useHolidays = () => {
     setSuccess(null);
     try {
       const newHoliday = await api.createHoliday(holiday);
-      setHolidays((prev) => [...prev, newHoliday]);
+      setHolidays((prev) => addHoliday(prev, newHoliday));
       setSuccess('Holiday created successfully');
       return newHoliday;
     } catch (err) {
@@ -35,9 +36,7 @@ export const useHolidays = () => {
     setSuccess(null);
     try {
       const updatedHoliday = await api.updateHoliday(id, holiday);
-      setHolidays((prev) =>
-        prev.map((h) => (h.id === id ? updatedHoliday : h))
-      );
+      setHolidays((prev) => replaceHoliday(prev, updatedHoliday));
       setSuccess('Holiday updated successfully');
       return updatedHoliday;
     } catch (err) {
@@ -56,7 +55,7 @@ export const useHolidays = () => {
     setSuccess(null);
     try {
       await api.deleteHoliday(id);
-      setHolidays((prev) => prev.filter((h) => h.id !== id));
+      setHolidays((prev) => removeHoliday(prev, id));
       setSuccess('Holiday deleted successfully');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete holiday';
@@ -71,6 +70,7 @@ export const useHolidays = () => {
   const fetchHolidaysByYear = useCallback(async (year: number) => {
     setIsLoading(true);
     setError(null);
+    setHolidays([]);
     try {
       const data = await api.getHolidaysByYear(year);
       setHolidays(data);
@@ -86,6 +86,7 @@ export const useHolidays = () => {
   const fetchMyHolidays = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setMyHolidays([]);
     try {
       const data = await api.getMyHolidays();
       setMyHolidays(data);

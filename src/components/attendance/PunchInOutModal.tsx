@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button } from '../../components/ui/components';
 import { MapPin } from 'lucide-react';
-import ApiService from '../../services/api';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { useNotifications } from '../../context/NotificationContext';
 
@@ -9,6 +8,8 @@ interface PunchInOutModalProps {
   isOpen: boolean;
   onClose: () => void;
   todayRecord?: any;
+  onPunchIn: (latitude?: number, longitude?: number) => Promise<void>;
+  onPunchOut: (latitude?: number, longitude?: number) => Promise<void>;
   onSuccess: () => Promise<void>;
 }
 
@@ -16,6 +17,8 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
   isOpen,
   onClose,
   todayRecord,
+  onPunchIn,
+  onPunchOut,
   onSuccess,
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,6 +59,9 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
   }, [isOpen]);
 
   const handlePunchIn = async () => {
+    if (isSubmitting || isGeoLoading) return;
+
+    setIsSubmitting(true);
     try {
       setErrorMessage('');
       setSuccessMessage('');
@@ -66,9 +72,7 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
         return;
       }
 
-      setIsSubmitting(true);
-
-      await ApiService.punchIn(coords.latitude, coords.longitude);
+      await onPunchIn(coords.latitude, coords.longitude);
 
       // ✅ INSTANT UI SWITCH
       setLocalPunchedIn(true);
@@ -82,8 +86,7 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
         message: `You punched in at ${new Date().toLocaleTimeString()}`,
       });
 
-      // ✅ Refresh DB data in background, don't await to avoid blocking the UI
-      onSuccess().catch(err => console.error('Failed to refresh after punch in:', err));
+      await onSuccess();
 
       // ✅ Close modal quickly to prevent flickering
       setTimeout(() => onClose(), 600);
@@ -92,16 +95,15 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
       console.error('punchIn error:', err);
       setErrorMessage(err.message || 'Punch in failed');
 
-      if (err.message?.toLowerCase().includes('already')) {
-        await onSuccess();
-      }
-
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handlePunchOut = async () => {
+    if (isSubmitting || isGeoLoading) return;
+
+    setIsSubmitting(true);
     try {
       setErrorMessage('');
       setSuccessMessage('');
@@ -112,9 +114,7 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
         return;
       }
 
-      setIsSubmitting(true);
-
-      await ApiService.punchOut(coords.latitude, coords.longitude);
+      await onPunchOut(coords.latitude, coords.longitude);
 
       // ✅ INSTANT UI SWITCH
       setLocalPunchedOut(true);
@@ -127,8 +127,7 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
         message: `You punched out at ${new Date().toLocaleTimeString()}`,
       });
 
-      // ✅ Refresh DB data in background, don't await to avoid blocking the UI
-      onSuccess().catch(err => console.error('Failed to refresh after punch out:', err));
+      await onSuccess();
 
       // ✅ Close modal quickly to prevent flickering
       setTimeout(() => onClose(), 600);
@@ -136,9 +135,6 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
     } catch (err: any) {
       console.error('punchOut error:', err);
       setErrorMessage(err.message || 'Punch out failed');
-
-      // 🔥 Force sync if mismatch
-      await onSuccess();
 
     } finally {
       setIsSubmitting(false);

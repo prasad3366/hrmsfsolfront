@@ -1,7 +1,42 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Search } from 'lucide-react';
-import ApiService, { AttendanceRecord, Leave, MonthlyAttendanceSummary } from '../../services/api';
+import ApiService, { AttendanceRecord, Employee360Leave, MonthlyAttendanceSummary } from '../../services/api';
+import attendanceService from '../../services/attendanceService';
 import { Badge, Button, Card, CardHeader, CardTitle, CardContent, Input, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
+
+type AttendanceFilter = 'ALL' | 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'LEAVE';
+type AttendanceRecordPayload = Partial<AttendanceRecord> & {
+  attendanceDate?: string | null;
+  attendanceStatus?: string | null;
+  clockIn?: string | null;
+  clockOut?: string | null;
+  data?: unknown;
+  records?: unknown;
+  history?: unknown;
+};
+
+const extractAttendanceRecords = (payload: unknown): AttendanceRecordPayload[] => {
+  if (Array.isArray(payload)) return payload as AttendanceRecordPayload[];
+  if (!payload || typeof payload !== 'object') return [];
+
+  const response = payload as AttendanceRecordPayload;
+  for (const nestedPayload of [response.data, response.records, response.history]) {
+    const records = extractAttendanceRecords(nestedPayload);
+    if (records.length > 0) return records;
+  }
+
+  return [];
+};
+
+const normalizeAttendanceRecords = (payload: unknown): AttendanceRecord[] => (
+  extractAttendanceRecords(payload).map((record) => ({
+    ...record,
+    date: record.date || record.attendanceDate || '',
+    status: (record.status || record.attendanceStatus || '') as AttendanceRecord['status'],
+    punchIn: record.punchIn || record.clockIn || '',
+    punchOut: record.punchOut || record.clockOut || null,
+  })) as AttendanceRecord[]
+);
 
 const EmployeeAttendance = () => {
   const [employees, setEmployees] = useState<any[]>([]);
@@ -17,18 +52,29 @@ const EmployeeAttendance = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [summary, setSummary] = useState<MonthlyAttendanceSummary | null>(null);
+  const [attendanceFilter, setAttendanceFilter] = useState<AttendanceFilter>('ALL');
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [leaveRecords, setLeaveRecords] = useState<Leave[]>([]);
+  const [leaveRecords, setLeaveRecords] = useState<Employee360Leave['recentHistory']>([]);
   const [isLeaveLoading, setIsLeaveLoading] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
+    if (selectedEmployee) {
+      setEmployees([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
 
-    ApiService.getAllEmployees()
-      .then((data) => {
-        if (mounted) setEmployees(data || []);
+    let mounted = true;
+    setIsLoading(true);
+    setError(null);
+
+    const loadEmployees = () => attendanceService.getAttendanceEmployees(searchTerm)
+      .then((res) => {
+        const employeeList = Array.isArray(res) ? res : (res.data || []);
+        if (mounted) setEmployees(employeeList);
       })
       .catch((err) => {
         if (mounted) {
@@ -39,28 +85,28 @@ const EmployeeAttendance = () => {
         if (mounted) setIsLoading(false);
       });
 
+    if (!searchTerm.trim()) {
+      loadEmployees();
+      return () => {
+        mounted = false;
+      };
+    }
+
+    const debounceTimer = window.setTimeout(loadEmployees, 300);
     return () => {
+      window.clearTimeout(debounceTimer);
       mounted = false;
     };
-  }, []);
+  }, [searchTerm, selectedEmployee]);
 
   const getEmployeeName = (employee: any) => (
     `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.name || employee.empCode || 'Unknown'
   );
 
   const filteredEmployees = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-    if (!query || selectedEmployee) return [];
-
-    return employees.filter((employee) => {
-      const name = getEmployeeName(employee).toLowerCase();
-      const firstName = String(employee.firstName || '').toLowerCase();
-      const lastName = String(employee.lastName || '').toLowerCase();
-      const empCode = String(employee.empCode || employee.employeeId || employee.id || '').toLowerCase();
-
-      return name.includes(query) || firstName.includes(query) || lastName.includes(query) || empCode.includes(query);
-    });
-  }, [employees, searchTerm, selectedEmployee]);
+    if (selectedEmployee) return [];
+    return employees;
+  }, [employees, selectedEmployee]);
 
   const handleSelectEmployee = (employee: any) => {
     setSelectedEmployee(employee);
@@ -69,6 +115,7 @@ const EmployeeAttendance = () => {
     setAttendanceError(null);
     setSummary(null);
     setSummaryError(null);
+    setAttendanceFilter('ALL');
     setLeaveRecords([]);
     setLeaveError(null);
   };
@@ -97,9 +144,14 @@ const EmployeeAttendance = () => {
     setAttendanceError(null);
     setIsAttendanceLoading(true);
 
-    ApiService.getEmployeeAttendance(numericEmployeeId)
-      .then((data) => {
-        if (mounted) setAttendanceRecords(data || []);
+    const [yearText, monthText] = selectedMonth.split('-');
+    const month = Number(monthText);
+    const year = Number(yearText);
+
+    ApiService.getEmployeeAttendance(numericEmployeeId, month, year)
+      .then((response) => {
+        console.log('API Attendance Response:', response);
+        if (mounted) setAttendanceRecords(normalizeAttendanceRecords(response));
       })
       .catch((err) => {
         if (mounted) {
@@ -113,7 +165,7 @@ const EmployeeAttendance = () => {
     return () => {
       mounted = false;
     };
-  }, [selectedEmployeeId]);
+  }, [selectedEmployeeId, selectedMonth]);
 
   useEffect(() => {
     if (selectedEmployeeId === undefined || selectedEmployeeId === null) {
@@ -175,17 +227,11 @@ const EmployeeAttendance = () => {
     setLeaveError(null);
     setIsLeaveLoading(true);
 
-    ApiService.getEmployeeById(numericEmployeeId)
+    ApiService.getEmployee360Leave(numericEmployeeId)
       .then((data) => {
         if (!mounted) return;
 
-        const rawLeaves = Array.isArray(data?.leaves) ? data.leaves : [];
-        const employeeLeaves = rawLeaves.filter((leave: any) => {
-          const leaveEmployeeId = Number(leave.employeeId ?? leave.employee?.id ?? data?.id ?? selectedEmployeeId);
-          return Number.isFinite(leaveEmployeeId) && leaveEmployeeId === numericEmployeeId;
-        });
-
-        setLeaveRecords(employeeLeaves as Leave[]);
+        setLeaveRecords(data?.recentHistory || []);
       })
       .catch((err) => {
         if (mounted) {
@@ -202,8 +248,9 @@ const EmployeeAttendance = () => {
   }, [selectedEmployeeId]);
 
   const attendanceStatusVariant = (status: string) => {
-    if (status === 'PRESENT') return 'success';
-    if (status === 'ABSENT') return 'danger';
+    const normalizedStatus = status?.toUpperCase();
+    if (normalizedStatus === 'PRESENT') return 'success';
+    if (normalizedStatus === 'ABSENT') return 'danger';
     return 'warning';
   };
 
@@ -226,6 +273,26 @@ const EmployeeAttendance = () => {
       .replace(/_/g, ' ')
       .toLowerCase()
       .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  };
+
+  const filteredRecords = useMemo(() => attendanceRecords
+    .filter((record) => {
+      const recordDate = new Date(record.date);
+      const recordMonth =
+        `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
+      const recordStatus = String(
+        record.status || (record as AttendanceRecord & { attendanceStatus?: string }).attendanceStatus || '',
+      ).toUpperCase();
+
+      return recordMonth === selectedMonth
+        && (attendanceFilter === 'ALL' || recordStatus === attendanceFilter.toUpperCase());
+    })
+    .sort((firstRecord, secondRecord) => (
+      new Date(firstRecord.date).getTime() - new Date(secondRecord.date).getTime()
+    )), [attendanceRecords, selectedMonth, attendanceFilter]);
+
+  const toggleAttendanceFilter = (filter: Exclude<AttendanceFilter, 'ALL'>) => {
+    setAttendanceFilter((currentFilter) => currentFilter === filter ? 'ALL' : filter);
   };
 
   return (
@@ -297,6 +364,7 @@ const EmployeeAttendance = () => {
                 setAttendanceError(null);
                 setSummary(null);
                 setSummaryError(null);
+                    setAttendanceFilter('ALL');
                 setLeaveRecords([]);
                 setLeaveError(null);
               }}>
@@ -306,6 +374,42 @@ const EmployeeAttendance = () => {
           )}
         </CardContent>
       </Card>
+
+      {!selectedEmployee && !isLoading && !error && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {searchTerm.trim() ? 'Matching Employees' : 'Employee Attendance'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {filteredEmployees.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                {searchTerm.trim() ? 'No matching employees found.' : 'No employees are available in your authorized scope.'}
+              </p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {filteredEmployees.map((employee) => (
+                  <button
+                    type="button"
+                    key={employee.id || employee.employeeId || employee.empCode}
+                    onClick={() => handleSelectEmployee(employee)}
+                    className="flex w-full items-center justify-between px-2 py-3 text-left hover:bg-slate-50"
+                  >
+                    <span>
+                      <span className="block font-medium text-slate-900">{getEmployeeName(employee)}</span>
+                      <span className="block text-xs text-slate-500">ID: {employee.empCode || employee.employeeId || employee.id || '-'}</span>
+                    </span>
+                    {employee.designation && (
+                      <span className="ml-4 text-xs text-slate-500">{employee.designation}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {selectedEmployee && (
         <div className="space-y-6">
@@ -326,7 +430,10 @@ const EmployeeAttendance = () => {
                   <input
                     type="month"
                     value={selectedMonth}
-                    onChange={(event) => setSelectedMonth(event.target.value)}
+                      onChange={(event) => {
+                        setSelectedMonth(event.target.value);
+                        setAttendanceFilter('ALL');
+                      }}
                     className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     aria-label="Select attendance month"
                   />
@@ -352,19 +459,31 @@ const EmployeeAttendance = () => {
                 <div className="py-8 text-center text-sm text-slate-500">No summary available for this month.</div>
               ) : (
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-                  {[
-                    ['Working Days', summary.workingDays, 'text-slate-900', 'bg-slate-50'],
-                    ['Present', summary.presentDays, 'text-emerald-600', 'bg-emerald-50'],
-                    ['Half Day', summary.halfDays, 'text-amber-600', 'bg-amber-50'],
-                    ['Absent', summary.absentDays, 'text-rose-600', 'bg-rose-50'],
-                    ['Leave', summary.leaveDays, 'text-blue-600', 'bg-blue-50'],
-                    ['Attendance %', `${summary.attendancePercentage}%`, 'text-violet-600', 'bg-violet-50'],
-                  ].map(([label, value, color, bgClass]) => (
-                    <div key={label} className={`rounded-xl border border-slate-200 ${bgClass} p-4`}>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Working Days</p>
+                    <p className="mt-3 text-2xl font-bold text-slate-900">{summary.workingDays}</p>
+                  </div>
+                  {([
+                    ['Present', summary.presentDays, 'PRESENT', 'text-emerald-600', 'bg-emerald-50'],
+                    ['Half Day', summary.halfDays, 'HALF_DAY', 'text-amber-600', 'bg-amber-50'],
+                    ['Absent', summary.absentDays, 'ABSENT', 'text-rose-600', 'bg-rose-50'],
+                    ['Leave', summary.leaveDays, 'LEAVE', 'text-blue-600', 'bg-blue-50'],
+                  ] as const).map(([label, value, filter, color, bgClass]) => (
+                    <button
+                      type="button"
+                      key={label}
+                      onClick={() => toggleAttendanceFilter(filter)}
+                      aria-pressed={attendanceFilter === filter}
+                      className={`cursor-pointer rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${bgClass} ${attendanceFilter === filter ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-200'}`}
+                    >
                       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
                       <p className={`mt-3 text-2xl font-bold ${color}`}>{value}</p>
-                    </div>
+                    </button>
                   ))}
+                  <div className="rounded-xl border border-slate-200 bg-violet-50 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Attendance %</p>
+                    <p className="mt-3 text-2xl font-bold text-violet-600">{summary.attendancePercentage}%</p>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -379,8 +498,15 @@ const EmployeeAttendance = () => {
                 <div className="p-6 text-center text-sm text-slate-500">Loading attendance records...</div>
               ) : attendanceError ? (
                 <div className="p-6 text-center text-sm text-rose-600">{attendanceError}</div>
-              ) : attendanceRecords.length === 0 ? (
-                <div className="p-6 text-center text-sm text-slate-500">No attendance records found.</div>
+              ) : filteredRecords.length === 0 ? (
+                <div className="p-6 text-center text-sm text-slate-500">
+                  <p>No attendance records found for this filter.</p>
+                  {attendanceFilter !== 'ALL' && (
+                    <button type="button" onClick={() => setAttendanceFilter('ALL')} className="mt-2 font-semibold text-blue-600 hover:text-blue-700">
+                      Reset Filter / View All
+                    </button>
+                  )}
+                </div>
               ) : (
                 <Table>
                   <TableHeader>
@@ -393,11 +519,21 @@ const EmployeeAttendance = () => {
                     </TableRow>
                   </TableHeader>
                   <tbody>
-                    {attendanceRecords.map((record) => (
+                    {(() => {
+                      console.log(filteredRecords);
+                      return null;
+                    })()}
+                    {filteredRecords.map((record) => (
                       <TableRow key={record.id}>
-                        <TableCell>{new Date(record.date).toLocaleDateString()}</TableCell>
+                        <TableCell>{formatDate(record.date)}</TableCell>
                         <TableCell>
-                          <Badge variant={attendanceStatusVariant(record.status)}>{record.status}</Badge>
+                          <Badge
+                            variant={attendanceStatusVariant(
+                              record.status || (record as AttendanceRecord & { attendanceStatus?: string }).attendanceStatus || '',
+                            )}
+                          >
+                            {record.status || (record as AttendanceRecord & { attendanceStatus?: string }).attendanceStatus || 'N/A'}
+                          </Badge>
                         </TableCell>
                         <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString() : '-'}</TableCell>
                         <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString() : '-'}</TableCell>
@@ -431,14 +567,12 @@ const EmployeeAttendance = () => {
                       <TableHead>Total Days</TableHead>
                       <TableHead>Duration Type</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Remarks</TableHead>
                     </TableRow>
                   </TableHeader>
                   <tbody>
                     {leaveRecords.map((leave) => (
                       <TableRow key={leave.id}>
-                        <TableCell>{leave.leaveType?.name || '—'}</TableCell>
+                        <TableCell>{leave.leaveType || '—'}</TableCell>
                         <TableCell>{formatDate(leave.startDate)}</TableCell>
                         <TableCell>{formatDate(leave.endDate)}</TableCell>
                         <TableCell>{leave.totalDays}</TableCell>
@@ -446,8 +580,6 @@ const EmployeeAttendance = () => {
                         <TableCell>
                           <Badge variant={leaveStatusVariant(leave.status)}>{leave.status}</Badge>
                         </TableCell>
-                        <TableCell>{leave.reason || '-'}</TableCell>
-                        <TableCell>{leave.remarks || '-'}</TableCell>
                       </TableRow>
                     ))}
                   </tbody>

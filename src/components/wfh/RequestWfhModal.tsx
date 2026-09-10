@@ -8,14 +8,31 @@ interface RequestWfhModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  requestWfh?: ReturnType<typeof useWfh>['requestWfh'];
+  isSubmitting?: boolean;
+  error?: string | null;
+  success?: string | null;
+  clearMessages?: () => void;
 }
 
 export const RequestWfhModal: React.FC<RequestWfhModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  requestWfh,
+  isSubmitting,
+  error,
+  success,
+  clearMessages,
 }) => {
-  const { requestWfh, isSubmitting, error, success, clearMessages } = useWfh();
+  const hook = useWfh();
+  const submitRequest = requestWfh ?? hook.requestWfh;
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const submitting = submitLoading || (isSubmitting ?? hook.isSubmitting);
+  const requestError = error ?? hook.error;
+  const requestSuccess = success ?? hook.success;
+  const clearRequestMessages = clearMessages ?? hook.clearMessages;
   const { addNotification } = useNotifications();
   const [formData, setFormData] = useState({
     startDate: '',
@@ -79,6 +96,8 @@ export const RequestWfhModal: React.FC<RequestWfhModalProps> = ({
       return;
     }
 
+    setSubmitLoading(true);
+    setSubmitError(null);
     try {
       const wfhData: RequestWfhDto = {
         startDate: new Date(formData.startDate),
@@ -86,7 +105,7 @@ export const RequestWfhModal: React.FC<RequestWfhModalProps> = ({
         reason: formData.reason || undefined,
       };
 
-      await requestWfh(wfhData);
+      await submitRequest(wfhData);
 
       // Add notification
       const startDateStr = new Date(formData.startDate).toLocaleDateString('en-US', {
@@ -114,18 +133,14 @@ export const RequestWfhModal: React.FC<RequestWfhModalProps> = ({
       });
 
       // Call success callback
-      if (onSuccess) {
-        onSuccess();
-      }
-
-      // Close modal after success
-      setTimeout(() => {
-        onClose();
-        clearMessages();
-      }, 2000);
+      onSuccess?.();
+      clearRequestMessages();
+      onClose();
     } catch (err) {
-      // Error is already handled by the hook
       console.error('Failed to request WFH:', err);
+      setSubmitError(err instanceof Error ? err.message : 'Failed to submit WFH request');
+    } finally {
+      setSubmitLoading(false);
     }
   };
 
@@ -148,16 +163,16 @@ export const RequestWfhModal: React.FC<RequestWfhModalProps> = ({
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Success Message */}
-          {success && (
+          {requestSuccess && (
             <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
-              {success}
+              {requestSuccess}
             </div>
           )}
 
           {/* Error Message */}
-          {error && (
+          {(submitError || requestError) && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {error}
+              {submitError || requestError}
             </div>
           )}
 
@@ -229,17 +244,17 @@ export const RequestWfhModal: React.FC<RequestWfhModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              disabled={isSubmitting}
+              disabled={submitting}
               className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-500 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={submitting}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 transition-colors"
             >
-              {isSubmitting ? 'Submitting...' : 'Submit Request'}
+              {submitting ? 'Submitting...' : 'Submit Request'}
             </button>
           </div>
         </form>
