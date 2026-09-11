@@ -9,7 +9,7 @@ import MedicalCertificateModal from '../../components/leave/MedicalCertificateMo
 import CarryForwardModal from '../../components/leave/CarryForwardModal';
 import { CreateLeaveDto } from '../../services/api';
 
-const LeaveBalanceCard = ({ type, total, used, color, ...props }: { type: string, total: number, used: number, color: string, [key: string]: any }) => {
+const LeaveBalanceCard = ({ type, total, used, remaining, color }: { type: string, total: number, used: number, remaining: number, color: string }) => {
     const percentage = (used / total) * 100;
     const colors: Record<string, string> = {
         blue: "bg-blue-500",
@@ -31,7 +31,7 @@ const LeaveBalanceCard = ({ type, total, used, color, ...props }: { type: string
                 <div className="flex justify-between items-start mb-4">
                     <div>
                         <p className="text-sm font-medium text-slate-500">{type}</p>
-                        <h3 className="text-2xl font-bold text-slate-900">{total - used} <span className="text-sm font-normal text-slate-400">/ {total}</span></h3>
+                        <h3 className="text-2xl font-bold text-slate-900">{remaining} <span className="text-sm font-normal text-slate-400">/ {total}</span></h3>
                     </div>
                     <div className={`p-2 rounded-lg ${colors[color]} bg-opacity-10 text-${color}-600`}>
                         <Calendar size={18} className={getIconColor()} />
@@ -51,6 +51,7 @@ const LeaveManagement = () => {
   const {
     myLeaves,
     myLeaveBalance,
+    leaveTypes,
     pendingLeaves,
     isLoading,
     isSubmitting,
@@ -59,6 +60,8 @@ const LeaveManagement = () => {
     applyLeave,
     approveLeave,
     rejectLeave,
+    cancelLeave,
+    fetchLeaveTypes,
     requestCarryForward,
     fetchMyLeaveHistory,
     fetchMyLeaveBalance,
@@ -110,19 +113,23 @@ const LeaveManagement = () => {
     totalPages: 1,
   });
 
-  const canManageLeave = ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER'].includes(user?.role ?? '');
-  const canApproveLeave = ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER'].includes(user?.role ?? '');
+  const canManageLeave = ['SUPER_ADMIN', 'HR', 'IT_MANAGER', 'SALES_MANAGER'].includes(user?.role ?? '');
+  const canApproveLeave = canManageLeave;
+  const hasEmployeeProfile = Number.isInteger(Number(user?.employeeId)) && Number(user?.employeeId) > 0;
 
   // Initial data load
   useEffect(() => {
-    fetchMyLeaveHistory();
-    fetchMyLeaveBalance(financialYearStart);
+    if (hasEmployeeProfile) {
+      fetchMyLeaveHistory();
+      fetchMyLeaveBalance(financialYearStart);
+    }
+    fetchLeaveTypes();
     if (canManageLeave) {
       fetchManagerLeaveHistory(managerLeavePage, managerLeaveLimit)
         .then((response) => setManagerLeavePagination(response.pagination))
         .catch(() => undefined);
     }
-  }, [canManageLeave, fetchMyLeaveHistory, fetchMyLeaveBalance, fetchManagerLeaveHistory, financialYearStart, managerLeavePage]);
+  }, [canManageLeave, fetchMyLeaveHistory, fetchMyLeaveBalance, fetchLeaveTypes, fetchManagerLeaveHistory, financialYearStart, managerLeavePage, hasEmployeeProfile]);
 
   // Show notifications
   useEffect(() => {
@@ -168,6 +175,16 @@ const LeaveManagement = () => {
       fetchMyLeaveBalance(financialYearStart);
     } catch (err) {
       console.error('Failed to reject leave:', err);
+    }
+  };
+
+  const handleCancelLeave = async (leaveId: number) => {
+    try {
+      await cancelLeave(leaveId);
+      await fetchMyLeaveHistory();
+      await fetchMyLeaveBalance(financialYearStart);
+    } catch (err) {
+      console.error('Failed to cancel leave:', err);
     }
   };
 
@@ -230,6 +247,8 @@ const LeaveManagement = () => {
         return 'warning';
       case 'REJECTED':
         return 'danger';
+      case 'CANCELLED':
+        return 'default';
       default:
         return 'default';
     }
@@ -276,8 +295,9 @@ const LeaveManagement = () => {
           myLeaveBalance.map((balance, idx) => (
             <LeaveBalanceCard
               key={balance.id}
-              total={balance.allocated}
+              total={balance.allocated + balance.carryForward}
               used={balance.used}
+              remaining={balance.remaining}
               color={['blue', 'rose', 'purple', 'orange'][idx % 4]}
               type={balance.leaveType}
             />
@@ -457,6 +477,11 @@ const LeaveManagement = () => {
                                   <Badge variant={getStatusBadgeVariant(leave.status)}>
                                       {leave.status}
                                   </Badge>
+                                  {leave.status === 'PENDING' && (
+                                    <Button size="sm" variant="outline" onClick={() => handleCancelLeave(leave.id)} disabled={isSubmitting}>
+                                      Cancel
+                                    </Button>
+                                  )}
                                 </div>
                             </TableCell>
                         </TableRow>
@@ -476,6 +501,7 @@ const LeaveManagement = () => {
         onClose={() => setIsApplyModalOpen(false)}
         onSubmit={handleApplyLeave}
         isSubmitting={isSubmitting}
+        leaveTypes={leaveTypes}
       />
 
       {canApproveLeave && (

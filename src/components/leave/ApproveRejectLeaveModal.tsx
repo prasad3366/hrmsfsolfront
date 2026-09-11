@@ -95,13 +95,14 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
 
               {actionType === 'reject' && (
                 <div>
-                  <label htmlFor="rejectionRemarks" className="block text-sm font-medium text-slate-700 mb-3">Remarks (Optional)</label>
+                  <label htmlFor="rejectionRemarks" className="block text-sm font-medium text-slate-700 mb-3">Remarks (Required)</label>
                   <textarea
                     id="rejectionRemarks"
                     value={remarks}
                     onChange={(e) => setRemarks(e.target.value)}
                     placeholder="Add remarks for rejection"
                     rows={5}
+                    required
                     className="flex w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all resize-none"
                   />
                 </div>

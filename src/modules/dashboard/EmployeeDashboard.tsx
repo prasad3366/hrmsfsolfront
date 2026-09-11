@@ -9,7 +9,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { PunchInOutModal } from '../../components/attendance/PunchInOutModal';
-import { useAttendance } from '../../hooks/useAttendance';
+import { getTodayAttendanceState, useAttendance } from '../../hooks/useAttendance';
 import { RequestWfhModal } from '../../components/wfh/RequestWfhModal';
 import { useWfh } from '../../hooks/useWfh';
 import { useHolidays } from '../../hooks/useHolidays';
@@ -183,17 +183,20 @@ export default function EmployeeDashboard() {
   const [weekPage, setWeekPage] = useState(0); // 0 = most recent week
 
   const { user } = useAuth();
-  const { todayRecord, records, refresh } = useAttendance();
+  const { todayRecord, todayError, records, refresh, punchIn, punchOut } = useAttendance();
   const { myWfhRequests, isLoading: isWfhLoading, fetchMyWfhRequests } = useWfh();
 
   // Filter my WFH requests to only show non-expired
   const today = new Date();
   const activeMyWfhRequests = myWfhRequests.filter(req => new Date(req.endDate) >= today);
-  const hasPunchedIn = Boolean(todayRecord?.hasPunchedIn ?? todayRecord?.punchInTime);
-  const hasPunchedOut = Boolean(todayRecord?.hasPunchedOut ?? todayRecord?.punchOutTime);
+  const todayState = getTodayAttendanceState(todayRecord);
+  const hasPunchedIn = todayState === 'IN_PROGRESS' || todayState === 'COMPLETED';
+  const hasPunchedOut = todayState === 'COMPLETED';
 
   const punchButtonVariant: 'primary' | 'secondary' = hasPunchedOut ? 'secondary' : 'primary';
-  const punchButtonLabel = hasPunchedIn
+  const punchButtonLabel = todayError
+    ? 'Unavailable'
+    : hasPunchedIn
     ? hasPunchedOut
       ? 'View Details'
       : 'Punch Out'
@@ -260,7 +263,9 @@ export default function EmployeeDashboard() {
     ? new Date(todayRecord.punchOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null;
 
-  const attendanceStatus = hasPunchedIn ? (hasPunchedOut ? 'Completed' : 'Active') : 'Not Started';
+  const attendanceStatus = todayState === 'LEAVE'
+    ? 'Leave'
+    : hasPunchedIn ? (hasPunchedOut ? 'Completed' : 'Active') : 'Not Started';
 
   return (
     <div className="min-h-screen bg-gray-50/40 pb-12">
@@ -428,6 +433,7 @@ export default function EmployeeDashboard() {
                   onClick={() => setIsPunchModalOpen(true)}
                   className="w-full"
                   variant={punchButtonVariant}
+                  disabled={Boolean(todayError) || todayState === 'LEAVE'}
                 >
                   {punchButtonLabel}
                 </Button>
@@ -611,6 +617,8 @@ export default function EmployeeDashboard() {
         isOpen={isPunchModalOpen}
         onClose={() => setIsPunchModalOpen(false)}
         todayRecord={todayRecord}
+        onPunchIn={punchIn}
+        onPunchOut={punchOut}
         onSuccess={refresh}
       />
 

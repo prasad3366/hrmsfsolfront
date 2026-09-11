@@ -3,11 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle, Button } from '../../componen
 import { MapPin } from 'lucide-react';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { useNotifications } from '../../context/NotificationContext';
+import { TodayAttendanceStatus } from '../../services/api';
 
 interface PunchInOutModalProps {
   isOpen: boolean;
   onClose: () => void;
-  todayRecord?: any;
+  todayRecord?: TodayAttendanceStatus;
   onPunchIn: (latitude?: number, longitude?: number) => Promise<void>;
   onPunchOut: (latitude?: number, longitude?: number) => Promise<void>;
   onSuccess: () => Promise<void>;
@@ -30,19 +31,22 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
   const { requestLocation, isLoading: isGeoLoading, error: geoError } = useGeolocation();
   const { addNotification } = useNotifications();
 
-  // ✅ FIXED LOGIC - Support both old AttendanceRecord and new TodayAttendanceStatus
+  const isLeaveDay = (todayRecord?.status ?? '').toUpperCase() === 'LEAVE';
+
   const hasPunchedIn =
     localPunchedIn === undefined
-      ? (todayRecord?.hasPunchedIn ?? Boolean(todayRecord?.punchInTime))
+      ? todayRecord?.status === 'IN_PROGRESS' || todayRecord?.status === 'COMPLETED'
       : localPunchedIn;
 
   const hasPunchedOut =
     localPunchedOut === undefined
-      ? (todayRecord?.hasPunchedOut ?? Boolean(todayRecord?.punchOutTime))
+      ? todayRecord?.status === 'COMPLETED'
       : localPunchedOut;
 
   let punchButtonLabel = 'Punch In';
-  if (hasPunchedIn) {
+  if (isLeaveDay) {
+    punchButtonLabel = 'Leave';
+  } else if (hasPunchedIn) {
     punchButtonLabel = hasPunchedOut ? 'Completed' : 'Punch Out';
   }
 
@@ -142,7 +146,9 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
   };
 
   let actionHandler: (() => Promise<void>) | undefined = handlePunchIn;
-  if (hasPunchedIn) {
+  if (isLeaveDay) {
+    actionHandler = undefined;
+  } else if (hasPunchedIn) {
     actionHandler = hasPunchedOut ? undefined : handlePunchOut;
   }
 

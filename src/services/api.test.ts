@@ -156,6 +156,7 @@ describe('Employee 360 API methods', () => {
 
     const request = fetchMock.mock.calls[0][1] as RequestInit;
     expect(request.body).toBeInstanceOf(FormData);
+    expect((request.body as FormData).get('employeeId')).toBe('42');
     const headers = new Headers(request.headers);
     expect(headers.get('Content-Type')).toBeNull();
     expect(headers.get('Authorization')).toBe('Bearer test-access-token');
@@ -178,8 +179,8 @@ describe('Attendance history API', () => {
   });
 
   it('requests the current-month page and returns pagination metadata', async () => {
-    await expect(api.getMyAttendance(9, 2026, 2, 10)).resolves.toEqual({
-      data: [{ id: 1, date: '2026-09-08', status: 'PRESENT' }],
+    await expect(api.getMyAttendance(9, 2026, 2, 10)).resolves.toMatchObject({
+      data: [expect.objectContaining({ id: 1, date: '2026-09-08', status: 'ABSENT', punchIn: null, punchOut: null })],
       meta: { page: 2, pageSize: 10, total: 11, totalPages: 2, month: 9, year: 2026 },
     });
 
@@ -205,6 +206,28 @@ describe('Attendance history API', () => {
       data: [expect.objectContaining({
         punchIn: '2026-09-09T09:00:00.000Z',
         punchOut: null,
+        status: 'IN_PROGRESS',
+      })],
+    });
+  });
+
+  it('preserves both clock timestamps for a completed history record', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      data: [{
+        id: 11,
+        date: '2026-09-11',
+        clockIn: '2026-09-11T07:28:00.000Z',
+        clockOut: '2026-09-11T16:45:00.000Z',
+        status: 'PRESENT',
+      }],
+      meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, month: 9, year: 2026 },
+    }), { status: 200 }));
+
+    await expect(api.getMyAttendance(9, 2026)).resolves.toMatchObject({
+      data: [expect.objectContaining({
+        punchIn: '2026-09-11T07:28:00.000Z',
+        punchOut: '2026-09-11T16:45:00.000Z',
+        status: 'PRESENT',
       })],
     });
   });
@@ -217,15 +240,33 @@ describe('Attendance history API', () => {
       punchOutTime: null,
       locationStatus: null,
       totalHours: 0,
-      status: 'PRESENT',
+      status: 'IN_PROGRESS',
     };
     fetchMock.mockResolvedValue(new Response(JSON.stringify(todayStatus), { status: 200 }));
 
     await expect(api.getTodayStatus()).resolves.toEqual(todayStatus);
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3000/api/attendance/today-status',
+      'http://localhost:3000/api/attendance/today',
       expect.objectContaining({ method: 'GET' }),
     );
+  });
+
+  it('normalizes today clock aliases and envelopes into the canonical state', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      data: {
+        clockIn: '2026-09-09T09:00:00.000Z',
+        clockOut: null,
+        status: 'IN_PROGRESS',
+      },
+    }), { status: 200 }));
+
+    await expect(api.getTodayStatus()).resolves.toMatchObject({
+      hasPunchedIn: true,
+      hasPunchedOut: false,
+      punchInTime: '2026-09-09T09:00:00.000Z',
+      punchOutTime: null,
+      status: 'IN_PROGRESS',
+    });
   });
 });
 
@@ -336,13 +377,14 @@ describe('self attendance punch API', () => {
       punchInTime: '2026-09-09T09:00:00.000Z',
       punchOutTime: '2026-09-09T17:00:00.000Z',
       totalHours: 8,
-      status: 'PRESENT',
+      locationStatus: null,
+      status: 'COMPLETED',
     };
     fetchMock.mockResolvedValue(new Response(JSON.stringify(today), { status: 200 }));
 
     await expect(api.getTodayStatus()).resolves.toEqual(today);
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3000/api/attendance/today-status',
+      'http://localhost:3000/api/attendance/today',
       expect.objectContaining({ method: 'GET' }),
     );
     expect((fetchMock.mock.calls[0][1].headers as Headers).get('Authorization'))
@@ -377,6 +419,21 @@ describe('monthly self attendance query', () => {
       expect.objectContaining({ method: 'GET' }),
     );
   });
+
+  it('uses the backend selected-month dataset and one-page metadata unchanged', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      data: [
+        { id: 1, date: '2026-08-01', status: 'PRESENT' },
+        { id: 2, date: '2026-08-31', status: 'ABSENT' },
+      ],
+      meta: { page: 1, pageSize: 2, total: 2, totalPages: 1, month: 8, year: 2026 },
+    }), { status: 200 }));
+
+    await expect(api.getMyAttendance(8, 2026, 1, 10)).resolves.toMatchObject({
+      data: [expect.objectContaining({ id: 1 }), expect.objectContaining({ id: 2 })],
+      meta: { page: 1, pageSize: 2, total: 2, totalPages: 1, month: 8, year: 2026 },
+    });
+  });
 });
 
 describe('employee attendance query', () => {
@@ -389,9 +446,47 @@ describe('employee attendance query', () => {
     await api.getEmployeeAttendance(42, 9, 2026, 'ABSENT');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3000/api/attendance/employee/42/monthly?month=9&year=2026&status=ABSENT',
+      'http://localhost:3000/api/attendance/employee/42/monthly?month=9&year=2026&status=ABSENT&page=1&pageSize=10',
       expect.objectContaining({ method: 'GET' }),
     );
+  });
+
+  it('normalizes employee attendance envelopes and preserves pagination metadata', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      data: [{ id: 7, employeeId: 42, date: '2026-09-09', clockIn: '2026-09-09T09:00:00.000Z', clockOut: null }],
+      meta: { page: 2, pageSize: 10, total: 21, totalPages: 3, month: 9, year: 2026 },
+    }), { status: 200 }));
+
+    await expect(api.getEmployeeAttendance(42, 9, 2026, undefined, 2, 10)).resolves.toEqual({
+      data: [expect.objectContaining({ id: 7, punchIn: '2026-09-09T09:00:00.000Z', punchOut: null, status: 'IN_PROGRESS' })],
+      meta: { page: 2, pageSize: 10, total: 21, totalPages: 3, month: 9, year: 2026 },
+    });
+  });
+
+  it('preserves completed ABSENT status in employee attendance details', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      data: [{
+        id: 22,
+        employeeId: 42,
+        date: '2026-09-11',
+        clockIn: '2026-09-11T08:57:46.091Z',
+        clockOut: '2026-09-11T08:58:11.508Z',
+        totalHours: 0.007,
+        status: 'ABSENT',
+      }],
+      meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, month: 9, year: 2026 },
+    }), { status: 200 }));
+
+    await expect(api.getEmployeeAttendance(42, 9, 2026)).resolves.toEqual({
+      data: [expect.objectContaining({
+        id: 22,
+        punchIn: '2026-09-11T08:57:46.091Z',
+        punchOut: '2026-09-11T08:58:11.508Z',
+        totalHours: 0.007,
+        status: 'ABSENT',
+      })],
+      meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, month: 9, year: 2026 },
+    });
   });
 });
 
