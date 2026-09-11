@@ -1,18 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { X, AlertCircle, FileText } from 'lucide-react';
 import { Button, Input } from '../../components/ui/components';
-import { CreateLeaveDto } from '../../services/api';
+import { CreateLeaveDto, LeaveTypeOption } from '../../services/api';
 
 interface ApplyLeaveModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (dto: CreateLeaveDto) => Promise<void>;
   isSubmitting?: boolean;
+  leaveTypes: LeaveTypeOption[];
 }
 
-const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSubmit, isSubmitting }) => {
+const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSubmit, isSubmitting, leaveTypes }) => {
   const [formData, setFormData] = useState({
-    leaveTypeId: 1,
+    leaveTypeId: 0,
     startDate: '',
     endDate: '',
     durationType: 'FULL_DAY' as 'FULL_DAY' | 'HALF_DAY_FIRST' | 'HALF_DAY_SECOND',
@@ -39,7 +40,8 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
     [formData.startDate, formData.endDate, formData.durationType]
   );
 
-  const requiresMedicalCertificate = formData.leaveTypeId === 2 && totalDays > 2;
+  const selectedLeaveType = leaveTypes.find((type) => type.id === formData.leaveTypeId);
+  const requiresMedicalCertificate = Boolean(selectedLeaveType?.requiresMedical) && totalDays > 2;
 
   if (!isOpen) return null;
 
@@ -49,8 +51,12 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
 
     // Check if sick leave > 2 days and no certificate
     const totalDaysForSubmit = calculateDays(formData.startDate, formData.endDate, formData.durationType);
-    if (formData.leaveTypeId === 2 && totalDaysForSubmit > 2 && !formData.medicalCertificate) {
-      setCertificateError('Medical certificate is required for sick leave more than 2 days');
+    if (!selectedLeaveType) {
+      setCertificateError('Please select a leave type');
+      return;
+    }
+    if (selectedLeaveType?.requiresMedical && totalDaysForSubmit > 2 && !formData.medicalCertificate) {
+      setCertificateError('Medical certificate is required for this leave type for more than 2 days');
       return;
     }
 
@@ -61,7 +67,7 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
         medicalCertificateFileName: formData.medicalCertificateFileName,
       });
       setFormData({
-        leaveTypeId: 1,
+        leaveTypeId: 0,
         startDate: '',
         endDate: '',
         durationType: 'FULL_DAY',
@@ -132,9 +138,10 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
                 onChange={(e) => setFormData({ ...formData, leaveTypeId: Number.parseInt(e.target.value, 10) })}
                 className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
               >
-                <option value="1">Casual Leave</option>
-                <option value="2">Sick Leave</option>
-                <option value="3">Maternity Leave</option>
+                <option value="0" disabled>Select leave type</option>
+                {leaveTypes.map((type) => (
+                  <option key={type.id} value={type.id}>{type.name}</option>
+                ))}
               </select>
             </div>
 

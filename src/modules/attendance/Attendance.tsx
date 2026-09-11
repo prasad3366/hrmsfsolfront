@@ -3,9 +3,10 @@ import {
   Table, TableHeader, TableRow, TableHead, TableCell, 
   Badge, Card, CardHeader, CardTitle, CardContent, Button
 } from '../../components/ui/components';
-import { useAttendance } from '../../hooks/useAttendance';
+import { getRecordAttendanceState, getTodayAttendanceState, useAttendance } from '../../hooks/useAttendance';
 import { PunchInOutModal } from '../../components/attendance/PunchInOutModal';
 import { Clock, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
+import { attendanceDateKey, formatAttendanceDate } from '../../utils/attendanceDate';
 
 const Attendance = () => {
   const initialMonth = React.useMemo(() => {
@@ -16,6 +17,7 @@ const Attendance = () => {
   const {
     records,
     todayRecord,
+    todayError,
     isLoading,
     error,
     refresh: attendanceRefresh,
@@ -24,13 +26,19 @@ const Attendance = () => {
     page,
     totalPages,
     setPage,
-  } = useAttendance(selectedMonth);
+  } = useAttendance({ month: selectedMonth.month, year: selectedMonth.year });
   const [isPunchOpen, setIsPunchOpen] = React.useState(false);
   const isCurrentMonth = selectedMonth.month === initialMonth.month && selectedMonth.year === initialMonth.year;
+
+  const selectMonth = (month: number, year: number) => {
+    setPage(1);
+    setSelectedMonth({ month, year });
+  };
 
   const changeMonth = (offset: number) => {
     setSelectedMonth((current) => {
       const date = new Date(current.year, current.month - 1 + offset, 1);
+      setPage(1);
       return { month: date.getMonth() + 1, year: date.getFullYear() };
     });
   };
@@ -45,19 +53,25 @@ const Attendance = () => {
     await attendanceRefresh();
   }, [attendanceRefresh]);
 
-  const hasPunchedIn = Boolean(todayRecord?.hasPunchedIn ?? todayRecord?.punchInTime);
-  const hasPunchedOut = Boolean(todayRecord?.hasPunchedOut ?? todayRecord?.punchOutTime);
+  const todayState = getTodayAttendanceState(todayRecord);
+  const hasPunchedIn = todayState === 'IN_PROGRESS' || todayState === 'COMPLETED';
 
-  const punchActionLabel = hasPunchedIn
-    ? hasPunchedOut
-      ? 'View'
-      : 'Check Out'
-    : 'Check In';
+  const punchActionLabel = todayError
+    ? 'Unavailable'
+    : todayState === 'LEAVE'
+    ? 'Leave'
+    : todayState === 'IN_PROGRESS'
+      ? 'Check Out'
+      : todayState === 'COMPLETED'
+        ? 'View'
+        : 'Check In';
 
   const statusBadgeVariant = (status: string) => {
     const normalized = status?.toString().toUpperCase();
     if (normalized === 'PRESENT') return 'success';
     if (normalized === 'ABSENT') return 'danger';
+    if (normalized === 'LEAVE') return 'default';
+    if (normalized === 'IN_PROGRESS') return 'warning';
     return 'default';
   };
 
@@ -74,8 +88,7 @@ const Attendance = () => {
     }> = {};
 
     records.forEach((rec) => {
-      const d = new Date(rec.date);
-      const dayKey = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+      const dayKey = attendanceDateKey(rec.date);
 
       if (!grouped[dayKey]) {
         grouped[dayKey] = {
@@ -83,7 +96,7 @@ const Attendance = () => {
           punchIn: rec.punchIn || undefined,
           punchOut: rec.punchOut || undefined,
           totalHours: rec.totalHours || 0,
-          status: rec.status,
+          status: getRecordAttendanceState(rec),
         };
         return;
       }
@@ -106,10 +119,11 @@ const Attendance = () => {
 
       // accumulate total hours (best effort)
       existing.totalHours += rec.totalHours || 0;
+      existing.status = getRecordAttendanceState(rec);
     });
 
     return Object.values(grouped)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      .sort((a, b) => attendanceDateKey(b.date).localeCompare(attendanceDateKey(a.date)));
   }, [records]);
 
   if (isLoading) {
@@ -136,7 +150,7 @@ const Attendance = () => {
               value={`${selectedMonth.year}-${String(selectedMonth.month).padStart(2, '0')}`}
               onChange={(event) => {
                 const [year, month] = event.target.value.split('-').map(Number);
-                if (year && month) setSelectedMonth({ year, month });
+                if (year && month) selectMonth(month, year);
               }}
               className="rounded border-0 text-center font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500"
             />
@@ -159,6 +173,7 @@ const Attendance = () => {
                 {isCurrentMonth && <div className="flex justify-center gap-4">
                   <Button
                     onClick={() => setIsPunchOpen(true)}
+                    disabled={Boolean(todayError) || todayState === 'LEAVE'}
                     className="h-32 w-32 rounded-full bg-blue-600 text-white font-bold text-lg shadow-lg hover:bg-blue-700 transition-all transform hover:scale-105 flex flex-col items-center justify-center"
                   >
                     <Clock size={32} className="mb-2" />
@@ -168,7 +183,8 @@ const Attendance = () => {
                 <div className="mt-6 flex flex-col items-center text-sm text-slate-500 gap-2">
                     <MapPin size={16} />
                     <span>Remote - IP 192.168.1.1</span>
-                    {isCurrentMonth && hasPunchedIn && (
+                    {todayError && <span className="text-rose-600">Today&apos;s status is unavailable.</span>}
+                    {isCurrentMonth && hasPunchedIn && todayRecord?.punchInTime && (
                       <span>Check-In Time: {new Date(todayRecord.punchInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     )}
                 </div>
@@ -207,7 +223,7 @@ const Attendance = () => {
                         ) : (
                           userAttendance.map((record, index) => (
                             <TableRow key={rowKey(record, index)}>
-                              <TableCell className="font-medium">{new Date(record.date).toLocaleDateString()}</TableCell>
+                              <TableCell className="font-medium">{formatAttendanceDate(record.date)}</TableCell>
                               <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                               <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</TableCell>
                               <TableCell>{record.totalHours ? `${record.totalHours.toFixed(2)} hrs` : '0.00 hrs'}</TableCell>

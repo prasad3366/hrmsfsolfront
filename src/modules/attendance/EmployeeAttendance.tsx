@@ -3,41 +3,10 @@ import { CalendarDays, Search } from 'lucide-react';
 import ApiService, { AttendanceRecord, Employee360Leave, MonthlyAttendanceSummary } from '../../services/api';
 import attendanceService from '../../services/attendanceService';
 import { Badge, Button, Card, CardHeader, CardTitle, CardContent, Input, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
+import { attendanceDateKey, formatAttendanceDate } from '../../utils/attendanceDate';
+import { getRecordAttendanceState } from '../../hooks/useAttendance';
 
 type AttendanceFilter = 'ALL' | 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'LEAVE';
-type AttendanceRecordPayload = Partial<AttendanceRecord> & {
-  attendanceDate?: string | null;
-  attendanceStatus?: string | null;
-  clockIn?: string | null;
-  clockOut?: string | null;
-  data?: unknown;
-  records?: unknown;
-  history?: unknown;
-};
-
-const extractAttendanceRecords = (payload: unknown): AttendanceRecordPayload[] => {
-  if (Array.isArray(payload)) return payload as AttendanceRecordPayload[];
-  if (!payload || typeof payload !== 'object') return [];
-
-  const response = payload as AttendanceRecordPayload;
-  for (const nestedPayload of [response.data, response.records, response.history]) {
-    const records = extractAttendanceRecords(nestedPayload);
-    if (records.length > 0) return records;
-  }
-
-  return [];
-};
-
-const normalizeAttendanceRecords = (payload: unknown): AttendanceRecord[] => (
-  extractAttendanceRecords(payload).map((record) => ({
-    ...record,
-    date: record.date || record.attendanceDate || '',
-    status: (record.status || record.attendanceStatus || '') as AttendanceRecord['status'],
-    punchIn: record.punchIn || record.clockIn || '',
-    punchOut: record.punchOut || record.clockOut || null,
-  })) as AttendanceRecord[]
-);
-
 const EmployeeAttendance = () => {
   const [employees, setEmployees] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,6 +14,8 @@ const EmployeeAttendance = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [attendancePage, setAttendancePage] = useState(1);
+  const [attendanceTotalPages, setAttendanceTotalPages] = useState(0);
   const [isAttendanceLoading, setIsAttendanceLoading] = useState(false);
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -112,6 +83,8 @@ const EmployeeAttendance = () => {
     setSelectedEmployee(employee);
     setSearchTerm('');
     setAttendanceRecords([]);
+    setAttendancePage(1);
+    setAttendanceTotalPages(0);
     setAttendanceError(null);
     setSummary(null);
     setSummaryError(null);
@@ -120,7 +93,7 @@ const EmployeeAttendance = () => {
     setLeaveError(null);
   };
 
-  const selectedEmployeeId = selectedEmployee?.id;
+  const selectedEmployeeId = selectedEmployee?.id ?? selectedEmployee?.employeeId;
   const employeeId = selectedEmployee?.empCode || selectedEmployeeId || '-';
 
   useEffect(() => {
@@ -141,6 +114,7 @@ const EmployeeAttendance = () => {
 
     let mounted = true;
     setAttendanceRecords([]);
+    setAttendanceTotalPages(0);
     setAttendanceError(null);
     setIsAttendanceLoading(true);
 
@@ -148,10 +122,12 @@ const EmployeeAttendance = () => {
     const month = Number(monthText);
     const year = Number(yearText);
 
-    ApiService.getEmployeeAttendance(numericEmployeeId, month, year)
+    ApiService.getEmployeeAttendance(numericEmployeeId, month, year, undefined, attendancePage, 10)
       .then((response) => {
-        console.log('API Attendance Response:', response);
-        if (mounted) setAttendanceRecords(normalizeAttendanceRecords(response));
+        if (mounted) {
+          setAttendanceRecords(response.data);
+          setAttendanceTotalPages(response.meta.totalPages);
+        }
       })
       .catch((err) => {
         if (mounted) {
@@ -165,7 +141,7 @@ const EmployeeAttendance = () => {
     return () => {
       mounted = false;
     };
-  }, [selectedEmployeeId, selectedMonth]);
+  }, [selectedEmployeeId, selectedMonth, attendancePage]);
 
   useEffect(() => {
     if (selectedEmployeeId === undefined || selectedEmployeeId === null) {
@@ -251,6 +227,8 @@ const EmployeeAttendance = () => {
     const normalizedStatus = status?.toUpperCase();
     if (normalizedStatus === 'PRESENT') return 'success';
     if (normalizedStatus === 'ABSENT') return 'danger';
+    if (normalizedStatus === 'LEAVE') return 'default';
+    if (normalizedStatus === 'IN_PROGRESS') return 'warning';
     return 'warning';
   };
 
@@ -262,9 +240,7 @@ const EmployeeAttendance = () => {
   };
 
   const formatDate = (value?: string | null) => {
-    if (!value) return '-';
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+    return formatAttendanceDate(value);
   };
 
   const formatDurationType = (value?: string | null) => {
@@ -277,18 +253,14 @@ const EmployeeAttendance = () => {
 
   const filteredRecords = useMemo(() => attendanceRecords
     .filter((record) => {
-      const recordDate = new Date(record.date);
-      const recordMonth =
-        `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
-      const recordStatus = String(
-        record.status || (record as AttendanceRecord & { attendanceStatus?: string }).attendanceStatus || '',
-      ).toUpperCase();
+      const recordMonth = attendanceDateKey(record.date).slice(0, 7);
+      const recordStatus = getRecordAttendanceState(record);
 
       return recordMonth === selectedMonth
         && (attendanceFilter === 'ALL' || recordStatus === attendanceFilter.toUpperCase());
     })
     .sort((firstRecord, secondRecord) => (
-      new Date(firstRecord.date).getTime() - new Date(secondRecord.date).getTime()
+      attendanceDateKey(firstRecord.date).localeCompare(attendanceDateKey(secondRecord.date))
     )), [attendanceRecords, selectedMonth, attendanceFilter]);
 
   const toggleAttendanceFilter = (filter: Exclude<AttendanceFilter, 'ALL'>) => {
@@ -432,6 +404,7 @@ const EmployeeAttendance = () => {
                     value={selectedMonth}
                       onChange={(event) => {
                         setSelectedMonth(event.target.value);
+                        setAttendancePage(1);
                         setAttendanceFilter('ALL');
                       }}
                     className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
@@ -519,20 +492,16 @@ const EmployeeAttendance = () => {
                     </TableRow>
                   </TableHeader>
                   <tbody>
-                    {(() => {
-                      console.log(filteredRecords);
-                      return null;
-                    })()}
                     {filteredRecords.map((record) => (
                       <TableRow key={record.id}>
                         <TableCell>{formatDate(record.date)}</TableCell>
                         <TableCell>
                           <Badge
                             variant={attendanceStatusVariant(
-                              record.status || (record as AttendanceRecord & { attendanceStatus?: string }).attendanceStatus || '',
+                              record.status,
                             )}
                           >
-                            {record.status || (record as AttendanceRecord & { attendanceStatus?: string }).attendanceStatus || 'N/A'}
+                            {record.status}
                           </Badge>
                         </TableCell>
                         <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString() : '-'}</TableCell>
@@ -543,6 +512,27 @@ const EmployeeAttendance = () => {
                   </tbody>
                 </Table>
               )}
+              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-sm text-slate-600">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={attendancePage <= 1 || isAttendanceLoading}
+                  onClick={() => setAttendancePage((currentPage) => Math.max(1, currentPage - 1))}
+                >
+                  Previous
+                </Button>
+                <span>Page {attendancePage} of {Math.max(attendanceTotalPages, 1)}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={attendancePage >= attendanceTotalPages || isAttendanceLoading || attendanceTotalPages === 0}
+                  onClick={() => setAttendancePage((currentPage) => currentPage + 1)}
+                >
+                  Next
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

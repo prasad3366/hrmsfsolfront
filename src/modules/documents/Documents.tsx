@@ -4,10 +4,23 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../../components/ui/components';
 
+export const MANAGEMENT_DOCUMENT_ROLES = ['SUPER_ADMIN', 'CEO', 'HR'] as const;
+
+export const isManagementDocumentRole = (role: string | null | undefined): boolean =>
+  MANAGEMENT_DOCUMENT_ROLES.includes(role as (typeof MANAGEMENT_DOCUMENT_ROLES)[number]);
+
+export const getDocumentTargetEmployeeId = (
+  role: string | null | undefined,
+  selectedEmployeeId: number | undefined,
+  selfEmployeeId: number | undefined,
+): number | undefined => isManagementDocumentRole(role) ? selectedEmployeeId : selfEmployeeId;
+
 const Documents = () => {
   const { user, role } = useAuth();
   const { addNotification } = useNotifications();
+  const isManagementUser = isManagementDocumentRole(role);
   const [employeeId, setEmployeeId] = useState<number | undefined>(() => {
+    if (isManagementDocumentRole(role)) return undefined;
     const n = Number(user?.employeeId);
     return Number.isInteger(n) && n > 0 ? n : undefined;
   });
@@ -53,29 +66,26 @@ const Documents = () => {
         if (Number.isInteger(maybeId) && maybeId > 0) setEmployeeId(maybeId);
       }
 
-      if (['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '')) {
+      if (isManagementUser) {
         await fetchEmployeeList();
       }
 
       // fetch lists
-      const loadForId = (['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '')) ? selectedEmployeeId : employeeId;
+      const loadForId = isManagementUser ? selectedEmployeeId : employeeId;
       if (loadForId) {
         setSelectedEmployeeId(loadForId);
         await fetchRequired();
       }
-      await fetchDocuments();
+      if (loadForId) await fetchDocuments();
       setResolved(true);
     };
 
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employeeId, selectedEmployeeId, role, user]);
+  }, [employeeId, selectedEmployeeId, role, user, isManagementUser]);
 
   const getCurrentEmployeeId = (): number | undefined => {
-    if (['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '')) {
-      return selectedEmployeeId || employeeId;
-    }
-    return employeeId;
+    return getDocumentTargetEmployeeId(role, selectedEmployeeId, employeeId);
   };
 
   const hasUploadableDocumentType = required.some((document) => {
@@ -139,6 +149,10 @@ const Documents = () => {
     try {
       setError(null);
       const targetId = getCurrentEmployeeId();
+      if (!targetId) {
+        setDocs([]);
+        return;
+      }
       const res = await api.getDocuments(targetId ? Math.floor(targetId) : undefined, role || undefined);
       setDocs(res || []);
     } catch (e: any) {
@@ -279,8 +293,11 @@ const Documents = () => {
       setLoading(true);
       const targetId = getCurrentEmployeeId();
       if (!targetId || !Number.isInteger(targetId) || targetId <= 0) {
-        setError('Employee profile is not available. Please try again after your profile loads.');
-        alert('Employee profile is not available. Please try again after your profile loads.');
+        const message = isManagementUser
+          ? 'Please select an employee before uploading.'
+          : 'Employee profile is not available. Please try again after your profile loads.';
+        setError(message);
+        alert(message);
         return;
       }
 
@@ -323,6 +340,14 @@ const Documents = () => {
         <CardContent>
           <div className="mb-4">
             {(() => {
+              if (isManagementUser) {
+                return (
+                  <div className="text-sm text-slate-600">
+                    {selectedEmployeeId == null ? 'Select an employee.' : 'Employee selected.'}
+                  </div>
+                );
+              }
+
               if (resolved === false) {
                 return <div className="text-sm text-slate-500">Resolving employee identity...</div>;
               }
@@ -335,7 +360,7 @@ const Documents = () => {
             })()}
           </div>
 
-          {['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '') && (
+          {isManagementUser && (
             <div className="mb-4">
               <label htmlFor="selectEmployee" className="text-xs font-medium text-slate-600 mb-1 block">Select Employee</label>
               <select
@@ -405,7 +430,7 @@ const Documents = () => {
               <Button
                 type="button"
                 onClick={(e) => void handleUploadSubmit(e)}
-                disabled={loading || !hasUploadableDocumentType}
+                disabled={loading || !hasUploadableDocumentType || !getCurrentEmployeeId()}
               >
                 {loading ? 'Uploading...' : 'Upload Documents'}
               </Button>
@@ -430,7 +455,7 @@ const Documents = () => {
                   <th>Document</th>
                   <th>File</th>
                   <th>Status</th>
-                  {['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '') && <th>Action</th>}
+                  {isManagementUser && <th>Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -440,7 +465,7 @@ const Documents = () => {
                     <td className="p-2">{d.documentType?.name || d.documentTypeId}</td>
                     <td className="p-2 flex items-center gap-4">
                       <span>{d.fileName}</span>
-                      {['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '') && (
+                      {isManagementUser && (
                         <div className="flex flex-wrap items-center gap-2 ml-4">
                         <Button size="xs" variant="outline" className="flex items-center gap-1" onClick={() => handleView(d.id)}>
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -461,7 +486,7 @@ const Documents = () => {
                         </div>
                       )}
                     </td>
-                    {['SUPER_ADMIN', 'CEO', 'HR'].includes(role ?? '') && (
+                    {isManagementUser && (
                       <td className="p-2">
                         {d.status === 'PENDING' && (
                           <div className="flex gap-1">

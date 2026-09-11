@@ -167,15 +167,15 @@ export interface AttendanceRecord {
   id: number;
   employeeId: number;
   date: string;
-  punchIn: string;
+  punchIn: string | null;
   punchOut: string | null;
   punchInLat: number | null;
   punchInLng: number | null;
   punchOutLat: number | null;
   punchOutLng: number | null;
-  totalHours: number;
-  overtime: number;
-  status: 'PRESENT' | 'ABSENT' | 'HALF_DAY';
+  totalHours: number | null;
+  overtime: number | null;
+  status: 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'LEAVE' | 'IN_PROGRESS' | 'NOT_CHECKED_IN' | 'COMPLETED';
   locationStatus?: 'OFFICE' | 'OUTSIDE' | 'WFH'; // Added locationStatus property
   employee?: {
     id: number;
@@ -218,9 +218,63 @@ export interface TodayAttendanceStatus {
   punchInTime: string | null;
   punchOutTime: string | null;
   locationStatus: string | null;
-  totalHours: number;
-  status: 'PRESENT' | 'ABSENT' | 'HALF_DAY' | null;
+  totalHours: number | null;
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'NOT_CHECKED_IN' | 'LEAVE' | null;
 }
+
+const normalizeAttendanceRecord = (record: Partial<AttendanceRecord> & { clockIn?: string | null; clockOut?: string | null }): AttendanceRecord => {
+  const punchIn = record.clockIn ?? record.punchIn ?? null;
+  const punchOut = record.clockOut ?? record.punchOut ?? null;
+  const sourceStatus = String(record.status ?? '').toUpperCase();
+  const status: AttendanceRecord['status'] = sourceStatus === 'LEAVE'
+    ? 'LEAVE'
+    : punchIn && !punchOut
+      ? 'IN_PROGRESS'
+      : punchIn && punchOut
+        ? (sourceStatus === 'PRESENT' || sourceStatus === 'HALF_DAY' || sourceStatus === 'ABSENT'
+          ? sourceStatus
+          : 'COMPLETED')
+        : 'ABSENT';
+
+  return {
+    ...record,
+    id: record.id ?? 0,
+    employeeId: record.employeeId ?? 0,
+    date: record.date ?? '',
+    punchIn,
+    punchOut,
+    punchInLat: record.punchInLat ?? null,
+    punchInLng: record.punchInLng ?? null,
+    punchOutLat: record.punchOutLat ?? null,
+    punchOutLng: record.punchOutLng ?? null,
+    totalHours: record.totalHours ?? null,
+    overtime: record.overtime ?? null,
+    status,
+  };
+};
+
+const normalizeTodayAttendanceStatus = (payload: Partial<TodayAttendanceStatus> & { clockIn?: string | null; clockOut?: string | null }): TodayAttendanceStatus => {
+  const punchInTime = payload.punchInTime ?? payload.clockIn ?? null;
+  const punchOutTime = payload.punchOutTime ?? payload.clockOut ?? null;
+  const sourceStatus = String(payload.status ?? '').toUpperCase();
+  const status: TodayAttendanceStatus['status'] = sourceStatus === 'LEAVE'
+    ? 'LEAVE'
+    : punchInTime && punchOutTime
+      ? 'COMPLETED'
+      : punchInTime
+        ? 'IN_PROGRESS'
+        : 'NOT_CHECKED_IN';
+
+  return {
+    hasPunchedIn: Boolean(punchInTime),
+    hasPunchedOut: Boolean(punchOutTime),
+    punchInTime,
+    punchOutTime,
+    locationStatus: payload.locationStatus ?? null,
+    totalHours: payload.totalHours ?? null,
+    status,
+  };
+};
 
 export interface OfficeLocationDto {
   latitude: number;
@@ -377,7 +431,7 @@ export interface CreateLeaveDto {
   leaveTypeId: number;
   startDate: string | Date;
   endDate: string | Date;
-  durationType?: 'FULL_DAY' | 'HALF_DAY' | 'HALF_DAY_FIRST' | 'HALF_DAY_SECOND';
+  durationType?: 'FULL_DAY' | 'HALF_DAY_FIRST' | 'HALF_DAY_SECOND';
   reason: string;
   medicalCertificate?: string | null; // Base64 encoded file or file URL
   medicalCertificateFileName?: string;
@@ -440,6 +494,16 @@ export interface LeaveType {
   used: number;
   carryForward: number;
   remaining: number;
+}
+
+export interface LeaveTypeOption {
+  id: number;
+  name: string;
+  yearlyQuota: number;
+  carryForward: boolean;
+  maxCarryLimit?: number | null;
+  monthlyAccrual?: number | null;
+  requiresMedical?: boolean | null;
 }
 
 // Holiday Types
@@ -1111,12 +1175,16 @@ class ApiService {
         throw new Error('Failed to fetch attendance records');
       }
 
-      const data = await response.json();
+      const payload = await response.json();
+      const records = Array.isArray(payload)
+        ? payload
+        : Array.isArray((payload as { data?: unknown })?.data)
+          ? (payload as { data: AttendanceRecord[] }).data
+          : [];
 
-      // Ensure employee details are included in the response
-      return data.map((record: AttendanceRecord) => ({
+      return records.map((record: AttendanceRecord) => ({
         ...record,
-        employee: record.employee || { firstName: 'Unknown', lastName: '', email: '' },
+        employee: record.employee || { id: record.employeeId, firstName: 'Unknown', lastName: '', email: '' },
       }));
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch attendance records');
@@ -1143,34 +1211,26 @@ class ApiService {
       }
 
       const payload = await response.json();
-      const normalizeRecord = (record: any): AttendanceRecord => {
-        const normalized = { ...record };
-        if (record.punchIn === undefined && record.clockIn !== undefined) {
-          normalized.punchIn = record.clockIn;
-        }
-        if (record.punchOut === undefined && record.clockOut !== undefined) {
-          normalized.punchOut = record.clockOut;
-        }
-        return normalized;
-      };
-      if (Array.isArray(payload)) {
-        return {
-          data: payload.map(normalizeRecord),
-          meta: {
+      const list = Array.isArray(payload)
+        ? payload
+        : Array.isArray((payload as { data?: unknown })?.data)
+          ? (payload as { data: (Partial<AttendanceRecord> & { clockIn?: string | null; clockOut?: string | null })[] }).data
+          : [];
+      const meta = (payload && typeof payload === 'object' && 'meta' in payload && payload.meta && typeof payload.meta === 'object')
+        ? (payload.meta as AttendanceHistoryResponse['meta'])
+        : {
             page,
             pageSize,
-            total: payload.length,
-            totalPages: payload.length > 0 ? 1 : 0,
+            total: list.length,
+            totalPages: list.length > 0 ? 1 : 0,
             month,
             year,
-          },
-        };
-      }
+          };
 
       return {
-        ...payload,
-        data: Array.isArray(payload.data) ? payload.data.map(normalizeRecord) : [],
-      } as AttendanceHistoryResponse;
+        data: list.map(normalizeAttendanceRecord),
+        meta,
+      };
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch attendance');
     }
@@ -1198,18 +1258,22 @@ class ApiService {
     month?: number,
     year?: number,
     status?: string,
-  ): Promise<AttendanceRecord[]> {
+    page = 1,
+    pageSize = 10,
+  ): Promise<AttendanceHistoryResponse> {
     try {
       const params = new URLSearchParams();
       if (month !== undefined) params.set('month', String(month));
       if (year !== undefined) params.set('year', String(year));
       if (status) params.set('status', status);
+      params.set('page', String(page));
+      params.set('pageSize', String(pageSize));
       const query = params.toString();
       const response = await fetch(
         `${API_BASE_URL}/attendance/employee/${employeeId}/monthly${query ? `?${query}` : ''}`,
         {
-        method: 'GET',
-        headers: this.getAuthHeaders(),
+          method: 'GET',
+          headers: this.getAuthHeaders(),
         },
       );
 
@@ -1217,7 +1281,17 @@ class ApiService {
         throw new Error('Failed to fetch employee attendance');
       }
 
-      return await response.json();
+      const payload = await response.json();
+      const list = Array.isArray(payload)
+        ? payload
+        : Array.isArray((payload as { data?: unknown })?.data)
+          ? (payload as { data: (Partial<AttendanceRecord> & { clockIn?: string | null; clockOut?: string | null })[] }).data
+          : [];
+      const meta = payload && typeof payload === 'object' && 'meta' in payload && payload.meta && typeof payload.meta === 'object'
+        ? payload.meta as AttendanceHistoryResponse['meta']
+        : { page, pageSize, total: list.length, totalPages: list.length ? 1 : 0, month: month ?? new Date().getMonth() + 1, year: year ?? new Date().getFullYear() };
+
+      return { data: list.map(normalizeAttendanceRecord), meta };
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch employee attendance');
     }
@@ -1258,7 +1332,7 @@ class ApiService {
 
   async getTodayStatus(): Promise<TodayAttendanceStatus | null> {
     try {
-      const response = await fetch(`${API_BASE_URL}/attendance/today-status`, {
+      const response = await fetch(`${API_BASE_URL}/attendance/today`, {
         method: 'GET',
         headers: this.getAuthHeaders(),
       });
@@ -1270,7 +1344,16 @@ class ApiService {
         throw new Error('Failed to fetch today attendance status');
       }
 
-      return await response.json();
+      const payload = await response.json();
+      const normalizedPayload = (payload && typeof payload === 'object' && 'data' in payload && payload.data && typeof payload.data === 'object')
+        ? payload.data as Partial<TodayAttendanceStatus> & { clockIn?: string | null; clockOut?: string | null }
+        : payload as Partial<TodayAttendanceStatus> & { clockIn?: string | null; clockOut?: string | null };
+
+      if (normalizedPayload && typeof normalizedPayload === 'object') {
+        return normalizeTodayAttendanceStatus(normalizedPayload);
+      }
+
+      return null;
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch today attendance status');
     }
@@ -1424,6 +1507,19 @@ class ApiService {
     }
   }
 
+  async getLeaveTypes(): Promise<LeaveTypeOption[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/leaves/types`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error('Failed to fetch leave types');
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch leave types');
+    }
+  }
+
   async approveLeave(leaveId: number): Promise<Leave> {
     try {
       const response = await fetch(`${API_BASE_URL}/leaves/approve/${leaveId}`, {
@@ -1458,6 +1554,22 @@ class ApiService {
       return await response.json();
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to reject leave');
+    }
+  }
+
+  async cancelLeave(leaveId: number): Promise<Leave> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/leaves/cancel/${leaveId}`, {
+        method: 'PATCH',
+        headers: this.getAuthHeaders(),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to cancel leave');
+      }
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to cancel leave');
     }
   }
 

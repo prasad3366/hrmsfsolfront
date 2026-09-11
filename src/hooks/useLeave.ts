@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import api, { Leave, CreateLeaveDto, LeaveBalance, LeaveType } from '../services/api';
+import api, { Leave, CreateLeaveDto, LeaveBalance, LeaveType, LeaveTypeOption } from '../services/api';
 
 export const useLeave = () => {
   const [leaves, setLeaves] = useState<Leave[]>([]);
@@ -7,6 +7,7 @@ export const useLeave = () => {
   const [pendingLeaves, setPendingLeaves] = useState<Leave[]>([]);
   const [leaveBalance, setLeaveBalance] = useState<LeaveBalance[]>([]);
   const [myLeaveBalance, setMyLeaveBalance] = useState<LeaveType[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([]);
   const [monthlyLeaves, setMonthlyLeaves] = useState<Leave[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,6 +72,36 @@ export const useLeave = () => {
       throw err;
     } finally {
       setIsSubmitting(false);
+    }
+  }, []);
+
+  const cancelLeave = useCallback(async (leaveId: number) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const updatedLeave = await api.cancelLeave(leaveId);
+      setMyLeaves((prev) => prev.map((leave) => leave.id === leaveId ? { ...leave, ...updatedLeave } : leave));
+      setSuccess('Leave cancelled successfully');
+      return updatedLeave;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to cancel leave';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, []);
+
+  const fetchLeaveTypes = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setLeaveTypes(await api.getLeaveTypes());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch leave types');
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -179,43 +210,20 @@ export const useLeave = () => {
     }
   }, []);
 
-  const normalizeLeaveAllocations = useCallback((balances: LeaveType[]): LeaveType[] => {
-    const defaultAllocation: Record<string, number> = {
-      'casual leave': 10,
-      'sick leave': 8,
-      'maternity leave': 182,
-    };
-
-    return balances.map((balance) => {
-      const normalizedType = (balance.leaveType || '').toLowerCase();
-      const defaultAllocated = defaultAllocation[normalizedType];
-
-      if (defaultAllocated !== undefined && (balance.used || 0) === 0 && balance.allocated !== defaultAllocated) {
-        return {
-          ...balance,
-          allocated: defaultAllocated,
-          remaining: defaultAllocated,
-        };
-      }
-
-      return balance;
-    });
-  }, []);
-
   // Fetch my leave balance
   const fetchMyLeaveBalance = useCallback(async (yearStart: number) => {
     setIsLoading(true);
     setError(null);
     try {
       const data = await api.getSelfLeaveBalance(yearStart);
-      setMyLeaveBalance(normalizeLeaveAllocations(data));
+      setMyLeaveBalance(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch your leave balance';
       setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
-  }, [normalizeLeaveAllocations]);
+  }, []);
 
   // Fetch monthly leaves
   const fetchMonthlyLeaves = useCallback(async (month: number, year: number) => {
@@ -257,6 +265,7 @@ export const useLeave = () => {
     pendingLeaves,
     leaveBalance,
     myLeaveBalance,
+    leaveTypes,
     monthlyLeaves,
     isLoading,
     isSubmitting,
@@ -267,6 +276,8 @@ export const useLeave = () => {
     applyLeave,
     approveLeave,
     rejectLeave,
+    cancelLeave,
+    fetchLeaveTypes,
     fetchLeaveHistory,
     fetchMyLeaveHistory,
     fetchPendingLeaves,
