@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { X, AlertCircle, FileText } from 'lucide-react';
-import { Button, Input } from '../../components/ui/components';
+import { Button, Input, Select } from '../../components/ui/components';
 import { CreateLeaveDto, LeaveTypeOption } from '../../services/api';
 
 interface ApplyLeaveModalProps {
@@ -10,6 +10,23 @@ interface ApplyLeaveModalProps {
   isSubmitting?: boolean;
   leaveTypes: LeaveTypeOption[];
 }
+
+export const calculateInclusiveLeaveDays = (
+  start: string,
+  end: string,
+  duration: string,
+): number => {
+  if (!start || !end) return 0;
+  if (duration === 'FULL_DAY' || duration === 'HALF_DAY_FIRST' || duration === 'HALF_DAY_SECOND') {
+    const [startYear, startMonth, startDay] = start.split('-').map(Number);
+    const [endYear, endMonth, endDay] = end.split('-').map(Number);
+    const startDate = Date.UTC(startYear, startMonth - 1, startDay);
+    const endDate = Date.UTC(endYear, endMonth - 1, endDay);
+    const days = Math.floor((endDate - startDate) / 86400000) + 1;
+    return duration === 'FULL_DAY' ? days : 0.5;
+  }
+  return 0;
+};
 
 const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSubmit, isSubmitting, leaveTypes }) => {
   const [formData, setFormData] = useState({
@@ -23,20 +40,8 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
   });
   const [certificateError, setCertificateError] = useState('');
 
-  const calculateDays = (start: string, end: string, duration: string): number => {
-    if (!start || !end) return 0;
-    if (duration === 'FULL_DAY' || duration === 'HALF_DAY_FIRST' || duration === 'HALF_DAY_SECOND') {
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      const diff = endDate.getTime() - startDate.getTime();
-      const days = Math.floor(diff / 86400000) + 1;
-      return duration === 'FULL_DAY' ? days : 0.5;
-    }
-    return 0;
-  };
-
   const totalDays = useMemo(
-    () => calculateDays(formData.startDate, formData.endDate, formData.durationType),
+    () => calculateInclusiveLeaveDays(formData.startDate, formData.endDate, formData.durationType),
     [formData.startDate, formData.endDate, formData.durationType]
   );
 
@@ -50,7 +55,7 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
     setCertificateError('');
 
     // Check if sick leave > 2 days and no certificate
-    const totalDaysForSubmit = calculateDays(formData.startDate, formData.endDate, formData.durationType);
+    const totalDaysForSubmit = calculateInclusiveLeaveDays(formData.startDate, formData.endDate, formData.durationType);
     if (!selectedLeaveType) {
       setCertificateError('Please select a leave type');
       return;
@@ -113,14 +118,15 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]">
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-white/70 bg-[#fffefa] shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-200 flex-shrink-0">
-          <h2 className="text-xl sm:text-2xl font-semibold text-slate-900">Apply for Leave</h2>
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9]/70 p-4 sm:p-6">
+          <h2 className="text-xl font-bold text-[#073b5c] sm:text-2xl">Apply for leave</h2>
           <button
             onClick={onClose}
-            className="text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0 ml-2"
+            aria-label="Close apply leave dialog"
+            className="ml-2 flex-shrink-0 rounded-lg p-1.5 text-[#78909a] transition-colors hover:bg-[#edf3f5] hover:text-[#12354a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e]"
           >
             <X size={24} />
           </button>
@@ -132,31 +138,29 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div>
               <label htmlFor="leaveTypeId" className="block text-sm font-medium text-slate-700 mb-2">Leave Type</label>
-              <select
+              <Select
                 id="leaveTypeId"
                 value={formData.leaveTypeId.toString()}
                 onChange={(e) => setFormData({ ...formData, leaveTypeId: Number.parseInt(e.target.value, 10) })}
-                className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
               >
                 <option value="0" disabled>Select leave type</option>
                 {leaveTypes.map((type) => (
                   <option key={type.id} value={type.id}>{type.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             <div>
               <label htmlFor="durationType" className="block text-sm font-medium text-slate-700 mb-2">Duration Type</label>
-              <select
+              <Select
                 id="durationType"
                 value={formData.durationType}
                 onChange={(e) => setFormData({ ...formData, durationType: e.target.value as 'FULL_DAY' | 'HALF_DAY_FIRST' | 'HALF_DAY_SECOND' })}
-                className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
               >
                 <option value="FULL_DAY">Full Day</option>
                 <option value="HALF_DAY_FIRST">Half Day (First Half)</option>
                 <option value="HALF_DAY_SECOND">Half Day (Second Half)</option>
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -250,12 +254,12 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
           </div>
 
           {/* Footer */}
-          <div className="flex flex-col-reverse sm:flex-row gap-3 justify-end p-4 sm:p-6 border-t border-slate-200 bg-slate-50 flex-shrink-0">
+          <div className="flex flex-shrink-0 flex-col-reverse justify-end gap-3 border-t border-[#dce6e8] bg-[#f6faf9]/70 p-4 sm:flex-row sm:p-6">
             <Button variant="outline" onClick={onClose} disabled={isSubmitting} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-              {isSubmitting ? 'Submitting...' : 'Apply Leave'}
+            <Button type="submit" variant="gold" disabled={isSubmitting} className="w-full sm:w-auto">
+              {isSubmitting ? 'Submitting...' : 'Apply leave'}
             </Button>
           </div>
         </form>

@@ -24,10 +24,10 @@ const normalizeDto = (data?: Partial<CreateEmployeeDto>): CreateEmployeeDto => (
   employmentType: data?.employmentType ?? 'FULL_TIME',
   status: data?.status ?? 'ACTIVE',
   sourceOfHire: data?.sourceOfHire ?? '',
-  dateOfJoining: data?.dateOfJoining ?? '',
+  dateOfJoining: data?.dateOfJoining || undefined,
   currentExperience: data?.currentExperience ?? undefined,
   reportingManager: data?.reportingManager ?? '',
-  dateOfBirth: data?.dateOfBirth ?? '',
+  dateOfBirth: data?.dateOfBirth || undefined,
   age: data?.age ?? undefined,
   gender: data?.gender ?? 'MALE',
   currentAddress: data?.currentAddress ?? '',
@@ -44,7 +44,7 @@ const normalizeDto = (data?: Partial<CreateEmployeeDto>): CreateEmployeeDto => (
   bankAccountNumber: data?.bankAccountNumber ?? '',
   bankName: data?.bankName ?? '',
   ifscCode: data?.ifscCode ?? '',
-  dateOfExit: data?.dateOfExit ?? '',
+  dateOfExit: data?.dateOfExit || undefined,
   isExperienced: data?.isExperienced ?? false,
 });
 

@@ -1,3 +1,4 @@
+// UI-only visibility helpers for page/menu presentation. Backend authorization remains authoritative.
 export const WFH_ROLES = ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE'] as const;
 export const WFH_MANAGEMENT_ROLES = ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER'] as const;
 

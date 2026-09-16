@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
-import { Plus, Calendar, AlertCircle, FileText, Gift } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardContent, Button, DataTable, EmptyState, PageHeader, Skeleton, StatusBadge, Table, TableHeader, TableRow, TableHead, TableCell, type DataTableColumn } from '../../components/ui/components';
+import { Plus, CalendarDays, AlertCircle, FileText, Gift, HeartPulse, Baby, BriefcaseBusiness } from 'lucide-react';
 import { useLeave } from '../../hooks/useLeave';
 import { useAuth } from '../../context/AuthContext';
 import ApplyLeaveModal from '../../components/leave/ApplyLeaveModal';
@@ -9,38 +9,33 @@ import MedicalCertificateModal from '../../components/leave/MedicalCertificateMo
 import CarryForwardModal from '../../components/leave/CarryForwardModal';
 import { CreateLeaveDto } from '../../services/api';
 
-const LeaveBalanceCard = ({ type, total, used, remaining, color }: { type: string, total: number, used: number, remaining: number, color: string }) => {
-    const percentage = (used / total) * 100;
-    const colors: Record<string, string> = {
-        blue: "bg-blue-500",
-        purple: "bg-purple-500",
-        orange: "bg-amber-500",
-        rose: "bg-rose-500"
-    };
-    
-    const getIconColor = () => {
-      if (color === 'blue') return 'text-blue-600';
-      if (color === 'purple') return 'text-purple-600';
-      return 'text-amber-600';
-    };
-    
+const LeaveBalanceCard = ({ type, allocated, used, carryForward, remaining, color }: { type: string, allocated: number, used: number, carryForward: number, remaining: number, color: string }) => {
+  const progressTotal = allocated + carryForward;
+  const percentage = progressTotal > 0 ? Math.min(100, Math.max(0, (used / progressTotal) * 100)) : 0;
+  const styles: Record<string, { bar: string; icon: React.ReactNode }> = {
+    blue: { bar: 'bg-[#0d7892]', icon: <CalendarDays size={18} /> },
+    rose: { bar: 'bg-[#c85d51]', icon: <HeartPulse size={18} /> },
+    purple: { bar: 'bg-[#b08a3e]', icon: <Baby size={18} /> },
+    orange: { bar: 'bg-[#b08a3e]', icon: <BriefcaseBusiness size={18} /> },
+  };
+  const style = styles[color] || styles.blue;
     return (
-        <Card className="overflow-hidden" hoverEffect>
-            <div className={`h-2 w-full ${colors[color]}`}></div>
+    <Card className="overflow-hidden" hoverEffect>
+      <div className={`h-1.5 w-full ${style.bar}`}></div>
             <CardContent className="p-5">
-                <div className="flex justify-between items-start mb-4">
+        <div className="mb-4 flex items-start justify-between">
                     <div>
-                        <p className="text-sm font-medium text-slate-500">{type}</p>
-                        <h3 className="text-2xl font-bold text-slate-900">{remaining} <span className="text-sm font-normal text-slate-400">/ {total}</span></h3>
+            <p className="text-sm font-semibold text-[#617984]">{type}</p>
+            <h3 className="mt-2 text-3xl font-bold text-[#073b5c]">{remaining} <span className="text-sm font-medium text-[#78909a]">days remaining</span></h3>
                     </div>
-                    <div className={`p-2 rounded-lg ${colors[color]} bg-opacity-10 text-${color}-600`}>
-                        <Calendar size={18} className={getIconColor()} />
+          <div className="rounded-xl bg-[#edf3f5] p-2.5 text-[#1e627d]">
+            {style.icon}
                     </div>
                 </div>
-                <div className="w-full bg-slate-100 rounded-full h-1.5 mb-2">
-                    <div className={`h-1.5 rounded-full ${colors[color]}`} style={{ width: `${percentage}%` }}></div>
+        <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-[#e6eeee]">
+          <div className={`h-1.5 rounded-full transition-[width] duration-300 ${style.bar}`} style={{ width: `${percentage}%` }}></div>
                 </div>
-                <p className="text-xs text-slate-400">{used} days consumed</p>
+        <div className="flex justify-between gap-3 text-xs text-[#78909a]"><span>{used} used / {allocated} allocated</span>{carryForward > 0 && <span>+{carryForward} carried</span>}</div>
             </CardContent>
         </Card>
     );
@@ -113,7 +108,7 @@ const LeaveManagement = () => {
     totalPages: 1,
   });
 
-  const canManageLeave = ['SUPER_ADMIN', 'HR', 'IT_MANAGER', 'SALES_MANAGER'].includes(user?.role ?? '');
+  const canManageLeave = ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER', 'FINANCE_MANAGER'].includes(user?.role ?? '');
   const canApproveLeave = canManageLeave;
   const hasEmployeeProfile = Number.isInteger(Number(user?.employeeId)) && Number(user?.employeeId) > 0;
 
@@ -239,63 +234,49 @@ const LeaveManagement = () => {
     });
   };
 
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case 'APPROVED':
-        return 'success';
-      case 'PENDING':
-        return 'warning';
-      case 'REJECTED':
-        return 'danger';
-      case 'CANCELLED':
-        return 'default';
-      default:
-        return 'default';
-    }
-  };
+  const hasSettlementFields = myLeaves.some((leave) => Object.prototype.hasOwnProperty.call(leave, 'paidLeaveDays') || Object.prototype.hasOwnProperty.call(leave, 'lopDays'));
+  const leaveHistoryColumns: DataTableColumn<any>[] = [
+    { key: 'leaveType', header: 'Leave type', render: (leave) => <span className="font-semibold text-[#12354a]">{leave.leaveType?.name || 'Leave'}</span> },
+    { key: 'dates', header: 'Dates', render: (leave) => <span className="whitespace-nowrap text-xs text-[#617984]">{new Date(leave.startDate).toLocaleDateString()} to {new Date(leave.endDate).toLocaleDateString()}</span> },
+    { key: 'duration', header: 'Duration', render: (leave) => leave.durationType || '-' },
+    { key: 'totalDays', header: 'Total days', render: (leave) => leave.totalDays },
+    ...(hasSettlementFields ? [
+      { key: 'paidLeaveDays', header: 'Paid leave', render: (leave: any) => leave.paidLeaveDays ?? '-' },
+      { key: 'lopDays', header: 'LOP', render: (leave: any) => leave.lopDays ?? '-' },
+    ] : []),
+    { key: 'status', header: 'Status', render: (leave) => <StatusBadge status={leave.status === 'APPROVED' ? 'success' : leave.status === 'PENDING' ? 'warning' : leave.status === 'REJECTED' ? 'danger' : 'neutral'}>{leave.status}</StatusBadge> },
+    { key: 'reason', header: 'Reason', className: 'max-w-56', render: (leave) => <span className="block max-w-56 truncate text-xs text-[#617984]" title={leave.reason}>{leave.reason || '-'}</span> },
+    { key: 'actions', header: 'Actions', render: (leave) => <div className="flex items-center gap-2">{leave.medicalCertificate && <Button size="icon" variant="outline" aria-label="View medical certificate" title="View medical certificate" onClick={() => openCertificateModal(leave)}><FileText size={14} /></Button>}{leave.status === 'PENDING' && <Button size="sm" variant="outline" onClick={() => handleCancelLeave(leave.id)} disabled={isSubmitting}>Cancel</Button>}</div> },
+  ];
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
       {error && (
-        <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 text-rose-600 flex items-start gap-2">
+        <div className="flex items-start gap-2 rounded-xl border border-[#f3c9c3] bg-[#fff1ef] p-4 text-[#a63e35]">
           <AlertCircle size={18} className="mt-0.5" />
           <span>{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-emerald-600">
+        <div className="rounded-xl border border-[#c8ead9] bg-[#eaf7f1] p-4 text-[#19704b]">
           {success}
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Leave Management</h1>
-          <p className="text-slate-500 text-sm">Track balances and manage requests</p>
-        </div>
-        <div className="flex gap-3 flex-col sm:flex-row w-full sm:w-auto">
-          <Button className="gap-2" onClick={() => setIsApplyModalOpen(true)}>
-            <Plus size={16} /> Apply Leave
-          </Button>
+      <PageHeader title="Leave" description="Track balances, submit requests, and review leave activity." actions={<div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"><Button variant="gold" className="gap-2" onClick={() => setIsApplyModalOpen(true)}><Plus size={16} /> Apply leave</Button>
           {['SUPER_ADMIN', 'CEO', 'HR', 'EMPLOYEE'].includes(user?.role ?? '') && (
-            <Button 
-              variant="secondary"  
-              className="gap-2" 
-              onClick={() => setIsCarryForwardModalOpen(true)}
-            >
-              <Gift size={16} /> Carry Forward
-            </Button>
+            <Button variant="secondary" className="gap-2" onClick={() => setIsCarryForwardModalOpen(true)}><Gift size={16} /> Carry forward</Button>
           )}
-        </div>
-      </div>
+        </div>} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {myLeaveBalance.length > 0 ? (
           myLeaveBalance.map((balance, idx) => (
             <LeaveBalanceCard
               key={balance.id}
-              total={balance.allocated + balance.carryForward}
+              allocated={balance.allocated}
+              carryForward={balance.carryForward}
               used={balance.used}
               remaining={balance.remaining}
               color={['blue', 'rose', 'purple', 'orange'][idx % 4]}
@@ -303,17 +284,15 @@ const LeaveManagement = () => {
             />
           ))
         ) : (
-          <div className="col-span-full text-center text-slate-500">
-            {isLoading ? 'Loading leave balance...' : 'No leave balance data available'}
-          </div>
+          isLoading ? <>{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-44 rounded-2xl" />)}</> : <div className="col-span-full"><EmptyState title="No leave balance available" description="Leave balance information will appear here when it is provided by HR." /></div>
         )}
       </div>
 
       {canApproveLeave && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2" hoverEffect>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-base">Leave Requests</CardTitle>
+            <Card className="overflow-hidden lg:col-span-2" hoverEffect>
+              <CardHeader className="flex flex-row items-center justify-between border-b border-[#e4ecec] bg-[#f6faf9]/70 pb-3">
+                <CardTitle className="text-base">Leave requests</CardTitle>
               </CardHeader>
               <CardContent className="p-0 overflow-x-auto">
                   {pendingLeaves.length > 0 ? (
@@ -357,8 +336,8 @@ const LeaveManagement = () => {
                                               <>
                                                 <Button 
                                                   size="sm" 
-                                                  variant="outline" 
-                                                  className="text-emerald-600 hover:bg-emerald-50 border-emerald-200 text-xs px-2 py-1 whitespace-nowrap"
+                                                  variant="gold"
+                                                  className="border-[#c8ead9] bg-[#eaf7f1] px-2 py-1 text-xs text-[#19704b] hover:bg-[#d8f1e4] whitespace-nowrap"
                                                   onClick={() => openApproveModal(leave)}
                                                   disabled={isSubmitting}
                                                 >
@@ -366,8 +345,8 @@ const LeaveManagement = () => {
                                                 </Button>
                                                 <Button 
                                                   size="sm" 
-                                                  variant="outline" 
-                                                  className="text-rose-600 hover:bg-rose-50 border-rose-200 text-xs px-2 py-1 whitespace-nowrap"
+                                                  variant="danger"
+                                                  className="px-2 py-1 text-xs whitespace-nowrap"
                                                   onClick={() => openRejectModal(leave)}
                                                   disabled={isSubmitting}
                                                 >
@@ -375,9 +354,9 @@ const LeaveManagement = () => {
                                                 </Button>
                                               </>
                                             ) : (
-                                              <Badge variant={getStatusBadgeVariant(leave.status)}>
+                                              <StatusBadge status={leave.status === 'APPROVED' ? 'success' : leave.status === 'REJECTED' ? 'danger' : 'neutral'}>
                                                 {leave.status}
-                                              </Badge>
+                                              </StatusBadge>
                                             )}
                                         </div>
                                     </TableCell>
@@ -440,58 +419,12 @@ const LeaveManagement = () => {
       )}
 
       <Card hoverEffect>
-        <CardHeader><CardTitle className="text-base">Your Leave History</CardTitle></CardHeader>
+        <CardHeader className="border-b border-[#e4ecec] bg-[#f6faf9]/70"><CardTitle className="text-base">Your leave history</CardTitle></CardHeader>
         <CardContent className="p-0">
           {myLeaves.length > 0 ? (
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Dates</TableHead>
-                        <TableHead>Days</TableHead>
-                        <TableHead>Reason</TableHead>
-                        <TableHead>Status</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <tbody>
-                    {myLeaves.map(leave => (
-                        <TableRow key={leave.id}>
-                            <TableCell className="font-medium text-slate-900">{leave.leaveType?.name || 'Leave'}</TableCell>
-                            <TableCell className="text-xs text-slate-500">
-                              {new Date(leave.startDate).toLocaleDateString()} to {new Date(leave.endDate).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell>{leave.totalDays}</TableCell>
-                            <TableCell className="text-xs text-slate-500">{leave.reason}</TableCell>
-                            <TableCell>
-                                <div className="flex items-center gap-2">
-                                  {leave.medicalCertificate && (
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline" 
-                                      className="text-blue-600 hover:bg-blue-50 border-blue-200 text-xs px-2 py-1 gap-1"
-                                      onClick={() => openCertificateModal(leave)}
-                                    >
-                                      <FileText size={14} />
-                                    </Button>
-                                  )}
-                                  <Badge variant={getStatusBadgeVariant(leave.status)}>
-                                      {leave.status}
-                                  </Badge>
-                                  {leave.status === 'PENDING' && (
-                                    <Button size="sm" variant="outline" onClick={() => handleCancelLeave(leave.id)} disabled={isSubmitting}>
-                                      Cancel
-                                    </Button>
-                                  )}
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </tbody>
-            </Table>
+            <DataTable columns={leaveHistoryColumns} data={myLeaves} getRowKey={(leave) => leave.id} />
           ) : (
-            <div className="p-6 text-center text-slate-500">
-              {isLoading ? 'Loading your leave history...' : 'No leave requests yet'}
-            </div>
+            isLoading ? <div className="space-y-3 p-5">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-10 w-full" />)}</div> : <EmptyState title="No leave requests yet" description="Your submitted leave requests will appear here." action={<Button variant="gold" onClick={() => setIsApplyModalOpen(true)}>Apply leave</Button>} />
           )}
         </CardContent>
       </Card>

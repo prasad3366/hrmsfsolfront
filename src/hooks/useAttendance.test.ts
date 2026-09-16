@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getTodayAttendanceState, normalizeAttendanceStatus } from './useAttendance';
+import { getAttendanceLocationLabel, getTodayAttendanceState, normalizeAttendanceStatus } from './useAttendance';
 import { formatAttendanceDate } from '../utils/attendanceDate';
 
 describe('attendance state helpers', () => {
@@ -88,5 +88,13 @@ describe('attendance state helpers', () => {
     expect(normalizeAttendanceStatus('HALF_DAY')).toBe('HALF_DAY');
     expect(normalizeAttendanceStatus('ABSENT')).toBe('ABSENT');
     expect(normalizeAttendanceStatus('LEAVE')).toBe('LEAVE');
+  });
+
+  it('maps the office/outside attendance location states to the approved display labels', () => {
+    expect(getAttendanceLocationLabel('OFFICE', 'OFFICE')).toBe('In Office');
+    expect(getAttendanceLocationLabel('OFFICE', 'OUTSIDE')).toBe('Checked Out Outside Office');
+    expect(getAttendanceLocationLabel('OUTSIDE', 'OFFICE')).toBe('Checked In Outside Office');
+    expect(getAttendanceLocationLabel('OUTSIDE', 'OUTSIDE')).toBe('Out of Office');
+    expect(getAttendanceLocationLabel(undefined, undefined)).toBe('Unknown');
   });
 });

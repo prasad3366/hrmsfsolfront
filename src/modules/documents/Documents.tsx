@@ -2,12 +2,15 @@ import React, { useEffect, useState } from 'react';
 import api, { EmployeeDirectoryResponse } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../../components/ui/components';
+import { Card, CardHeader, CardTitle, CardContent, Button, DataTable, EmptyState, PageHeader, Select, Skeleton, StatusBadge, type DataTableColumn } from '../../components/ui/components';
 
 export const MANAGEMENT_DOCUMENT_ROLES = ['SUPER_ADMIN', 'CEO', 'HR'] as const;
 
 export const isManagementDocumentRole = (role: string | null | undefined): boolean =>
   MANAGEMENT_DOCUMENT_ROLES.includes(role as (typeof MANAGEMENT_DOCUMENT_ROLES)[number]);
+
+export const canUploadDocuments = (role: string | null | undefined): boolean =>
+  isManagementDocumentRole(role);
 
 export const getDocumentTargetEmployeeId = (
   role: string | null | undefined,
@@ -19,6 +22,7 @@ const Documents = () => {
   const { user, role } = useAuth();
   const { addNotification } = useNotifications();
   const isManagementUser = isManagementDocumentRole(role);
+  const canUpload = canUploadDocuments(role);
   const [employeeId, setEmployeeId] = useState<number | undefined>(() => {
     if (isManagementDocumentRole(role)) return undefined;
     const n = Number(user?.employeeId);
@@ -44,45 +48,34 @@ const Documents = () => {
     setPage(1);
   }, [employeeId, selectedEmployeeId]);
 
-  const fetchEmployeeList = async () => {
-    try {
-      const response = await api.getAllEmployees() as EmployeeDirectoryResponse;
-      const list = response.data;
-      setEmployeeList(list || []);
-      if (selectedEmployeeId == null && list?.length > 0) {
-        setSelectedEmployeeId(list[0].id);
-      }
-    } catch (e: any) {
-      setError(e.message || 'Failed to load employee list');
-      console.error('Failed to fetch employee list', e);
-    }
-  };
-
   useEffect(() => {
-    const init = async () => {
-      // try to resolve employee id from JWT-derived user info
-      if (employeeId == null && user) {
-        const maybeId = Number((user as any).employeeId);
-        if (Number.isInteger(maybeId) && maybeId > 0) setEmployeeId(maybeId);
-      }
+    let mounted = true;
 
-      if (isManagementUser) {
-        await fetchEmployeeList();
-      }
-
-      // fetch lists
-      const loadForId = isManagementUser ? selectedEmployeeId : employeeId;
-      if (loadForId) {
-        setSelectedEmployeeId(loadForId);
-        await fetchRequired();
-      }
-      if (loadForId) await fetchDocuments();
+    if (isManagementUser) {
+      setEmployeeId(undefined);
       setResolved(true);
-    };
+      api.getAllEmployees({ page: 1, pageSize: 10000, sortBy: 'name', sortDirection: 'asc' })
+        .then((response: EmployeeDirectoryResponse) => {
+          if (mounted) setEmployeeList(response.data || []);
+        })
+        .catch((err: any) => {
+          if (mounted) setError(err.message || 'Failed to load employees');
+        });
 
-    init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employeeId, selectedEmployeeId, role, user, isManagementUser]);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setEmployeeList([]);
+    const resolvedEmployeeId = Number(user?.employeeId);
+    setEmployeeId(Number.isInteger(resolvedEmployeeId) && resolvedEmployeeId > 0 ? resolvedEmployeeId : undefined);
+    setResolved(true);
+
+    return () => {
+      mounted = false;
+    };
+  }, [isManagementUser, user?.employeeId]);
 
   const getCurrentEmployeeId = (): number | undefined => {
     return getDocumentTargetEmployeeId(role, selectedEmployeeId, employeeId);
@@ -92,19 +85,6 @@ const Documents = () => {
     const id = Number(document.id);
     return Number.isInteger(id) && id > 0;
   });
-
-  const getDocumentStatusVariant = (status: string): 'success' | 'warning' | 'danger' | 'default' => {
-    switch (status) {
-      case 'APPROVED':
-        return 'success';
-      case 'PENDING':
-        return 'warning';
-      case 'REJECTED':
-        return 'danger';
-      default:
-        return 'default';
-    }
-  };
 
   const fetchRequired = async () => {
     try {
@@ -160,6 +140,18 @@ const Documents = () => {
       console.error('getDocuments error:', e);
     }
   };
+
+  useEffect(() => {
+    const targetId = getCurrentEmployeeId();
+    if (!targetId) {
+      setRequired([]);
+      setDocs([]);
+      return;
+    }
+
+    void fetchRequired();
+    void fetchDocuments();
+  }, [role, employeeId, selectedEmployeeId]);
 
   const retryResolve = async () => {
     setResolved(false);
@@ -331,39 +323,49 @@ const Documents = () => {
     }
   };
 
+  const documentColumns: DataTableColumn<any>[] = [
+    ...(isManagementUser ? [{ key: 'employee', header: 'Employee', render: (document: any) => <span className="font-semibold text-[#12354a]">{document.employee?.firstName || document.employeeId || '-'}</span> }] : []),
+    { key: 'document', header: 'Document', render: (document) => <span className="font-semibold text-[#12354a]">{document.documentType?.name || document.documentTypeId || 'Document'}</span> },
+    { key: 'file', header: 'File', render: (document) => <span className="block max-w-56 truncate text-sm text-[#617984]" title={document.fileName}>{document.fileName || '-'}</span> },
+    { key: 'uploadedAt', header: 'Uploaded', render: (document) => document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString() : '-' },
+    { key: 'status', header: 'Status', render: (document) => <div><StatusBadge status={document.status === 'APPROVED' ? 'success' : document.status === 'REJECTED' ? 'danger' : document.status === 'PENDING' ? 'warning' : 'neutral'}>{document.status}</StatusBadge>{document.status === 'REJECTED' && (document.remarks || document.rejectionReason) && <p className="mt-1 max-w-56 text-xs text-[#a63e35]">{document.remarks || document.rejectionReason}</p>}</div> },
+    ...(isManagementUser ? [{ key: 'actions', header: 'Actions', render: (document: any) => <div className="flex flex-wrap items-center gap-2"><Button size="xs" variant="outline" onClick={() => handleView(document.id)}>View</Button><Button size="xs" variant="outline" onClick={() => handleDownload(document.id, document.fileName)}>Download</Button>{document.status === 'PENDING' && <><Button size="xs" variant="gold" onClick={() => handleApprove(document.id)} disabled={loading}>Approve</Button><Button size="xs" variant="danger" onClick={() => handleReject(document.id)} disabled={loading}>Reject</Button></>}</div> }] : []),
+  ];
+
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <Card>
-        <CardHeader>
-          <CardTitle>Documents</CardTitle>
+    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <PageHeader title="Documents" description={isManagementUser ? 'Review and manage employee documents.' : 'View your submitted employee documents.'} />
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b border-[#e4ecec] bg-[#f6faf9]/70">
+          <CardTitle>{isManagementUser ? 'Document workspace' : 'My documents'}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="mb-4">
             {(() => {
               if (isManagementUser) {
                 return (
-                  <div className="text-sm text-slate-600">
+                  <div className="rounded-xl border border-[#cce1e8] bg-[#eaf3f7] p-3 text-sm text-[#486271]">
                     {selectedEmployeeId == null ? 'Select an employee.' : 'Employee selected.'}
                   </div>
                 );
               }
 
               if (resolved === false) {
-                return <div className="text-sm text-slate-500">Resolving employee identity...</div>;
+                return <div className="flex items-center gap-3 text-sm text-[#617984]"><Skeleton className="h-7 w-7 rounded-full" />Resolving employee identity...</div>;
               }
 
               if (employeeId == null) {
-                return <div className="text-sm text-rose-600">Could not auto-detect employee. Contact HR to link your account.</div>;
+                return <div className="text-sm text-[#a63e35]">Could not auto-detect employee. Contact HR to link your account.</div>;
               }
 
-              return <div className="text-sm text-slate-600">Employee detected.</div>;
+              return <div className="text-sm text-[#617984]">Employee detected.</div>;
             })()}
           </div>
 
           {isManagementUser && (
             <div className="mb-4">
-              <label htmlFor="selectEmployee" className="text-xs font-medium text-slate-600 mb-1 block">Select Employee</label>
-              <select
+              <label htmlFor="selectEmployee" className="mb-1 block text-xs font-bold uppercase tracking-wide text-[#617984]">Select employee</label>
+              <Select
                 id="selectEmployee"
                 value={selectedEmployeeId || ''}
                 onChange={(e) => {
@@ -371,7 +373,7 @@ const Documents = () => {
                   if (!Number.isInteger(selectedId)) return;
                   setSelectedEmployeeId(selectedId);
                 }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="max-w-xl"
               >
                 <option value="">Select an employee</option>
                 {employeeList.map((emp) => (
@@ -379,63 +381,32 @@ const Documents = () => {
                     {emp.firstName} {emp.lastName} ({emp.empCode || emp.email || emp.id})
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
 
           {error && (
-            <div className="mb-3 text-red-600">
+            <div className="mb-3 rounded-xl border border-[#f3c9c3] bg-[#fff1ef] p-4 text-[#a63e35]">
               {error}
-              <div className="mt-2">
-                <Button onClick={() => fetchDocuments()}>Retry fetch</Button>
-                <Button className="ml-2" variant="secondary" onClick={retryResolve}>Retry detect</Button>
-              </div>
+              <div className="mt-2"><Button variant="outline" onClick={() => fetchDocuments()}>Retry fetch</Button><Button className="ml-2" variant="secondary" onClick={retryResolve}>Retry detect</Button></div>
             </div>
           )}
 
-          <form onSubmit={(e) => handleUploadSubmit(e)}>
-            <h4 className="font-semibold mb-2">Required Documents</h4>
-            {!hasUploadableDocumentType ? (
-              <div className="text-sm text-slate-500">
-                No applicable document types are configured for this employee. Upload is unavailable.
-              </div>
-            ) : (
-              required.filter((document) => Number(document.id) > 0).map((r) => (
-                <div key={`${r.id}-${r.name}`} className="flex items-center gap-3 mb-2">
-                  <div className="flex-1">
-                    {r.name}
-                    {r.virtual && (
-                      <span className="ml-2 text-xs text-rose-600">
-                        (added as experienced-only fallback)
-                      </span>
-                    )}
-                  </div>
-
-                  <input
-                    key={`${r.id}-${getCurrentEmployeeId()}`}
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                    onChange={(e) => handleFileChange(Number(r.id), e)}
-                  />
-                  {selectedFiles[Number(r.id)] && (
-                    <span className="text-xs text-slate-600">
-                      {selectedFiles[Number(r.id)].name}
-                    </span>
-                  )}
+          {canUpload && (
+            <form onSubmit={(e) => handleUploadSubmit(e)}>
+              <h4 className="mb-3 font-bold text-[#12354a]">Required documents</h4>
+              {!hasUploadableDocumentType ? (
+                <div className="rounded-xl border border-dashed border-[#cbd9dc] bg-[#f6faf9] p-4 text-sm text-[#617984]">No applicable document types are configured for this employee. Upload is unavailable.</div>
+              ) : required.filter((document) => Number(document.id) > 0).map((document) => (
+                <div key={`${document.id}-${document.name}`} className="mb-3 flex flex-col gap-3 rounded-xl border border-[#dce6e8] bg-white p-4 sm:flex-row sm:items-center">
+                  <div className="flex-1 font-semibold text-[#12354a]">{document.name}{document.virtual && <span className="ml-2 text-xs text-[#a63e35]">(added as experienced-only fallback)</span>}</div>
+                  <input key={`${document.id}-${getCurrentEmployeeId()}`} type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" onChange={(e) => handleFileChange(Number(document.id), e)} />
+                  {selectedFiles[Number(document.id)] && <span className="text-xs text-[#617984]">{selectedFiles[Number(document.id)].name}</span>}
                 </div>
-              ))
-            )}
-
-            <div className="mt-4">
-              <Button
-                type="button"
-                onClick={(e) => void handleUploadSubmit(e)}
-                disabled={loading || !hasUploadableDocumentType || !getCurrentEmployeeId()}
-              >
-                {loading ? 'Uploading...' : 'Upload Documents'}
-              </Button>
-            </div>
-          </form>
+              ))}
+              <div className="mt-4"><Button variant="gold" type="button" onClick={(e) => void handleUploadSubmit(e)} disabled={loading || !hasUploadableDocumentType || !getCurrentEmployeeId()}>{loading ? 'Uploading...' : 'Upload documents'}</Button></div>
+            </form>
+          )}
         </CardContent>
       </Card>
 
@@ -448,58 +419,7 @@ const Documents = () => {
             <div className="text-sm text-slate-500">No documents submitted yet.</div>
           ) : (
             <>
-              <table className="w-full text-sm">
-              <thead className="text-slate-500 text-left">
-                <tr>
-                  <th>Employee</th>
-                  <th>Document</th>
-                  <th>File</th>
-                  <th>Status</th>
-                  {isManagementUser && <th>Action</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {docs.slice((page-1)*perPage, page*perPage).map((d) => (
-                  <tr key={d.id} className="border-t">
-                    <td className="p-2">{d.employee?.firstName || d.employeeId}</td>
-                    <td className="p-2">{d.documentType?.name || d.documentTypeId}</td>
-                    <td className="p-2 flex items-center gap-4">
-                      <span>{d.fileName}</span>
-                      {isManagementUser && (
-                        <div className="flex flex-wrap items-center gap-2 ml-4">
-                        <Button size="xs" variant="outline" className="flex items-center gap-1" onClick={() => handleView(d.id)}>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                          View
-                        </Button>
-                        <Button size="xs" variant="outline" onClick={() => handleDownload(d.id, d.fileName)}>Download</Button>
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-2">
-                      <Badge variant={getDocumentStatusVariant(d.status)}>{d.status}</Badge>
-                      {d.status === 'REJECTED' && (d.remarks || d.rejectionReason) && (
-                        <div className="mt-1 text-xs text-rose-700">
-                          Reason: {d.remarks || d.rejectionReason}
-                        </div>
-                      )}
-                    </td>
-                    {isManagementUser && (
-                      <td className="p-2">
-                        {d.status === 'PENDING' && (
-                          <div className="flex gap-1">
-                            <Button size="xs" variant="primary" className="bg-green-600 text-white hover:bg-green-700" onClick={() => handleApprove(d.id)}>Approve</Button>
-                            <Button size="xs" variant="danger" onClick={() => handleReject(d.id)}>Reject</Button>
-                          </div>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              <DataTable columns={documentColumns} data={docs.slice((page - 1) * perPage, page * perPage)} getRowKey={(document) => document.id} />
             <div className="mt-4 flex justify-between items-center">
               <Button
                 size="sm"
@@ -524,14 +444,14 @@ const Documents = () => {
       </Card>
 
       {rejectionDocumentId != null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
-            <h2 className="text-lg font-semibold text-slate-900">Reject document</h2>
-            <p className="mt-1 text-sm text-slate-600">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-md rounded-2xl border border-white/70 bg-[#fffefa] p-5 shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
+            <h2 className="text-lg font-bold text-[#073b5c]">Reject document</h2>
+            <p className="mt-1 text-sm text-[#617984]">
               Provide a reason for rejecting this document.
             </p>
             <form onSubmit={submitRejection} className="mt-4">
-              <label htmlFor="rejectionReason" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="rejectionReason" className="block text-sm font-semibold text-[#12354a]">
                 Rejection reason
               </label>
               <textarea
@@ -543,14 +463,14 @@ const Documents = () => {
                 }}
                 rows={4}
                 autoFocus
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="mt-1 w-full rounded-xl border border-[#cbd9dc] px-3 py-2 text-sm text-[#12354a] focus:border-[#b08a3e] focus:outline-none focus:ring-2 focus:ring-[#b08a3e]/20"
                 placeholder="Enter the rejection reason"
               />
               {rejectionError && (
                 <p className="mt-1 text-sm text-rose-600">{rejectionError}</p>
               )}
               <div className="mt-4 flex justify-end gap-2">
-                <Button type="button" variant="secondary" onClick={closeRejectionDialog} disabled={loading}>
+                <Button type="button" variant="ghost" onClick={closeRejectionDialog} disabled={loading}>
                   Cancel
                 </Button>
                 <Button type="submit" variant="danger" disabled={loading}>

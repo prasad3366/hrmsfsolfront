@@ -41,10 +41,10 @@ const Wfh = () => {
     return <div className="p-8 text-center text-slate-500">Access Denied. You do not have permission to view WFH.</div>;
   }
 
-  return <main className="mx-auto max-w-7xl space-y-6 p-6 lg:p-8">
+  return <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-      <div><div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#2A4B9B]"><Home size={18} />Work From Home</div><h1 className="text-3xl font-bold text-slate-900">WFH requests</h1><p className="mt-1 text-sm text-slate-500">Submit and track server-managed work from home requests.</p></div>
-      {canSelfServe && <button onClick={() => setIsRequestOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#2A4B9B] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#213d80]"><Plus size={17} />Request WFH</button>}
+      <div><div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#b08a3e]"><Home size={18} />Work from home</div><h1 className="text-3xl font-bold text-[#073b5c]">WFH requests</h1><p className="mt-1 text-sm text-[#617984]">Submit and track server-managed work from home requests.</p></div>
+      {canSelfServe && <button onClick={() => setIsRequestOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#c3a25a] bg-gradient-to-b from-[#c3a25a] to-[#b08a3e] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(176,138,62,0.24)] transition-all duration-200 hover:-translate-y-px hover:shadow-[0_10px_24px_rgba(176,138,62,0.3)]"><Plus size={17} />Request WFH</button>}
     </div>
 
     {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{success}</div>}

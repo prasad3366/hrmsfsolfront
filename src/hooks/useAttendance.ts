@@ -44,6 +44,19 @@ export const getRecordAttendanceState = (record?: Partial<AttendanceRecord> | nu
   return 'ABSENT';
 };
 
+export type AttendanceLocation = 'OFFICE' | 'OUTSIDE' | 'WFH';
+
+export const getAttendanceLocationLabel = (
+  punchInLocation?: AttendanceLocation | null,
+  punchOutLocation?: AttendanceLocation | null,
+): string => {
+  if (punchInLocation === 'OFFICE' && punchOutLocation === 'OFFICE') return 'In Office';
+  if (punchInLocation === 'OFFICE' && punchOutLocation === 'OUTSIDE') return 'Checked Out Outside Office';
+  if (punchInLocation === 'OUTSIDE' && punchOutLocation === 'OFFICE') return 'Checked In Outside Office';
+  if (punchInLocation === 'OUTSIDE' && punchOutLocation === 'OUTSIDE') return 'Out of Office';
+  return 'Unknown';
+};
+
 export interface UseAttendanceOptions {
   /**
    * Which attendance to load.

@@ -1,12 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Search } from 'lucide-react';
+import { CalendarDays } from 'lucide-react';
 import ApiService, { AttendanceRecord, Employee360Leave, MonthlyAttendanceSummary } from '../../services/api';
 import attendanceService from '../../services/attendanceService';
-import { Badge, Button, Card, CardHeader, CardTitle, CardContent, Input, Table, TableHeader, TableRow, TableHead, TableCell } from '../../components/ui/components';
+import { Badge, Button, Card, CardHeader, CardTitle, CardContent, DataTable, EmptyState, ErrorState, PageHeader, SearchBox, Skeleton, StatCard, StatusBadge, type DataTableColumn } from '../../components/ui/components';
 import { attendanceDateKey, formatAttendanceDate } from '../../utils/attendanceDate';
-import { getRecordAttendanceState } from '../../hooks/useAttendance';
+import { getAttendanceLocationLabel, getRecordAttendanceState } from '../../hooks/useAttendance';
 
 type AttendanceFilter = 'ALL' | 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'LEAVE';
+
+export const getEmployeeAttendanceLocationLabel = (
+  punchInLocationStatus?: AttendanceRecord['punchInLocationStatus'],
+  punchOutLocationStatus?: AttendanceRecord['punchOutLocationStatus'],
+) => getAttendanceLocationLabel(punchInLocationStatus, punchOutLocationStatus);
+
 const EmployeeAttendance = () => {
   const [employees, setEmployees] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -223,22 +229,6 @@ const EmployeeAttendance = () => {
     };
   }, [selectedEmployeeId]);
 
-  const attendanceStatusVariant = (status: string) => {
-    const normalizedStatus = status?.toUpperCase();
-    if (normalizedStatus === 'PRESENT') return 'success';
-    if (normalizedStatus === 'ABSENT') return 'danger';
-    if (normalizedStatus === 'LEAVE') return 'default';
-    if (normalizedStatus === 'IN_PROGRESS') return 'warning';
-    return 'warning';
-  };
-
-  const leaveStatusVariant = (status: string) => {
-    if (status === 'APPROVED') return 'success';
-    if (status === 'REJECTED') return 'danger';
-    if (status === 'PENDING') return 'warning';
-    return 'default';
-  };
-
   const formatDate = (value?: string | null) => {
     return formatAttendanceDate(value);
   };
@@ -263,51 +253,63 @@ const EmployeeAttendance = () => {
       attendanceDateKey(firstRecord.date).localeCompare(attendanceDateKey(secondRecord.date))
     )), [attendanceRecords, selectedMonth, attendanceFilter]);
 
+  const attendanceColumns: DataTableColumn<AttendanceRecord>[] = [
+    { key: 'date', header: 'Date', render: (record) => <span className="font-semibold text-[#12354a]">{formatDate(record.date)}</span> },
+    { key: 'status', header: 'Status', render: (record) => <StatusBadge status={record.status === 'PRESENT' ? 'success' : record.status === 'ABSENT' ? 'danger' : record.status === 'LEAVE' ? 'info' : record.status === 'IN_PROGRESS' ? 'warning' : 'neutral'}>{record.status}</StatusBadge> },
+    { key: 'punchIn', header: 'Check in', render: (record) => record.punchIn ? new Date(record.punchIn).toLocaleTimeString() : '-' },
+    { key: 'punchOut', header: 'Check out', render: (record) => record.punchOut ? new Date(record.punchOut).toLocaleTimeString() : '-' },
+    { key: 'totalHours', header: 'Total hours', render: (record) => record.totalHours ?? '-' },
+    { key: 'location', header: 'Location', render: (record) => { const label = record.locationLabel || 'Unknown'; const tone = label === 'In Office' ? 'success' : label === 'Out of Office' ? 'danger' : label === 'Unknown' ? 'neutral' : 'warning'; return <StatusBadge status={tone}>{label}</StatusBadge>; } },
+  ];
+
+  const leaveColumns: DataTableColumn<typeof leaveRecords[number]>[] = [
+    { key: 'leaveType', header: 'Leave type', render: (leave) => leave.leaveType || '-' },
+    { key: 'startDate', header: 'Start date', render: (leave) => formatDate(leave.startDate) },
+    { key: 'endDate', header: 'End date', render: (leave) => formatDate(leave.endDate) },
+    { key: 'totalDays', header: 'Total days', render: (leave) => leave.totalDays },
+    { key: 'durationType', header: 'Duration type', render: (leave) => formatDurationType(leave.durationType) },
+    { key: 'status', header: 'Status', render: (leave) => <StatusBadge status={leave.status === 'APPROVED' ? 'success' : leave.status === 'REJECTED' ? 'danger' : leave.status === 'PENDING' ? 'warning' : 'neutral'}>{leave.status}</StatusBadge> },
+  ];
+
   const toggleAttendanceFilter = (filter: Exclude<AttendanceFilter, 'ALL'>) => {
     setAttendanceFilter((currentFilter) => currentFilter === filter ? 'ALL' : filter);
   };
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Employee Attendance &amp; Leave Report</h1>
-        <p className="text-slate-500 mt-2">Search for an employee to view their attendance and leave information.</p>
-      </div>
+    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <PageHeader title="Employee Attendance" description="Review attendance, location status, and leave records for an employee." />
 
-      <Card hoverEffect>
-        <CardHeader>
-          <CardTitle className="text-base">Employee Search</CardTitle>
+      <Card className="overflow-hidden" hoverEffect>
+        <CardHeader className="border-b border-[#e4ecec] bg-[#f6faf9]/70">
+          <CardTitle className="text-base">Select employee</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="relative max-w-xl">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input
-              type="search"
+          <div className="max-w-xl">
+            <SearchBox
               placeholder="Search employee by ID or name"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              className="pl-10"
               aria-label="Search employee by ID or name"
             />
           </div>
 
           {isLoading && (
-            <p className="mt-3 text-sm text-slate-500">Loading employees...</p>
+            <div className="mt-4 flex items-center gap-3"><Skeleton className="h-8 w-8 rounded-full" /><Skeleton className="h-3 w-48" /></div>
           )}
 
           {error && (
-            <p className="mt-3 text-sm text-rose-600">{error}</p>
+            <ErrorState message={error} />
           )}
 
           {!isLoading && !error && searchTerm.trim() && !selectedEmployee && (
-            <div className="mt-3 max-w-xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="mt-3 max-w-xl overflow-hidden rounded-xl border border-[#dce6e8] bg-white shadow-[0_12px_30px_rgba(7,59,92,0.08)]">
               {filteredEmployees.length > 0 ? (
                 filteredEmployees.map((employee) => (
                   <button
                     type="button"
                     key={employee.id || employee.employeeId || employee.empCode}
                     onClick={() => handleSelectEmployee(employee)}
-                    className="flex w-full items-center justify-between border-b border-slate-100 px-4 py-3 text-left last:border-b-0 hover:bg-slate-50"
+                    className="flex w-full items-center justify-between border-b border-[#edf3f5] px-4 py-3 text-left transition-colors hover:bg-[#f6faf9] last:border-b-0"
                   >
                     <span>
                       <span className="block font-medium text-slate-900">{getEmployeeName(employee)}</span>
@@ -319,16 +321,16 @@ const EmployeeAttendance = () => {
                   </button>
                 ))
               ) : (
-                <p className="px-4 py-3 text-sm text-slate-500">No matching employees found.</p>
+                <EmptyState title="No matching employees" description="Try a different name or employee code." />
               )}
             </div>
           )}
 
           {selectedEmployee && (
-            <div className="mt-4 flex max-w-xl items-center justify-between rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+            <div className="mt-4 flex max-w-xl items-center justify-between rounded-xl border border-[#cce1e8] bg-[#eaf3f7] px-4 py-3">
               <div>
-                <p className="font-medium text-slate-900">{getEmployeeName(selectedEmployee)}</p>
-                <p className="text-sm text-slate-600">Employee ID: {employeeId}</p>
+                <p className="font-bold text-[#12354a]">{getEmployeeName(selectedEmployee)}</p>
+                <p className="text-sm text-[#617984]">Employee ID: {employeeId}</p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={() => {
                 setSelectedEmployee(null);
@@ -385,20 +387,20 @@ const EmployeeAttendance = () => {
 
       {selectedEmployee && (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_2px_4px_rgba(0,0,0,0.02)] sm:p-6">
+          <div className="relative overflow-hidden rounded-2xl border border-[#dce6e8] bg-gradient-to-br from-[#073b5c] to-[#0d526b] p-5 text-white shadow-[0_18px_42px_rgba(7,59,92,0.14)] sm:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Selected Employee</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#b8d0d5]">Selected employee</p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                  <h2 className="text-2xl font-bold text-slate-900">{getEmployeeName(selectedEmployee)}</h2>
-                  <Badge variant="blue">Employee ID: {employeeId}</Badge>
+                  <h2 className="text-2xl font-bold text-white">{getEmployeeName(selectedEmployee)}</h2>
+                  <Badge variant="blue" className="border-white/20 bg-white/10 text-white">Employee ID: {employeeId}</Badge>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                <CalendarDays size={16} className="text-slate-400" />
+              <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.08] px-3 py-2 text-sm text-[#d5e6e8]">
+                <CalendarDays size={16} className="text-[#e3c477]" />
                 <label className="flex items-center gap-2">
-                  <span className="font-medium text-slate-600">Month</span>
+                  <span className="font-medium text-[#d5e6e8]">Month</span>
                   <input
                     type="month"
                     value={selectedMonth}
@@ -407,110 +409,75 @@ const EmployeeAttendance = () => {
                         setAttendancePage(1);
                         setAttendanceFilter('ALL');
                       }}
-                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    className="rounded-lg border border-white/20 bg-white/10 px-2.5 py-1.5 text-sm text-white outline-none focus:border-[#c3a25a] focus:ring-2 focus:ring-[#b08a3e]/30"
                     aria-label="Select attendance month"
                   />
                 </label>
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium">{selectedEmployee.designation || 'Designation not available'}</span>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-[#d5e6e8]">
+              <span className="rounded-full border border-white/15 bg-white/[0.08] px-2.5 py-1 font-medium">{selectedEmployee.designation || 'Designation not available'}</span>
             </div>
           </div>
 
-          <Card hoverEffect>
-            <CardHeader className="pb-2">
+          <Card hoverEffect className="overflow-hidden">
+            <CardHeader className="border-b border-[#e4ecec] bg-[#f6faf9]/70 pb-3">
               <CardTitle className="text-base">Attendance Summary</CardTitle>
             </CardHeader>
             <CardContent>
               {isSummaryLoading ? (
-                <div className="py-8 text-center text-sm text-slate-500">Loading monthly summary...</div>
+                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-24 rounded-xl" />)}</div>
               ) : summaryError ? (
-                <div className="py-8 text-center text-sm text-rose-600">{summaryError}</div>
+                <div className="py-8 text-center text-sm text-[#c85d51]">{summaryError}</div>
               ) : !summary ? (
                 <div className="py-8 text-center text-sm text-slate-500">No summary available for this month.</div>
               ) : (
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Working Days</p>
-                    <p className="mt-3 text-2xl font-bold text-slate-900">{summary.workingDays}</p>
-                  </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+                  <StatCard label="Working days" value={summary.workingDays} />
                   {([
                     ['Present', summary.presentDays, 'PRESENT', 'text-emerald-600', 'bg-emerald-50'],
                     ['Half Day', summary.halfDays, 'HALF_DAY', 'text-amber-600', 'bg-amber-50'],
-                    ['Absent', summary.absentDays, 'ABSENT', 'text-rose-600', 'bg-rose-50'],
-                    ['Leave', summary.leaveDays, 'LEAVE', 'text-blue-600', 'bg-blue-50'],
+                    ['Absent', summary.absentDays, 'ABSENT', 'text-[#c85d51]', 'bg-[#fff1ef]'],
+                    ['Leave', summary.leaveDays, 'LEAVE', 'text-[#1e627d]', 'bg-[#eaf3f7]'],
                   ] as const).map(([label, value, filter, color, bgClass]) => (
                     <button
                       type="button"
                       key={label}
                       onClick={() => toggleAttendanceFilter(filter)}
                       aria-pressed={attendanceFilter === filter}
-                      className={`cursor-pointer rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${bgClass} ${attendanceFilter === filter ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-200'}`}
+                      className={`cursor-pointer rounded-xl border p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:shadow-sm ${bgClass} ${attendanceFilter === filter ? 'border-[#b08a3e] ring-2 ring-[#b08a3e]/20' : 'border-[#dce6e8]'}`}
                     >
                       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
                       <p className={`mt-3 text-2xl font-bold ${color}`}>{value}</p>
                     </button>
                   ))}
-                  <div className="rounded-xl border border-slate-200 bg-violet-50 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Attendance %</p>
-                    <p className="mt-3 text-2xl font-bold text-violet-600">{summary.attendancePercentage}%</p>
-                  </div>
+                  <StatCard label="Attendance %" value={`${summary.attendancePercentage}%`} />
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <Card hoverEffect>
-            <CardHeader className="pb-2">
+          <Card hoverEffect className="overflow-hidden">
+            <CardHeader className="border-b border-[#e4ecec] bg-[#f6faf9]/70 pb-3">
               <CardTitle className="text-base">Attendance Details</CardTitle>
             </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
+            <CardContent className="overflow-x-auto p-0">
               {isAttendanceLoading ? (
-                <div className="p-6 text-center text-sm text-slate-500">Loading attendance records...</div>
+                <div className="space-y-3 p-5">{Array.from({ length: 5 }, (_, index) => <Skeleton key={index} className="h-10 w-full" />)}</div>
               ) : attendanceError ? (
-                <div className="p-6 text-center text-sm text-rose-600">{attendanceError}</div>
+                <ErrorState message={attendanceError} />
               ) : filteredRecords.length === 0 ? (
                 <div className="p-6 text-center text-sm text-slate-500">
-                  <p>No attendance records found for this filter.</p>
+                  <EmptyState title="No attendance records" description="No records match the selected month and filter." />
                   {attendanceFilter !== 'ALL' && (
-                    <button type="button" onClick={() => setAttendanceFilter('ALL')} className="mt-2 font-semibold text-blue-600 hover:text-blue-700">
+                    <button type="button" onClick={() => setAttendanceFilter('ALL')} className="mt-2 font-semibold text-[#1e627d] hover:text-[#073b5c]">
                       Reset Filter / View All
                     </button>
                   )}
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Check-in</TableHead>
-                      <TableHead>Check-out</TableHead>
-                      <TableHead>Total hours</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <tbody>
-                    {filteredRecords.map((record) => (
-                      <TableRow key={record.id}>
-                        <TableCell>{formatDate(record.date)}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={attendanceStatusVariant(
-                              record.status,
-                            )}
-                          >
-                            {record.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{record.punchIn ? new Date(record.punchIn).toLocaleTimeString() : '-'}</TableCell>
-                        <TableCell>{record.punchOut ? new Date(record.punchOut).toLocaleTimeString() : '-'}</TableCell>
-                        <TableCell>{record.totalHours}</TableCell>
-                      </TableRow>
-                    ))}
-                  </tbody>
-                </Table>
+                <DataTable columns={attendanceColumns} data={filteredRecords} getRowKey={(record) => record.id} />
               )}
               <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-sm text-slate-600">
                 <Button
@@ -536,44 +503,19 @@ const EmployeeAttendance = () => {
             </CardContent>
           </Card>
 
-          <Card hoverEffect>
-            <CardHeader className="pb-2">
+          <Card hoverEffect className="overflow-hidden">
+            <CardHeader className="border-b border-[#e4ecec] bg-[#f6faf9]/70 pb-3">
               <CardTitle className="text-base">Leave Details</CardTitle>
             </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
+            <CardContent className="overflow-x-auto p-0">
               {isLeaveLoading ? (
-                <div className="p-6 text-center text-sm text-slate-500">Loading leave details...</div>
+                <div className="space-y-3 p-5">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-10 w-full" />)}</div>
               ) : leaveError ? (
-                <div className="p-6 text-center text-sm text-rose-600">{leaveError}</div>
+                <ErrorState message={leaveError} />
               ) : leaveRecords.length === 0 ? (
-                <div className="p-6 text-center text-sm text-slate-500">No leave requests found</div>
+                <EmptyState title="No leave requests" description="Leave details will appear here when records are available." />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Leave Type</TableHead>
-                      <TableHead>Start Date</TableHead>
-                      <TableHead>End Date</TableHead>
-                      <TableHead>Total Days</TableHead>
-                      <TableHead>Duration Type</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <tbody>
-                    {leaveRecords.map((leave) => (
-                      <TableRow key={leave.id}>
-                        <TableCell>{leave.leaveType || '—'}</TableCell>
-                        <TableCell>{formatDate(leave.startDate)}</TableCell>
-                        <TableCell>{formatDate(leave.endDate)}</TableCell>
-                        <TableCell>{leave.totalDays}</TableCell>
-                        <TableCell>{formatDurationType(leave.durationType)}</TableCell>
-                        <TableCell>
-                          <Badge variant={leaveStatusVariant(leave.status)}>{leave.status}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </tbody>
-                </Table>
+                <DataTable columns={leaveColumns} data={leaveRecords} getRowKey={(leave) => leave.id} />
               )}
             </CardContent>
           </Card>

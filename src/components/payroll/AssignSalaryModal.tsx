@@ -131,27 +131,27 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <div className="p-6 max-w-md w-full bg-white rounded-lg shadow-lg">
-        <h2 className="text-xl font-bold mb-1 text-slate-900">
+      <div className="w-full max-w-md rounded-2xl border border-white/70 bg-[#fffefa] p-6 shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
+        <h2 className="mb-1 text-xl font-bold text-[#073b5c]">
           {isRaiseMode ? `Give Raise${presetEmployeeName ? ` - ${presetEmployeeName}` : ''}` : 'Assign Salary'}
         </h2>
-        <p className="text-xs text-slate-500 mb-4">
+        <p className="mb-4 text-xs text-[#617984]">
           {isRaiseMode
             ? 'This creates a new salary effective from today. Their previous salary and payroll history are kept.'
             : "Only employees without a salary yet are listed. To give an existing employee a raise, use their profile."}
         </p>
 
         {successMessage && (
-          <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-            <p className="text-emerald-800 font-semibold text-sm">Success</p>
-            <p className="text-emerald-700 text-sm mt-1">{successMessage}</p>
+          <div className="mb-4 rounded-xl border border-[#c8ead9] bg-[#eaf7f1] p-4">
+            <p className="text-sm font-semibold text-[#19704b]">Success</p>
+            <p className="mt-1 text-sm text-[#19704b]">{successMessage}</p>
           </div>
         )}
         
         {(error || validationError) && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-800 font-semibold text-sm">Error</p>
-            <p className="text-red-700 text-sm mt-1">{error || validationError}</p>
+          <div className="mb-4 rounded-xl border border-[#f3c9c3] bg-[#fff1ef] p-4">
+            <p className="text-sm font-semibold text-[#a63e35]">Error</p>
+            <p className="mt-1 text-sm text-[#a63e35]">{error || validationError}</p>
           </div>
         )}
 
@@ -245,7 +245,7 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
             {!successMessage && (
               <Button
                 type="submit"
-                variant="primary"
+                variant="gold"
                 className="flex-1"
                 disabled={loading}
               >

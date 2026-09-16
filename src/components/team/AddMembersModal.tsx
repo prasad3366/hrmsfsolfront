@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTeam } from '../../hooks/useTeam';
-import ApiService, { TeamMember } from '../../services/api';
+import ApiService, { TEAM_MEMBER_DIRECTORY_QUERY, TeamMember } from '../../services/api';
 import {
   Card,
   CardContent,
@@ -37,7 +37,7 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
   const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
 
-  const canManageTeam = ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER'].includes(user?.role ?? '');
+  const canManageTeam = ['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER', 'FINANCE_MANAGER'].includes(user?.role ?? '');
 
   useEffect(() => {
     if (isOpen) {
@@ -50,23 +50,31 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
 
   const fetchEmployees = async () => {
     try {
-      const allEmployees = await ApiService.getAllEmployees();
+      const employeeDirectory = await ApiService.getAllEmployees(TEAM_MEMBER_DIRECTORY_QUERY);
+      const allEmployees = Array.isArray(employeeDirectory?.data)
+        ? employeeDirectory.data
+        : Array.isArray(employeeDirectory)
+          ? employeeDirectory
+          : [];
+
       console.log('📋 [AddMembersModal.fetchEmployees] Total employees from API:', allEmployees.length);
       console.log('📋 [AddMembersModal.fetchEmployees] Current team members:', currentMembers);
-      
-      // Filter out employees who are already in this team or are managers
+
       const currentMemberIdSet = new Set(currentMembers.map(Number));
-      const availableEmployees = allEmployees.filter(emp =>
-        !currentMemberIdSet.has(Number(emp.id)) &&
-        (emp.user?.role !== 'MANAGER' && emp.role !== 'MANAGER')
-      );
-      
+      const availableEmployees = allEmployees.filter((emp: any) => {
+        const employeeId = Number(emp.id);
+        const role = (emp.user?.role ?? emp.role ?? '').toString().toUpperCase();
+        const hasAssignedTeam = emp.teamId !== null && emp.teamId !== undefined && emp.teamId !== '';
+        return emp.status === 'ACTIVE' && !currentMemberIdSet.has(employeeId) && !hasAssignedTeam && !['IT_MANAGER', 'SALES_MANAGER', 'FINANCE_MANAGER'].includes(role);
+      });
+
       console.log('✅ [AddMembersModal.fetchEmployees] Available employees after filtering:', availableEmployees.length);
-      console.log('👥 [AddMembersModal.fetchEmployees] Available employee IDs:', availableEmployees.map(e => e.id));
-      
+      console.log('👥 [AddMembersModal.fetchEmployees] Available employee IDs:', availableEmployees.map((e: any) => e.id));
+
       setEmployees(availableEmployees);
     } catch (err) {
       console.error('Failed to fetch employees:', err);
+      setEmployees([]);
     }
   };
 

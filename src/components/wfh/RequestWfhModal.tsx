@@ -147,11 +147,11 @@ export const RequestWfhModal: React.FC<RequestWfhModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]">
+      <div className="mx-4 w-full max-w-md overflow-hidden rounded-2xl border border-white/70 bg-[#fffefa] shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900">Request Work From Home</h2>
+          <div className="flex items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9]/70 p-6">
+          <h2 className="text-lg font-bold text-[#073b5c]">Request work from home</h2>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 transition-colors"

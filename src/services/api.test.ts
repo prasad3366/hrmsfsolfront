@@ -104,6 +104,60 @@ describe('getEmployeeIdByUserId', () => {
       .toBe('Bearer login-access-token');
   });
 
+  it('stores an enveloped refresh response and attaches the new token on retry', async () => {
+    const storedTokens = new Map([
+      ['accessToken', 'expired-access-token'],
+      ['refreshToken', 'valid-refresh-token'],
+    ]);
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) => storedTokens.get(key) ?? null);
+    vi.mocked(localStorage.setItem).mockImplementation((key: string, value: string) => {
+      storedTokens.set(key, value);
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: { accessToken: 'refreshed-access-token', refreshToken: 'rotated-refresh-token' },
+      }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] }), { status: 200 }));
+
+    await api.get('/employees');
+
+    expect(storedTokens.get('accessToken')).toBe('refreshed-access-token');
+    expect(storedTokens.get('refreshToken')).toBe('rotated-refresh-token');
+    expect((fetchMock.mock.calls[2][1].headers as Headers).get('Authorization'))
+      .toBe('Bearer refreshed-access-token');
+  });
+
+  it('shares one refresh request across concurrent 401 responses', async () => {
+    const storedTokens = new Map([
+      ['accessToken', 'expired-access-token'],
+      ['refreshToken', 'valid-refresh-token'],
+    ]);
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) => storedTokens.get(key) ?? null);
+    vi.mocked(localStorage.setItem).mockImplementation((key: string, value: string) => {
+      storedTokens.set(key, value);
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ accessToken: 'refreshed-access-token' }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] }), { status: 200 }));
+
+    const firstRequest = api.get('/employees');
+    const secondRequest = api.get('/employees?page=2');
+    await Promise.all([firstRequest, secondRequest]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(storedTokens.get('accessToken')).toBe('refreshed-access-token');
+    expect((fetchMock.mock.calls[3][1].headers as Headers).get('Authorization'))
+      .toBe('Bearer refreshed-access-token');
+    expect((fetchMock.mock.calls[4][1].headers as Headers).get('Authorization'))
+      .toBe('Bearer refreshed-access-token');
+  });
+
   it('does not treat a stored user profile without an access token as an API session', () => {
     expect(hasAccessToken(null)).toBe(false);
     expect(hasAccessToken('')).toBe(false);
@@ -525,6 +579,28 @@ describe('announcement employee feed', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:3000/api/announcements/feed',
       expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('maps persisted read records into the page read-state fields', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify([
+      { id: 3, title: 'Already read', reads: [{ employeeId: 7 }] },
+      { id: 4, title: 'Unread', reads: [] },
+    ]), { status: 200 }));
+
+    await expect(api.getAnnouncements()).resolves.toEqual([
+      expect.objectContaining({ id: 3, isRead: true, read: true }),
+      expect.objectContaining({ id: 4, isRead: false, read: false }),
+    ]);
+  });
+
+  it('persists mark-as-unread through the existing read endpoint', async () => {
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
+
+    await expect(api.markAnnouncementAsUnread(42)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/api/announcements/42/read',
+      expect.objectContaining({ method: 'DELETE' }),
     );
   });
 });

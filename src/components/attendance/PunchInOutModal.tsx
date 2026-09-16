@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button } from '../../components/ui/components';
 import { MapPin } from 'lucide-react';
 import { useGeolocation } from '../../hooks/useGeolocation';
@@ -8,6 +8,7 @@ import { TodayAttendanceStatus } from '../../services/api';
 interface PunchInOutModalProps {
   isOpen: boolean;
   onClose: () => void;
+  anchorRef?: React.RefObject<HTMLElement | null>;
   todayRecord?: TodayAttendanceStatus;
   onPunchIn: (latitude?: number, longitude?: number) => Promise<void>;
   onPunchOut: (latitude?: number, longitude?: number) => Promise<void>;
@@ -17,6 +18,7 @@ interface PunchInOutModalProps {
 export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
   isOpen,
   onClose,
+  anchorRef,
   todayRecord,
   onPunchIn,
   onPunchOut,
@@ -27,6 +29,8 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [localPunchedIn, setLocalPunchedIn] = useState<boolean | undefined>(undefined);
   const [localPunchedOut, setLocalPunchedOut] = useState<boolean | undefined>(undefined);
+  const [popoverPosition, setPopoverPosition] = useState({ top: 0, left: 0 });
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   const { requestLocation, isLoading: isGeoLoading, error: geoError } = useGeolocation();
   const { addNotification } = useNotifications();
@@ -61,6 +65,41 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
       setSuccessMessage('');
     }
   }, [isOpen]);
+
+  useLayoutEffect(() => {
+    if (!isOpen || !anchorRef?.current || !popoverRef.current) return;
+
+    const updatePosition = () => {
+      const anchor = anchorRef.current;
+      const popover = popoverRef.current;
+      if (!anchor || !popover) return;
+
+      const anchorRect = anchor.getBoundingClientRect();
+      const popoverRect = popover.getBoundingClientRect();
+      const viewportPadding = 12;
+      const gap = 10;
+      const spaceAbove = anchorRect.top - viewportPadding;
+      const spaceBelow = window.innerHeight - anchorRect.bottom - viewportPadding;
+      const openBelow = spaceBelow >= popoverRect.height || spaceBelow >= spaceAbove;
+      const top = openBelow
+        ? Math.min(anchorRect.bottom + gap, window.innerHeight - popoverRect.height - viewportPadding)
+        : Math.max(viewportPadding, anchorRect.top - popoverRect.height - gap);
+      const left = Math.min(
+        Math.max(viewportPadding, anchorRect.right - popoverRect.width),
+        window.innerWidth - popoverRect.width - viewportPadding,
+      );
+
+      setPopoverPosition({ top: Math.max(viewportPadding, top), left });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [anchorRef, isOpen]);
 
   const handlePunchIn = async () => {
     if (isSubmitting || isGeoLoading) return;
@@ -155,8 +194,13 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
   if (isOpen === false) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-md shadow-2xl">
+    <div className="pointer-events-none fixed inset-0 z-50">
+      <div
+        ref={popoverRef}
+        className="pointer-events-auto absolute w-[min(24rem,calc(100vw-1.5rem))] max-h-[calc(100vh-1.5rem)] overflow-y-auto"
+        style={anchorRef ? { top: popoverPosition.top, left: popoverPosition.left } : undefined}
+      >
+      <Card className="w-full shadow-2xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MapPin size={20} /> Attendance Punch
@@ -228,6 +272,7 @@ export const PunchInOutModal: React.FC<PunchInOutModalProps> = ({
 
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 };

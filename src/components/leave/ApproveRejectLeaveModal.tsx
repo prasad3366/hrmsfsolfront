@@ -52,16 +52,17 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-2 backdrop-blur-[2px] sm:p-4">
+      <div className="flex h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/70 bg-[#fffefa] shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-200 flex-shrink-0">
-          <h2 className="text-xl sm:text-2xl font-semibold text-slate-900">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9]/70 p-4 sm:p-6">
+          <h2 className="text-xl font-bold text-[#073b5c] sm:text-2xl">
             {actionType === 'approve' ? 'Approve Leave Request' : 'Reject Leave Request'}
           </h2>
           <button
             onClick={onClose}
-            className="text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0 ml-2"
+            aria-label="Close leave approval dialog"
+            className="ml-2 flex-shrink-0 rounded-lg p-1.5 text-[#78909a] transition-colors hover:bg-[#edf3f5] hover:text-[#12354a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e]"
           >
             <X size={24} />
           </button>
@@ -71,8 +72,8 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
         <form onSubmit={actionType === 'approve' ? handleApprove : handleReject} className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1">
           {leaveDetails && (
             <>
-              <div className="bg-slate-50 rounded-lg p-4 sm:p-6 space-y-4 sm:space-y-5 border border-slate-200">
-                <h3 className="text-sm font-semibold text-slate-900 mb-4">Leave Request Details</h3>
+              <div className="space-y-4 rounded-xl border border-[#dce6e8] bg-[#f6faf9] p-4 sm:space-y-5 sm:p-6">
+                <h3 className="mb-4 text-sm font-bold text-[#12354a]">Leave request details</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div>
                     <p className="text-xs uppercase text-slate-500 font-semibold mb-1">Employee Name</p>
@@ -112,7 +113,7 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
         </form>
 
         {/* Footer */}
-        <div className="flex flex-col-reverse sm:flex-row gap-3 justify-end p-4 sm:p-6 border-t border-slate-200 bg-slate-50 flex-shrink-0">
+        <div className="flex flex-shrink-0 flex-col-reverse justify-end gap-3 border-t border-[#dce6e8] bg-[#f6faf9]/70 p-4 sm:flex-row sm:p-6">
           <Button variant="outline" onClick={onClose} disabled={isSubmitting} className="w-full sm:w-auto">
             Cancel
           </Button>
@@ -121,7 +122,8 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
               type="submit"
               onClick={handleApprove}
               disabled={isSubmitting}
-              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
+              variant="gold"
+              className="w-full bg-[#eaf7f1] text-[#19704b] hover:bg-[#d8f1e4] sm:w-auto"
             >
               {isSubmitting ? 'Approving...' : 'Approve'}
             </Button>
@@ -130,7 +132,8 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
               type="submit"
               onClick={handleReject}
               disabled={isSubmitting}
-              className="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white"
+              variant="danger"
+              className="w-full sm:w-auto"
             >
               {isSubmitting ? 'Rejecting...' : 'Reject'}
             </Button>

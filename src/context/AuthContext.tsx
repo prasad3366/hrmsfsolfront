@@ -29,6 +29,7 @@ const decodeJwt = (token: string | null): Record<string, any> | null => {
 
 const buildUserFromJwt = (jwt: Record<string, any>, fallbackEmail?: string): User => {
   const email = jwt.email || fallbackEmail || null;
+  const rawRole = jwt.role || jwt.roles || jwt['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || jwt.roleName || null;
   const getId = () => {
     if (jwt.sub) return String(jwt.sub);
     if (jwt.id) return String(jwt.id);
@@ -39,7 +40,7 @@ const buildUserFromJwt = (jwt: Record<string, any>, fallbackEmail?: string): Use
     id: getId(),
     name: jwt.name || jwt.firstName || email?.split?.('@')?.[0] || 'User',
     email,
-    role: (jwt.role || jwt.roles || jwt['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || jwt.roleName || null) as Role,
+    role: (typeof rawRole === 'string' ? rawRole.trim().toUpperCase() : rawRole) as Role,
     avatar: jwt.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(jwt.name || email || 'User')}&background=random`,
     department: jwt.department || 'General',
     designation: jwt.designation || 'User',
@@ -83,9 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (err) {
             console.warn('Unable to persist user to localStorage:', err);
           }
-          if (userObj.role === 'EMPLOYEE') {
-            fetchEmployeeId(userObj, setUser);
-          }
+          fetchEmployeeId(userObj, setUser);
           return;
         }
       }
@@ -119,9 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setRole((userObj.role || response.role || 'EMPLOYEE') as Role);
       localStorage.setItem('foodeez_user', JSON.stringify(userObj));
       
-      if (userObj.role === 'EMPLOYEE') {
-        await fetchEmployeeId(userObj, setUser);
-      }
+      await fetchEmployeeId(userObj, setUser);
       
       return {
         success: true,

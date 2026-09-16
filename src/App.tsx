@@ -28,7 +28,9 @@ import SettingsPage from './pages/SettingsPage';
 import { REPORTS_ROLES } from './modules/reports/reports-roles';
 import { Construction } from 'lucide-react';
 
-// Protected Route Wrapper
+export const EMPLOYEE_DIRECTORY_ROLES = ['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE'] as const;
+
+// Route-level UI gating only. The backend remains the only authority for API authorization.
 const ProtectedRoute = ({ children, allowedRoles }: { children?: React.ReactNode, allowedRoles?: readonly string[] }) => {
   const { user, isLoading } = useAuth();
 
@@ -53,12 +55,10 @@ const PlaceholderModule = ({ title }: { title: string }) => (
 );
 
 const AppRoutes = () => {
-  const { user } = useAuth();
-  
   return (
     <Routes>
       {/* Login Page - redirect to dashboard if already logged in */}
-      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/login" element={<Login />} />
       
       <Route path="/" element={<Layout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
@@ -70,7 +70,7 @@ const AppRoutes = () => {
         } />
         
         <Route path="employees" element={
-          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER']}>
+          <ProtectedRoute allowedRoles={EMPLOYEE_DIRECTORY_ROLES}>
             <EmployeeList />
           </ProtectedRoute>
         } />
@@ -88,7 +88,7 @@ const AppRoutes = () => {
         } />
 
         <Route path="employee-attendance" element={
-          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER']}>
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE']}>
             <EmployeeAttendance />
           </ProtectedRoute>
         } />
@@ -112,13 +112,13 @@ const AppRoutes = () => {
         } />
 
         <Route path="team" element={
-          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER']}>
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'IT_MANAGER', 'SALES_MANAGER', 'FINANCE_MANAGER', 'EMPLOYEE']}>
             <TeamManagement />
           </ProtectedRoute>
         } />
 
         <Route path="recruitment" element={
-          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER']}>
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE']}>
             <Recruitment />
           </ProtectedRoute>
         } />

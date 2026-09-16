@@ -27,11 +27,12 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
     let mounted = true;
     setEmpLoading(true);
     ApiService.getAllEmployees()
-      .then((data) => {
+      .then((response) => {
         if (mounted === false) return;
         // Once an employee has a first payroll record, the monthly scheduler
         // takes over automatically - only show employees who haven't started yet.
-        const notStarted = (data || []).filter(
+        const employees = Array.isArray(response) ? response : response.data || [];
+        const notStarted = employees.filter(
           (emp: any) => emp.status === 'ACTIVE' && (!emp.payrolls || emp.payrolls.length === 0),
         );
         setEmployees(notStarted);
@@ -93,16 +94,16 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
  
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <div className="p-6 max-w-md w-full bg-white rounded-lg shadow-lg">
-        <h2 className="text-xl font-bold mb-1 text-slate-900">Run Payroll</h2>
-        <p className="text-xs text-slate-500 mb-4">
+      <div className="w-full max-w-md rounded-2xl border border-white/70 bg-[#fffefa] p-6 shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
+        <h2 className="mb-1 text-xl font-bold text-[#073b5c]">Run payroll</h2>
+        <p className="mb-4 text-xs text-[#617984]">
           For an employee's first payroll only. Once generated, their payroll runs automatically every month.
         </p>
 
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-800 font-semibold text-sm">Error</p>
-            <p className="text-red-700 text-sm mt-1">{error}</p>
+          <div className="mb-4 rounded-xl border border-[#f3c9c3] bg-[#fff1ef] p-4">
+            <p className="text-sm font-semibold text-[#a63e35]">Error</p>
+            <p className="mt-1 text-sm text-[#a63e35]">{error}</p>
           </div>
         )}
  
@@ -117,7 +118,7 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
               value={formData.employeeIdentifier}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="h-10 w-full rounded-xl border border-[#cbd9dc] bg-white px-3 py-2 text-sm text-[#12354a] focus:border-[#b08a3e] focus:outline-none focus:ring-2 focus:ring-[#b08a3e]/20"
             >
               <option value="">Select employee...</option>
               {empLoading && <option>Loading...</option>}
@@ -145,7 +146,7 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
                 name="month"
                 value={formData.month}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="h-10 w-full rounded-xl border border-[#cbd9dc] bg-white px-3 py-2 text-sm text-[#12354a] focus:border-[#b08a3e] focus:outline-none focus:ring-2 focus:ring-[#b08a3e]/20"
               >
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
                   <option key={month} value={month}>
@@ -182,7 +183,7 @@ export const RunPayrollModal: React.FC<RunPayrollModalProps> = ({
             </Button>
             <Button
               type="submit"
-              variant="primary"
+              variant="gold"
               className="flex-1"
               disabled={loading}
             >

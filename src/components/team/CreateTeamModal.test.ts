@@ -13,7 +13,7 @@ describe('CreateTeamModal employee candidates', () => {
     const result = getCreateTeamCandidates(response([
       { id: 1, empCode: 'IT-1', role: 'IT_MANAGER' },
       { id: 2, empCode: 'SALES-1', user: { role: 'SALES_MANAGER' } },
-      { id: 3, empCode: 'EMP-1', role: 'EMPLOYEE' },
+      { id: 3, empCode: 'EMP-1', role: 'EMPLOYEE', status: 'ACTIVE' },
     ]));
 
     expect(result.managers.map((employee) => employee.empCode)).toEqual(['IT-1', 'SALES-1']);
@@ -29,11 +29,21 @@ describe('CreateTeamModal employee candidates', () => {
 
   it('does not treat stale ADMIN or MANAGER roles as current manager roles', () => {
     const result = getCreateTeamCandidates(response([
-      { id: 1, empCode: 'ADMIN-1', role: 'ADMIN' },
-      { id: 2, empCode: 'MANAGER-1', role: 'MANAGER' },
+      { id: 1, empCode: 'ADMIN-1', role: 'ADMIN', status: 'ACTIVE' },
+      { id: 2, empCode: 'MANAGER-1', role: 'MANAGER', status: 'ACTIVE' },
     ]));
 
     expect(result.managers).toEqual([]);
     expect(result.employees.map((employee) => employee.empCode)).toEqual(['ADMIN-1', 'MANAGER-1']);
+  });
+
+  it('only exposes active unassigned employees as team members', () => {
+    const result = getCreateTeamCandidates(response([
+      { id: 1, empCode: 'ACTIVE-1', status: 'ACTIVE', teamId: null },
+      { id: 2, empCode: 'INACTIVE-1', status: 'INACTIVE', teamId: null },
+      { id: 3, empCode: 'ASSIGNED-1', status: 'ACTIVE', teamId: 9 },
+    ]));
+
+    expect(result.employees.map((employee) => employee.empCode)).toEqual(['ACTIVE-1']);
   });
 });

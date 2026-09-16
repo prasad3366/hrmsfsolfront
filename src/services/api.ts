@@ -17,8 +17,9 @@ export interface AuthTokens {
 }
 
 const getAuthTokens = (payload: any): AuthTokens => {
-  const accessToken = payload?.accessToken;
-  const refreshToken = payload?.refreshToken;
+  const tokenPayload = payload?.data ?? payload;
+  const accessToken = tokenPayload?.accessToken ?? tokenPayload?.access_token;
+  const refreshToken = tokenPayload?.refreshToken ?? tokenPayload?.refresh_token;
 
   if (!accessToken) {
     throw new Error('Login response did not include an access token');
@@ -49,6 +50,12 @@ export interface EmployeeDirectoryResponse {
     noticePeriod: number;
   };
 }
+
+export const TEAM_MEMBER_DIRECTORY_QUERY: EmployeeDirectoryQuery = {
+  status: 'ACTIVE',
+  page: 1,
+  pageSize: 10000,
+};
 
 export const normalizeEmployeeDirectoryResponse = (payload: unknown): EmployeeDirectoryResponse => {
   const envelope = Array.isArray(payload) ? {} : (payload as Partial<EmployeeDirectoryResponse> | null) ?? {};
@@ -177,6 +184,9 @@ export interface AttendanceRecord {
   overtime: number | null;
   status: 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'LEAVE' | 'IN_PROGRESS' | 'NOT_CHECKED_IN' | 'COMPLETED';
   locationStatus?: 'OFFICE' | 'OUTSIDE' | 'WFH'; // Added locationStatus property
+  punchInLocationStatus?: 'OFFICE' | 'OUTSIDE' | 'WFH' | null;
+  punchOutLocationStatus?: 'OFFICE' | 'OUTSIDE' | 'WFH' | null;
+  locationLabel?: string;
   employee?: {
     id: number;
     firstName: string;
@@ -738,6 +748,7 @@ export interface CreateTrainingProgramDto {
   department: string;
   startDate: string;
   endDate: string;
+  employeeIds?: number[];
 }
 
 export interface EnrollEmployeesDto {
@@ -759,6 +770,9 @@ export interface Announcement {
   category: AnnouncementCategory;
   priority: AnnouncementPriority;
   targetDepartment?: string | null;
+  targetAudience?: 'ALL' | 'DEPARTMENT' | 'TEAM';
+  departmentId?: string | null;
+  teamId?: number | null;
   isPinned?: boolean;
   expiresAt?: string | null;
   createdAt?: string;
@@ -772,7 +786,9 @@ export interface CreateAnnouncementDto {
   content: string;
   category: AnnouncementCategory;
   priority: AnnouncementPriority;
-  targetDepartment: string;
+  targetAudience: 'ALL' | 'DEPARTMENT' | 'TEAM';
+  departmentId?: string;
+  teamId?: number;
   isPinned: boolean;
   expiresAt: string;
 }
@@ -1010,7 +1026,11 @@ class ApiService {
       body: init.body,
     };
 
-    return this.originalFetch(input, retryOptions);
+    try {
+      return await this.originalFetch(input, retryOptions);
+    } finally {
+      this.retriedRequests.delete(retryKey);
+    }
   }
 
   async login(email: string, password: string): Promise<LoginResponse> {
@@ -1182,9 +1202,10 @@ class ApiService {
           ? (payload as { data: AttendanceRecord[] }).data
           : [];
 
-      return records.map((record: AttendanceRecord) => ({
+      return records.map((record: AttendanceRecord & { user?: { employee?: AttendanceRecord['employee'] } }) => ({
         ...record,
-        employee: record.employee || { id: record.employeeId, firstName: 'Unknown', lastName: '', email: '' },
+        employeeId: record.employeeId ?? record.user?.employee?.id ?? 0,
+        employee: record.employee || record.user?.employee || { id: record.employeeId ?? 0, firstName: 'Unknown', lastName: '', email: '' },
       }));
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch attendance records');
@@ -2033,12 +2054,19 @@ class ApiService {
             ? payload.items
             : [];
 
-    return data.map((announcement: any) => ({
+    return data.map((announcement: any) => {
+      const persistedRead = Array.isArray(announcement?.reads) && announcement.reads.length > 0;
+      const read = announcement?.isRead ?? announcement?.read ?? persistedRead;
+      return {
       ...announcement,
       category: String(announcement?.category || 'GENERAL').toUpperCase() as AnnouncementCategory,
       isPinned: announcement?.isPinned === true
         || String(announcement?.isPinned || announcement?.pinStatus || '').toUpperCase() === 'PINNED',
-    }));
+      ...(announcement?.isRead !== undefined || announcement?.read !== undefined || Array.isArray(announcement?.reads)
+        ? { isRead: Boolean(read), read: Boolean(read) }
+        : {}),
+      };
+    });
   }
 
   async getReportsSummary(): Promise<ReportsSummary> {
@@ -2124,6 +2152,14 @@ class ApiService {
       body: JSON.stringify({}),
     });
     if (!response.ok) throw new Error('Failed to mark announcement as read');
+  }
+
+  async markAnnouncementAsUnread(id: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/announcements/${id}/read`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to mark announcement as unread');
   }
 
   async getEmployee360(employeeId: number): Promise<Employee360Profile> {
@@ -3250,6 +3286,18 @@ class ApiService {
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to resolve helpdesk ticket');
     }
+  }
+
+  async getDashboard(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/dashboard`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const err = await response.text().catch(() => '');
+      throw new Error(err || 'Failed to load dashboard');
+    }
+    return response.json();
   }
 }
 

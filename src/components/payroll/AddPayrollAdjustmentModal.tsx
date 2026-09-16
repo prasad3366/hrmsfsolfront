@@ -56,13 +56,13 @@ export const AddPayrollAdjustmentModal: React.FC<AddPayrollAdjustmentModalProps>
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <div className="p-6 max-w-md w-full bg-white rounded-lg shadow-lg">
-        <h2 className="text-xl font-bold mb-4 text-slate-900">Add Adjustment</h2>
+      <div className="w-full max-w-md rounded-2xl border border-white/70 bg-[#fffefa] p-6 shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
+        <h2 className="mb-4 text-xl font-bold text-[#073b5c]">Add adjustment</h2>
         
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-800 font-semibold text-sm">Error</p>
-            <p className="text-red-700 text-sm mt-1">{error}</p>
+          <div className="mb-4 rounded-xl border border-[#f3c9c3] bg-[#fff1ef] p-4">
+            <p className="text-sm font-semibold text-[#a63e35]">Error</p>
+            <p className="mt-1 text-sm text-[#a63e35]">{error}</p>
           </div>
         )}
 
@@ -125,7 +125,7 @@ export const AddPayrollAdjustmentModal: React.FC<AddPayrollAdjustmentModalProps>
             </Button>
             <Button
               type="submit"
-              variant="primary"
+              variant="gold"
               className="flex-1"
               disabled={loading}
             >

@@ -14,7 +14,7 @@ describe('training API methods', () => {
 
   it('uses the training endpoints for program and enrollment actions', async () => {
     await api.getTrainingPrograms();
-    await api.createTrainingProgram({ title: 'Leadership', description: '', trainer: 'Ada', department: 'HR', startDate: '2026-09-10', endDate: '2026-09-11' });
+    await api.createTrainingProgram({ title: 'Leadership', description: '', trainer: 'Ada', department: 'HR', startDate: '2026-09-10', endDate: '2026-09-11', employeeIds: [7, 8] });
     await api.updateTrainingProgram(2, { title: 'Advanced Leadership' });
     await api.deleteTrainingProgram(2);
     await api.enrollEmployees({ trainingProgramId: 2, employeeIds: [7, 8] });
@@ -28,6 +28,7 @@ describe('training API methods', () => {
       'http://localhost:3000/api/training/enroll',
       'http://localhost:3000/api/training/enrollments/9',
     ]);
+    expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({ method: 'POST', body: JSON.stringify({ title: 'Leadership', description: '', trainer: 'Ada', department: 'HR', startDate: '2026-09-10', endDate: '2026-09-11', employeeIds: [7, 8] }) }));
     expect(fetchMock.mock.calls[2][1]).toEqual(expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ title: 'Advanced Leadership' }) }));
     expect(fetchMock.mock.calls[4][1]).toEqual(expect.objectContaining({ method: 'POST', body: JSON.stringify({ trainingProgramId: 2, employeeIds: [7, 8] }) }));
   });

@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './src/App';
 import portalLogo from './src/assets/foodeez.png';
+import './src/components/ui/theme.css';
 
 document.title = 'FooDeeZ HRMS';
 const iconLink = document.querySelector("link[rel~='icon']");

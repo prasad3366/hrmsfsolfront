@@ -15,7 +15,7 @@ import { CreateEmployeeModal } from '../../components/employees/CreateEmployeeMo
 import { AssignSalaryModal } from '../../components/payroll/AssignSalaryModal';
 import {
   Card, CardContent, CardHeader, CardTitle,
-  Button, Badge
+  Button, Badge, ErrorState, LoadingState, PageHeader, Skeleton, StatusBadge, Tabs
 } from '../../components/ui/components';
 import {
   Edit, Briefcase, TrendingUp, Download, Eye
@@ -407,91 +407,74 @@ const EmployeeProfile = () => {
 
     if (loading) {
         return (
-            <div className="p-8 flex items-center justify-center">
-                <div className="text-slate-500">Loading employee details...</div>
+        <div className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8" role="status">
+          <div className="flex items-center gap-4 rounded-2xl border border-[#dce6e8] bg-white/80 p-6"><Skeleton className="h-20 w-20 rounded-full" /><div className="flex-1 space-y-3"><Skeleton className="h-5 w-56" /><Skeleton className="h-3 w-80 max-w-full" /></div></div>
+          <LoadingState label="Loading employee details..." />
             </div>
         );
     }
 
     if (error || !employee) {
         return (
-            <div className="p-8 flex flex-col items-center justify-center text-center min-h-[60vh]">
-                 <h2 className="text-xl font-semibold text-slate-800">Unable to Load Employee Profile</h2>
-                 <p className="text-slate-500 mb-2">{error ? `Error: ${error}` : 'The employee you are looking for does not exist or has been removed.'}</p>
-                 <p className="text-xs text-slate-400 mb-4">Route ID: {id} | User Role: {user?.role} | User employeeId: {user?.employeeId}</p>
+              <div className="mx-auto flex min-h-[60vh] w-full max-w-2xl items-center justify-center p-6">
+                <ErrorState message={error ? `Error: ${error}` : 'The employee you are looking for does not exist or has been removed.'} />
             </div>
         );
     }
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <PageHeader title="Employee 360" description="A complete view of this employee's profile and connected HR records." />
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="relative overflow-hidden rounded-2xl border border-[#dce6e8] bg-gradient-to-br from-[#073b5c] via-[#0d526b] to-[#164f66] p-6 text-white shadow-[0_18px_42px_rgba(7,59,92,0.16)] sm:p-8">
+             <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full border border-[#c3a25a]/15 bg-[#b08a3e]/10" />
+             <div className="relative flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
              <div className="flex items-center gap-6">
                 <img 
                   src={employee.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent((employee.firstName ?? '') + ' ' + (employee.lastName ?? ''))}&background=random`}
                   alt={employee.firstName || 'Employee'} 
-                  className="w-24 h-24 rounded-full object-cover border-4 border-slate-50 shadow-sm" 
+                  className="h-24 w-24 rounded-full border-4 border-white/80 object-cover shadow-[0_8px_24px_rgba(2,35,55,0.28)]" 
                 />
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">{employee.firstName ? `${employee.firstName} ${employee.lastName || ''}`.trim() : 'Employee'}</h1>
-                    <div className="flex flex-wrap items-center gap-2 text-slate-500 mt-2 text-sm">
-                        <span className="flex items-center gap-1"><Briefcase size={14} /> {employee.designation || employee.jobTitle || '-'}</span>
-                        <span className="hidden sm:inline mx-1">•</span>
-                        <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">{employee.department || '-'}</span>
+                    <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#c3d9dc]">{employee.empCode || 'Employee profile'}</p>
+                    <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{employee.firstName ? `${employee.firstName} ${employee.lastName || ''}`.trim() : 'Employee'}</h1>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[#d5e6e8]">
+                        <span className="flex items-center gap-1.5"><Briefcase size={14} className="text-[#e3c477]" /> {employee.designation || employee.jobTitle || '-'}</span>
+                        <span className="hidden text-[#8db1bd] sm:inline">/</span>
+                        <span>{employee.department || '-'}</span>
                     </div>
                 </div>
              </div>
-             <div className="flex gap-3 w-full md:w-auto">
+             <div className="flex w-full flex-col items-start gap-3 sm:flex-row sm:items-center md:w-auto md:flex-col md:items-end">
+                 <StatusBadge status={isEmployeeActive(employee) ? 'success' : 'danger'} className="border-white/20 bg-white/10 text-white">{getEmployeeStatusLabel(employee)}</StatusBadge>
+                 <div className="flex w-full gap-3 sm:w-auto">
                  {canManagePayroll && (
-                   <Button variant="outline" className="flex-1 md:flex-none" onClick={() => setIsRaiseOpen(true)}>
-                      <TrendingUp size={16} className="mr-2" /> Give Raise
+                   <Button variant="outline" className="flex-1 border-white/30 bg-white/10 text-white hover:bg-white/20 md:flex-none" onClick={() => setIsRaiseOpen(true)}>
+                      <TrendingUp size={16} /> Give raise
                    </Button>
                  )}
                  {canEditEmployees && (
-                   <Button className="flex-1 md:flex-none" onClick={handleEditEmployee}>
-                      <Edit size={16} className="mr-2" /> Edit
+                   <Button variant="gold" className="flex-1 md:flex-none" onClick={handleEditEmployee}>
+                      <Edit size={16} /> Edit
                    </Button>
                  )}
+                 </div>
+             </div>
              </div>
         </div>
       </div>
 
-      <div className="border-b border-slate-200">
-        <div className="flex gap-2 overflow-x-auto" role="tablist" aria-label="Employee 360 sections">
-          {[
-            ['personal', 'Personal'],
-            ['employment', 'Employment'],
-            ['contact', 'Contact'],
-            ['attendance', 'Attendance'],
-            ['leave', 'Leave'],
-            ['hierarchy', 'Hierarchy'],
-            ['assets', 'Assets'],
-            ['documents', 'Documents'],
-            ['payroll', 'Payroll'],
-          ].map(([section, label]) => (
-            <button
-              key={section}
-              type="button"
-              role="tab"
-              aria-selected={activeSection === section}
-              onClick={() => setActiveSection(section as 'personal' | 'employment' | 'contact' | 'attendance' | 'leave' | 'hierarchy' | 'assets' | 'documents' | 'payroll')}
-              className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                activeSection === section
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      <div className="overflow-hidden rounded-xl border border-[#dce6e8] bg-white/70 px-2 pt-1 shadow-[0_8px_24px_rgba(7,59,92,0.04)]">
+        <Tabs tabs={[
+          { value: 'personal', label: 'Personal' }, { value: 'employment', label: 'Employment' }, { value: 'contact', label: 'Contact' },
+          { value: 'attendance', label: 'Attendance' }, { value: 'leave', label: 'Leave' }, { value: 'hierarchy', label: 'Hierarchy' },
+          { value: 'assets', label: 'Assets' }, { value: 'documents', label: 'Documents' }, { value: 'payroll', label: 'Payroll' },
+        ]} value={activeSection} onChange={(section) => setActiveSection(section as 'personal' | 'employment' | 'contact' | 'attendance' | 'leave' | 'hierarchy' | 'assets' | 'documents' | 'payroll')} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b border-[#e4ecec] bg-[#f6faf9]/70">
+          <CardTitle className="text-lg">
             {activeSection === 'personal' ? 'Personal Information' : activeSection === 'employment' ? 'Employment Information' : activeSection === 'contact' ? 'Contact Information' : activeSection === 'attendance' ? 'Attendance' : activeSection === 'leave' ? 'Leave' : activeSection === 'hierarchy' ? 'Team / Reporting Hierarchy' : activeSection === 'assets' ? 'Assets' : activeSection === 'documents' ? 'Documents' : 'Payroll'}
           </CardTitle>
         </CardHeader>

@@ -57,23 +57,19 @@ const TeamManagement: React.FC = () => {
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const canManageTeams = ['SUPER_ADMIN', 'CEO', 'HR'].includes(user?.role ?? '');
-  const isManager = ['IT_MANAGER', 'SALES_MANAGER'].includes(user?.role ?? '');
+  const isManager = ['IT_MANAGER', 'SALES_MANAGER', 'FINANCE_MANAGER'].includes(user?.role ?? '');
 
   const refreshManagerTeams = async () => {
-    if (!user?.employeeId) {
-      console.warn('[Team.tsx] Manager employeeId not available yet. Waiting for profile load.');
-      return;
-    }
     await getAllMyTeams();
   };
 
   useEffect(() => {
     if (canManageTeams) {
       fetchAllTeams();
-    } else if (isManager && user?.employeeId) {
+    } else if (isManager || user?.role === 'EMPLOYEE') {
       getAllMyTeams();
     }
-  }, [canManageTeams, isManager, user?.employeeId]);
+  }, [canManageTeams, isManager, user?.role]);
 
   const fetchAllTeams = async () => {
     setLoadingTeams(true);
