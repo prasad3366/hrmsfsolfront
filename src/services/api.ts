@@ -232,9 +232,33 @@ export interface TodayAttendanceStatus {
   status: 'IN_PROGRESS' | 'COMPLETED' | 'NOT_CHECKED_IN' | 'LEAVE' | null;
 }
 
-const normalizeAttendanceRecord = (record: Partial<AttendanceRecord> & { clockIn?: string | null; clockOut?: string | null }): AttendanceRecord => {
-  const punchIn = record.clockIn ?? record.punchIn ?? null;
-  const punchOut = record.clockOut ?? record.punchOut ?? null;
+const normalizeLocationStatus = (value?: string | null): AttendanceRecord['punchInLocationStatus'] => {
+  if (value === null || value === undefined || value === '') return null;
+  const normalized = String(value).trim().toUpperCase();
+  if (normalized === 'OFFICE' || normalized === 'OUTSIDE' || normalized === 'WFH') {
+    return normalized as AttendanceRecord['punchInLocationStatus'];
+  }
+  return null;
+};
+
+const normalizeAttendanceRecord = (record: Partial<AttendanceRecord> & {
+  clockIn?: string | null;
+  clockOut?: string | null;
+  checkIn?: string | null;
+  checkOut?: string | null;
+  checkInLocation?: string | null;
+  checkOutLocation?: string | null;
+  punchInLocation?: string | null;
+  punchOutLocation?: string | null;
+}): AttendanceRecord => {
+  const punchIn = record.clockIn ?? record.checkIn ?? record.punchIn ?? null;
+  const punchOut = record.clockOut ?? record.checkOut ?? record.punchOut ?? null;
+  const punchInLocationStatus = normalizeLocationStatus(
+    record.punchInLocationStatus ?? record.checkInLocation ?? record.locationStatus ?? record.punchInLocation ?? null,
+  );
+  const punchOutLocationStatus = normalizeLocationStatus(
+    record.punchOutLocationStatus ?? record.checkOutLocation ?? record.punchOutLocation ?? null,
+  );
   const sourceStatus = String(record.status ?? '').toUpperCase();
   const status: AttendanceRecord['status'] = sourceStatus === 'LEAVE'
     ? 'LEAVE'
@@ -259,13 +283,21 @@ const normalizeAttendanceRecord = (record: Partial<AttendanceRecord> & { clockIn
     punchOutLng: record.punchOutLng ?? null,
     totalHours: record.totalHours ?? null,
     overtime: record.overtime ?? null,
+    locationStatus: punchInLocationStatus ?? punchOutLocationStatus ?? normalizeLocationStatus(record.locationStatus ?? null) ?? null,
+    punchInLocationStatus,
+    punchOutLocationStatus,
     status,
   };
 };
 
-const normalizeTodayAttendanceStatus = (payload: Partial<TodayAttendanceStatus> & { clockIn?: string | null; clockOut?: string | null }): TodayAttendanceStatus => {
-  const punchInTime = payload.punchInTime ?? payload.clockIn ?? null;
-  const punchOutTime = payload.punchOutTime ?? payload.clockOut ?? null;
+const normalizeTodayAttendanceStatus = (payload: Partial<TodayAttendanceStatus> & {
+  clockIn?: string | null;
+  clockOut?: string | null;
+  checkIn?: string | null;
+  checkOut?: string | null;
+}): TodayAttendanceStatus => {
+  const punchInTime = payload.punchInTime ?? payload.clockIn ?? payload.checkIn ?? null;
+  const punchOutTime = payload.punchOutTime ?? payload.clockOut ?? payload.checkOut ?? null;
   const sourceStatus = String(payload.status ?? '').toUpperCase();
   const status: TodayAttendanceStatus['status'] = sourceStatus === 'LEAVE'
     ? 'LEAVE'
@@ -1202,11 +1234,23 @@ class ApiService {
           ? (payload as { data: AttendanceRecord[] }).data
           : [];
 
-      return records.map((record: AttendanceRecord & { user?: { employee?: AttendanceRecord['employee'] } }) => ({
-        ...record,
-        employeeId: record.employeeId ?? record.user?.employee?.id ?? 0,
-        employee: record.employee || record.user?.employee || { id: record.employeeId ?? 0, firstName: 'Unknown', lastName: '', email: '' },
-      }));
+      return records.map((record: AttendanceRecord & { user?: { employee?: AttendanceRecord['employee'] } }) => {
+        const normalized = normalizeAttendanceRecord(record as Partial<AttendanceRecord> & {
+          clockIn?: string | null;
+          clockOut?: string | null;
+          checkIn?: string | null;
+          checkOut?: string | null;
+          checkInLocation?: string | null;
+          checkOutLocation?: string | null;
+          punchInLocation?: string | null;
+          punchOutLocation?: string | null;
+        });
+        return {
+          ...normalized,
+          employeeId: normalized.employeeId || record.employeeId || record.user?.employee?.id || 0,
+          employee: normalized.employee || record.employee || record.user?.employee || { id: normalized.employeeId || record.employeeId || 0, firstName: 'Unknown', lastName: '', email: '' },
+        };
+      });
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch attendance records');
     }
@@ -1268,7 +1312,18 @@ class ApiService {
         throw new Error('Failed to fetch attendance');
       }
 
-      return await response.json();
+      const payload = await response.json();
+      const records = Array.isArray(payload) ? payload : Array.isArray((payload as { data?: unknown })?.data) ? (payload as { data: AttendanceRecord[] }).data : [];
+      return records.map((record) => normalizeAttendanceRecord(record as Partial<AttendanceRecord> & {
+        clockIn?: string | null;
+        clockOut?: string | null;
+        checkIn?: string | null;
+        checkOut?: string | null;
+        checkInLocation?: string | null;
+        checkOutLocation?: string | null;
+        punchInLocation?: string | null;
+        punchOutLocation?: string | null;
+      }));
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch attendance');
     }

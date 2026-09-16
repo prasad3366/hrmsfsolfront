@@ -95,6 +95,7 @@ describe('attendance state helpers', () => {
     expect(getAttendanceLocationLabel('OFFICE', 'OUTSIDE')).toBe('Checked Out Outside Office');
     expect(getAttendanceLocationLabel('OUTSIDE', 'OFFICE')).toBe('Checked In Outside Office');
     expect(getAttendanceLocationLabel('OUTSIDE', 'OUTSIDE')).toBe('Out of Office');
-    expect(getAttendanceLocationLabel(undefined, undefined)).toBe('Unknown');
+    expect(getAttendanceLocationLabel(undefined, undefined)).toBe('—');
+    expect(getAttendanceLocationLabel(null, null)).toBe('—');
   });
 });

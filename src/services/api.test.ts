@@ -265,6 +265,33 @@ describe('Attendance history API', () => {
     });
   });
 
+  it('normalizes management attendance aliases for check-in, check-out and location fields', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      data: [{
+        id: 99,
+        employeeId: 42,
+        date: '2026-09-09',
+        checkIn: '2026-09-09T09:00:00.000Z',
+        checkOut: '2026-09-09T17:15:00.000Z',
+        status: 'PRESENT',
+        checkInLocation: 'OFFICE',
+        checkOutLocation: 'OUTSIDE',
+      }],
+    }), { status: 200 }));
+
+    await expect(api.getAttendance()).resolves.toEqual([
+      expect.objectContaining({
+        id: 99,
+        employeeId: 42,
+        punchIn: '2026-09-09T09:00:00.000Z',
+        punchOut: '2026-09-09T17:15:00.000Z',
+        punchInLocationStatus: 'OFFICE',
+        punchOutLocationStatus: 'OUTSIDE',
+        status: 'PRESENT',
+      }),
+    ]);
+  });
+
   it('preserves both clock timestamps for a completed history record', async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({
       data: [{
