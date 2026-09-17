@@ -5,9 +5,10 @@ import {
   type DataTableColumn,
 } from '../../components/ui/components';
 import { getAttendanceLocationLabel, getRecordAttendanceState, getTodayAttendanceState, useAttendance } from '../../hooks/useAttendance';
-import { PunchInOutModal } from '../../components/attendance/PunchInOutModal';
 import { ChevronLeft, ChevronRight, Clock, MapPin } from 'lucide-react';
 import { attendanceDateKey, formatAttendanceDate } from '../../utils/attendanceDate';
+import { useGeolocation } from '../../hooks/useGeolocation';
+import { useNotifications } from '../../context/NotificationContext';
 
 const Attendance = () => {
   const initialMonth = React.useMemo(() => {
@@ -28,8 +29,10 @@ const Attendance = () => {
     totalPages,
     setPage,
   } = useAttendance({ month: selectedMonth.month, year: selectedMonth.year });
-  const [isPunchOpen, setIsPunchOpen] = React.useState(false);
-  const punchButtonRef = React.useRef<HTMLButtonElement>(null);
+  const { requestLocation, isLoading: isGeoLoading, error: geoError } = useGeolocation();
+  const { addNotification } = useNotifications();
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [actionError, setActionError] = React.useState<string | null>(null);
   const isCurrentMonth = selectedMonth.month === initialMonth.month && selectedMonth.year === initialMonth.year;
 
   const selectMonth = (month: number, year: number) => {
@@ -61,10 +64,76 @@ const Attendance = () => {
     : todayState === 'LEAVE'
     ? 'Leave'
     : todayState === 'IN_PROGRESS'
-      ? 'Check Out'
+      ? 'Punch Out'
       : todayState === 'COMPLETED'
-        ? 'View'
+        ? 'Completed'
         : 'Check In';
+
+  const statusLabel = todayError
+    ? 'Unavailable'
+    : todayState === 'NOT_CHECKED_IN'
+      ? 'Not checked in'
+      : todayState === 'IN_PROGRESS'
+        ? 'Checked in'
+        : todayState === 'COMPLETED'
+          ? 'Completed'
+          : todayState === 'LEAVE'
+            ? 'On leave'
+            : 'Not checked in';
+
+  const formatTime = (value?: string | null) => value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+
+  const handlePunchIn = async () => {
+    if (isSubmitting || isGeoLoading || Boolean(todayError) || todayState === 'LEAVE') return;
+
+    setIsSubmitting(true);
+    setActionError(null);
+
+    try {
+      const coords = await requestLocation();
+      if (!coords) {
+        setActionError(geoError?.message || 'Failed to get location');
+        return;
+      }
+
+      await punchIn(coords.latitude, coords.longitude);
+      addNotification({
+        type: 'punch_in',
+        title: 'Punch In Recorded',
+        message: `You punched in at ${new Date().toLocaleTimeString()}`,
+      });
+    } catch (err: any) {
+      setActionError(err?.message || 'Punch in failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePunchOut = async () => {
+    if (isSubmitting || isGeoLoading || Boolean(todayError) || todayState === 'LEAVE') return;
+
+    setIsSubmitting(true);
+    setActionError(null);
+
+    try {
+      const coords = await requestLocation();
+      if (!coords) {
+        setActionError(geoError?.message || 'Failed to get location');
+        return;
+      }
+
+      await punchOut(coords.latitude, coords.longitude);
+      addNotification({
+        type: 'punch_out',
+        title: 'Punch Out Recorded',
+        message: `You punched out at ${new Date().toLocaleTimeString()}`,
+      });
+    } catch (err: any) {
+      setActionError(err?.message || 'Punch out failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const rowKey = (record: any, index: number) => (record.date ? `${record.date}-${index}` : `record-${index}`);
 
@@ -147,17 +216,90 @@ const Attendance = () => {
       <PageHeader title="Attendance" description="Track your work hours and attendance history." actions={<div className="flex items-center gap-2 rounded-xl border border-[#dce6e8] bg-white/80 p-1.5 shadow-sm"><Button size="icon" variant="ghost" aria-label="Previous month" onClick={() => changeMonth(-1)} disabled={isLoading}><ChevronLeft size={18} /></Button><label><span className="sr-only">Select attendance month</span><input type="month" value={`${selectedMonth.year}-${String(selectedMonth.month).padStart(2, '0')}`} onChange={(event) => { const [year, month] = event.target.value.split('-').map(Number); if (year && month) selectMonth(month, year); }} className="rounded-lg border-0 bg-transparent px-2 text-center text-sm font-bold text-[#12354a] focus:ring-2 focus:ring-[#b08a3e]" /></label><Button size="icon" variant="ghost" aria-label="Next month" onClick={() => changeMonth(1)} disabled={isLoading}><ChevronRight size={18} /></Button></div>} />
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
-        <Card className="overflow-hidden border-[#4c8da0]/70 bg-gradient-to-br from-[#022337] via-[#073b5c] to-[#0d526b] text-white shadow-[0_22px_52px_rgba(2,35,55,0.28),0_0_28px_rgba(30,98,125,0.16)] ring-1 ring-[#b08a3e]/20 before:opacity-0 lg:col-span-1">
-          <CardHeader className="border-b border-[#8db1bd]/25 bg-[#022337]/20"><CardTitle className="text-lg font-bold text-[#fffefa]">Today's attendance</CardTitle><p className="text-sm text-[#d5e6e8]">Your current attendance status</p></CardHeader>
-          <CardContent className="space-y-5 p-6">
-            <div className="flex items-center justify-between gap-3"><StatusBadge status={todayError ? 'danger' : todayState === 'IN_PROGRESS' ? 'warning' : todayState === 'COMPLETED' ? 'success' : todayState === 'LEAVE' ? 'info' : 'neutral'} className="border-white/30 bg-white/[0.14] text-[#fffefa] shadow-[0_4px_14px_rgba(2,35,55,0.18)]">{todayError ? 'Unavailable' : todayState}</StatusBadge><MapPin size={18} className="text-[#e3c477] drop-shadow-[0_0_8px_rgba(227,196,119,0.35)]" /></div>
-            <div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-xl border border-[#8db1bd]/25 bg-[#0a4965]/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"><p className="text-xs font-medium text-[#b8d0d5]">Check in</p><p className="mt-1 font-bold text-[#fffefa]">{todayRecord?.punchInTime ? new Date(todayRecord.punchInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</p></div><div className="rounded-xl border border-[#8db1bd]/25 bg-[#0a4965]/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"><p className="text-xs font-medium text-[#b8d0d5]">Check out</p><p className="mt-1 font-bold text-[#fffefa]">{todayRecord?.punchOutTime ? new Date(todayRecord.punchOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</p></div><div className="rounded-xl border border-[#8db1bd]/25 bg-[#0a4965]/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"><p className="text-xs font-medium text-[#b8d0d5]">Total hours</p><p className="mt-1 font-bold text-[#fffefa]">{todayRecord?.totalHours ?? '0.00'}</p></div><div className="rounded-xl border border-[#8db1bd]/25 bg-[#0a4965]/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"><p className="text-xs font-medium text-[#b8d0d5]">Location</p><p className="mt-1 truncate font-bold text-[#fffefa]">{todayRecord?.locationStatus || 'Unknown'}</p></div></div>
-            {isCurrentMonth && <Button ref={punchButtonRef} variant="gold" className="w-full" onClick={() => setIsPunchOpen(true)} disabled={Boolean(todayError) || todayState === 'LEAVE'}><Clock size={17} /> {punchActionLabel}</Button>}
+        <Card className="overflow-hidden border-[#163d59] bg-[#062F40] text-white shadow-[0_14px_32px_rgba(6,47,64,0.18)] ring-1 ring-[#C7D0D4]/20 before:opacity-0 lg:col-span-1">
+          <CardHeader className="border-b border-[#C7D0D4]/20 bg-[#062F40] p-4 pb-3 sm:p-5 sm:pb-3">
+            <CardTitle className="text-lg font-bold text-white">Today's attendance</CardTitle>
+            <p className="text-sm text-[#D7E3E5]">Your current attendance status</p>
+          </CardHeader>
+
+          <CardContent className="space-y-4 p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <StatusBadge
+                status={todayError ? 'danger' : todayState === 'IN_PROGRESS' ? 'warning' : todayState === 'COMPLETED' ? 'success' : todayState === 'LEAVE' ? 'info' : 'neutral'}
+                className="rounded-full border border-[#C7D0D4]/40 bg-[#0B3C53] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#F4F7F8] shadow-none"
+              >
+                {statusLabel}
+              </StatusBadge>
+
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[#C39A42]/35 bg-[#0B3C53] text-[#C39A42]">
+                <MapPin size={15} />
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-[10px]">
+              <div className="flex min-h-[96px] flex-col justify-between rounded-[14px] border border-[#C7D0D4] bg-[#F3F6F7] p-3.5 shadow-[0_1px_0_rgba(18,59,74,0.03)]">
+                <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-[#8A9AA1]">Check in</p>
+                <p className="text-[1.05rem] font-bold leading-none text-[#062F40]">{formatTime(todayRecord?.punchInTime)}</p>
+              </div>
+
+              <div className="flex min-h-[96px] flex-col justify-between rounded-[14px] border border-[#C7D0D4] bg-[#F3F6F7] p-3.5 shadow-[0_1px_0_rgba(18,59,74,0.03)]">
+                <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-[#8A9AA1]">Check out</p>
+                <p className="text-[1.05rem] font-bold leading-none text-[#062F40]">{formatTime(todayRecord?.punchOutTime)}</p>
+              </div>
+
+              <div className="flex min-h-[96px] flex-col justify-between rounded-[14px] border border-[#C7D0D4] bg-[#F3F6F7] p-3.5 shadow-[0_1px_0_rgba(18,59,74,0.03)]">
+                <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-[#8A9AA1]">Total hours</p>
+                <p className="text-[1.05rem] font-bold leading-none text-[#062F40]">{todayRecord?.totalHours ? `${Number(todayRecord.totalHours).toFixed(2)}` : '0.00'}</p>
+              </div>
+
+              <div className="flex min-h-[96px] flex-col justify-between rounded-[14px] border border-[#C7D0D4] bg-[#F3F6F7] p-3.5 shadow-[0_1px_0_rgba(18,59,74,0.03)]">
+                <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-[#8A9AA1]">Location</p>
+                <p className="text-[1.05rem] font-bold leading-none text-[#062F40]">{todayRecord?.locationStatus || 'Unknown'}</p>
+              </div>
+            </div>
+
+            {isCurrentMonth && (
+              <>
+                {todayState === 'NOT_CHECKED_IN' ? (
+                  <Button
+                    variant="gold"
+                    size="lg"
+                    className="h-11 w-full rounded-[12px] text-[14px] font-semibold shadow-[0_6px_18px_rgba(195,154,66,0.18)] hover:bg-[#B38A3A]"
+                    onClick={handlePunchIn}
+                    disabled={Boolean(todayError) || isSubmitting || isGeoLoading}
+                  >
+                    <Clock size={16} />
+                    {isSubmitting ? 'Processing...' : 'Check In'}
+                  </Button>
+                ) : todayState === 'IN_PROGRESS' ? (
+                  <Button
+                    variant="gold"
+                    size="lg"
+                    className="h-11 w-full rounded-[12px] text-[14px] font-semibold shadow-[0_6px_18px_rgba(195,154,66,0.18)] hover:bg-[#B38A3A]"
+                    onClick={handlePunchOut}
+                    disabled={isSubmitting || isGeoLoading}
+                  >
+                    <Clock size={16} />
+                    {isSubmitting ? 'Processing...' : 'Check Out'}
+                  </Button>
+                ) : todayState === 'COMPLETED' ? (
+                  <div className="rounded-[12px] border border-[#C7D0D4]/40 bg-[#0B3C53] px-3 py-2.5 text-sm font-medium text-[#F4F7F8]">
+                    Completed for today
+                  </div>
+                ) : todayState === 'LEAVE' ? (
+                  <div className="rounded-[12px] border border-[#C7D0D4]/40 bg-[#0B3C53] px-3 py-2.5 text-sm font-medium text-[#F4F7F8]">
+                    Leave day
+                  </div>
+                ) : null}
+              </>
+            )}
+
+            {actionError && <p className="text-xs text-[#f2b3ab]">{actionError}</p>}
             {todayError && <p className="text-xs text-[#f2b3ab]">Today's status is unavailable.</p>}
           </CardContent>
         </Card>
 
-        <div className="grid gap-3 sm:grid-cols-3 lg:col-span-2"><StatCard label="Current status" value={todayState} /><StatCard label="Check-in" value={todayRecord?.punchInTime ? new Date(todayRecord.punchInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'} /><StatCard label="Total hours" value={todayRecord?.totalHours ?? '0.00'} detail="Backend reported value" /></div>
+        <div className="grid w-full min-w-0 gap-3 sm:grid-cols-3 lg:col-span-2"><StatCard label="Current status" value={todayState} /><StatCard label="Check-in" value={todayRecord?.punchInTime ? new Date(todayRecord.punchInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'} /><StatCard label="Total hours" value={todayRecord?.totalHours ?? '0.00'} detail="Backend reported value" /></div>
       </div>
 
       <Card className="overflow-hidden">
@@ -168,15 +310,6 @@ const Attendance = () => {
         </CardContent>
       </Card>
 
-      <PunchInOutModal
-        isOpen={isCurrentMonth && isPunchOpen}
-        onClose={() => setIsPunchOpen(false)}
-        anchorRef={punchButtonRef}
-        todayRecord={todayRecord}
-        onPunchIn={punchIn}
-        onPunchOut={punchOut}
-        onSuccess={refresh}
-      />
     </div>
   );
 };

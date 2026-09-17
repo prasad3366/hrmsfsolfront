@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Input, Button } from '../ui/components';
@@ -15,6 +15,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   const { login, user } = useAuth();
   const navigate = useNavigate();
@@ -49,6 +50,18 @@ const Login = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const togglePasswordVisibility = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setShowPassword((visible) => !visible);
+
+    requestAnimationFrame(() => {
+      passwordInputRef.current?.focus();
+      const end = passwordInputRef.current?.value.length ?? 0;
+      passwordInputRef.current?.setSelectionRange(end, end);
+    });
   };
 
   const BRAND_PURPLE = '#5D2B90';
@@ -150,18 +163,20 @@ const Login = () => {
                   </label>
                   <div className="relative">
                     <Input
+                      ref={passwordInputRef}
                       id="login-password"
                       type={showPassword ? 'text' : 'password'}
                       placeholder="••••••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="h-10 pl-3 pr-8 rounded-xl bg-slate-50 border-slate-200 text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                      className="h-10 pl-3 pr-12 rounded-xl bg-slate-50 border-slate-200 text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
                     />
                     <button
                       type="button"
-                      onClick={() => setShowPassword((visible) => !visible)}
-                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-1"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={togglePasswordVisibility}
+                      className="absolute right-2.5 top-1/2 z-10 -translate-y-1/2 cursor-pointer rounded-md p-1.5 text-slate-400 transition-colors hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500/20 pointer-events-auto"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
@@ -213,7 +228,7 @@ const Login = () => {
               </form>
             </div>
 
-            <div className="hidden md:block w-[250px] lg:w-[300px] relative z-30 flex-shrink-0 p-0 md:-ml-24">
+            <div className="hidden md:block w-[250px] lg:w-[300px] relative z-0 flex-shrink-0 p-0 md:-ml-24 pointer-events-none">
               <img
                 src={LOGIN_CHAR_IMG}
                 alt="3D Character"
