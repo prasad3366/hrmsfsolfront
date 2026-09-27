@@ -10,7 +10,7 @@ const Layout = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   return (
-    <div className="shell-app relative min-h-screen font-sans text-slate-900">
+    <div className="shell-app relative min-h-screen bg-[#f5f8f8] font-sans text-slate-900">
       <OceanAtmosphere />
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} collapsed={isSidebarCollapsed} onCollapsedChange={setIsSidebarCollapsed} />
       <div className={`relative z-[1] flex min-h-screen min-w-0 flex-col transition-[margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>

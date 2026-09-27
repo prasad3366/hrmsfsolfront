@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { EMPLOYEE_DIRECTORY_ROLES } from '../../App';
+import { EMPLOYEE_DIRECTORY_ROLES, EMPLOYEE_360_ROLES, EMPLOYEE_PROFILE_ROUTE_ROLES, canOpenEmployee360, isEmployeeDirectoryReadOnly } from '../../App';
 import { mapEmployee } from './EmployeeList';
+import { canAccessEmployeeProfile } from './EmployeeProfile';
 
 describe('employee directory integration', () => {
-  it('allows EMPLOYEE to reach the directory route', () => {
+  it('allows EMPLOYEE to reach the directory route while keeping organization-wide Employee 360 restricted', () => {
     expect(EMPLOYEE_DIRECTORY_ROLES).toContain('EMPLOYEE');
+    expect(isEmployeeDirectoryReadOnly('EMPLOYEE')).toBe(true);
+    expect(EMPLOYEE_PROFILE_ROUTE_ROLES).toContain('EMPLOYEE');
+    expect(canOpenEmployee360('EMPLOYEE')).toBe(false);
+    expect(canOpenEmployee360('HR')).toBe(true);
+    expect(EMPLOYEE_360_ROLES).toContain('HR');
+  });
+
+  it('allows EMPLOYEE to view only their own profile', () => {
+    expect(canAccessEmployeeProfile('EMPLOYEE', '42', 42)).toBe(true);
+    expect(canAccessEmployeeProfile('EMPLOYEE', '43', 42)).toBe(false);
+    expect(canAccessEmployeeProfile('EMPLOYEE', undefined, 42)).toBe(false);
   });
 
   it('maps every backend directory record without exposing private fields', () => {

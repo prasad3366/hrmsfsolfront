@@ -97,8 +97,7 @@ const LeaveManagement = () => {
     return 'Unknown';
   };
 
-  const currentYear = new Date().getFullYear();
-  const financialYearStart = new Date().getMonth() >= 3 ? currentYear : currentYear - 1;
+  const currentBalanceYear = new Date().getFullYear();
   const managerLeaveLimit = 10;
   const [managerLeavePage, setManagerLeavePage] = useState(1);
   const [managerLeavePagination, setManagerLeavePagination] = useState({
@@ -112,11 +111,14 @@ const LeaveManagement = () => {
   const canApproveLeave = canManageLeave;
   const hasEmployeeProfile = Number.isInteger(Number(user?.employeeId)) && Number(user?.employeeId) > 0;
 
+  const combinedMonthlyLeave = myLeaveBalance.find((balance) => ['Casual Leave', 'Sick Leave'].includes(balance.leaveType));
+  const visibleLeaveBalances = myLeaveBalance.filter((balance) => !['Casual Leave', 'Sick Leave'].includes(balance.leaveType));
+
   // Initial data load
   useEffect(() => {
     if (hasEmployeeProfile) {
       fetchMyLeaveHistory();
-      fetchMyLeaveBalance(financialYearStart);
+      fetchMyLeaveBalance(currentBalanceYear);
     }
     fetchLeaveTypes();
     if (canManageLeave) {
@@ -124,7 +126,7 @@ const LeaveManagement = () => {
         .then((response) => setManagerLeavePagination(response.pagination))
         .catch(() => undefined);
     }
-  }, [canManageLeave, fetchMyLeaveHistory, fetchMyLeaveBalance, fetchLeaveTypes, fetchManagerLeaveHistory, financialYearStart, managerLeavePage, hasEmployeeProfile]);
+  }, [canManageLeave, fetchMyLeaveHistory, fetchMyLeaveBalance, fetchLeaveTypes, fetchManagerLeaveHistory, currentBalanceYear, managerLeavePage, hasEmployeeProfile]);
 
   // Show notifications
   useEffect(() => {
@@ -138,8 +140,7 @@ const LeaveManagement = () => {
     try {
       await applyLeave(dto);
       setIsApplyModalOpen(false);
-      // Refresh leave balance after applying for leave
-      fetchMyLeaveBalance(financialYearStart);
+      fetchMyLeaveBalance(currentBalanceYear);
     } catch (err) {
       console.error('Failed to apply leave:', err);
     }
@@ -149,11 +150,9 @@ const LeaveManagement = () => {
     try {
       await approveLeave(leaveId);
       setApproveRejectModal({ ...approveRejectModal, isOpen: false });
-      // Refresh the current Manager/HR table page
       const response = await fetchManagerLeaveHistory(managerLeavePage, managerLeaveLimit);
       setManagerLeavePagination(response.pagination);
-      // Refresh leave balance in case it affects the current user's balance
-      fetchMyLeaveBalance(financialYearStart);
+      fetchMyLeaveBalance(currentBalanceYear);
     } catch (err) {
       console.error('Failed to approve leave:', err);
     }
@@ -163,11 +162,9 @@ const LeaveManagement = () => {
     try {
       await rejectLeave(leaveId, remarks);
       setApproveRejectModal({ ...approveRejectModal, isOpen: false });
-      // Refresh the current Manager/HR table page
       const response = await fetchManagerLeaveHistory(managerLeavePage, managerLeaveLimit);
       setManagerLeavePagination(response.pagination);
-      // Refresh leave balance in case it affects the current user's balance
-      fetchMyLeaveBalance(financialYearStart);
+      fetchMyLeaveBalance(currentBalanceYear);
     } catch (err) {
       console.error('Failed to reject leave:', err);
     }
@@ -177,7 +174,7 @@ const LeaveManagement = () => {
     try {
       await cancelLeave(leaveId);
       await fetchMyLeaveHistory();
-      await fetchMyLeaveBalance(financialYearStart);
+      await fetchMyLeaveBalance(currentBalanceYear);
     } catch (err) {
       console.error('Failed to cancel leave:', err);
     }
@@ -265,24 +262,34 @@ const LeaveManagement = () => {
       )}
 
       <PageHeader title="Leave" description="Track balances, submit requests, and review leave activity." actions={<div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"><Button variant="gold" className="gap-2" onClick={() => setIsApplyModalOpen(true)}><Plus size={16} /> Apply leave</Button>
-          {['SUPER_ADMIN', 'CEO', 'HR', 'EMPLOYEE'].includes(user?.role ?? '') && (
-            <Button variant="secondary" className="gap-2" onClick={() => setIsCarryForwardModalOpen(true)}><Gift size={16} /> Carry forward</Button>
-          )}
         </div>} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {myLeaveBalance.length > 0 ? (
-          myLeaveBalance.map((balance, idx) => (
-            <LeaveBalanceCard
-              key={balance.id}
-              allocated={balance.allocated}
-              carryForward={balance.carryForward}
-              used={balance.used}
-              remaining={balance.remaining}
-              color={['blue', 'rose', 'purple', 'orange'][idx % 4]}
-              type={balance.leaveType}
-            />
-          ))
+          <>
+            {combinedMonthlyLeave ? (
+              <LeaveBalanceCard
+                key="combined-casual-sick"
+                allocated={combinedMonthlyLeave.allocated}
+                carryForward={combinedMonthlyLeave.carryForward}
+                used={combinedMonthlyLeave.used}
+                remaining={combinedMonthlyLeave.remaining}
+                color="blue"
+                type="Combined Casual + Sick Leave"
+              />
+            ) : null}
+            {visibleLeaveBalances.map((balance, idx) => (
+              <LeaveBalanceCard
+                key={balance.id}
+                allocated={balance.allocated}
+                carryForward={balance.carryForward}
+                used={balance.used}
+                remaining={balance.remaining}
+                color={['rose', 'purple', 'orange'][idx % 3]}
+                type={balance.leaveType}
+              />
+            ))}
+          </>
         ) : (
           isLoading ? <>{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-44 rounded-2xl" />)}</> : <div className="col-span-full"><EmptyState title="No leave balance available" description="Leave balance information will appear here when it is provided by HR." /></div>
         )}
