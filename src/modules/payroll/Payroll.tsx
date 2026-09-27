@@ -28,17 +28,6 @@ const getMonthlyCTC = (salaryInfo: any): number => {
   return salaryInfo?.monthlyCTC ?? (salaryInfo?.annualCTC ? salaryInfo.annualCTC / 12 : 0);
 };
 
-const calculateSalaryComponents = (monthlyCTC: number, structure: any) => {
-  const basic = monthlyCTC * (structure.basicPercent / 100);
-  return {
-    basic,
-    hra: basic * (structure.hraPercent / 100),
-    conveyance: monthlyCTC * (structure.conveyancePercent / 100),
-    pf: basic * (structure.pfPercent / 100),
-    pt: structure.ptAmount,
-  };
-};
-
 const getSalaryInfo = (employeeSalaries: EmployeeSalary[], employeeDetails: any): any => {
   return employeeSalaries.length > 0 ? employeeSalaries[0] : employeeDetails?.salaries?.[0];
 };
@@ -93,7 +82,7 @@ const buildSalarySummary = (currentPayroll: PayrollType | null, salaryInfo: any,
 const getFormattedSalaryValue = (
   currentPayroll: PayrollType | null,
   salaryInfo: any,
-  computedValue: number,
+  _computedValue: number,
   fallbackKey: string,
   leading = '₹'
 ) => {
@@ -101,10 +90,7 @@ const getFormattedSalaryValue = (
     const value = currentPayroll[fallbackKey]?.toLocaleString() || '0';
     return `${leading}${value}`;
   }
-  if (salaryInfo) {
-    return `${leading}${computedValue.toLocaleString()}`;
-  }
-  return `${leading}0`;
+  return salaryInfo ? 'Not finalized' : `${leading}0`;
 };
 
 const shouldShowManagementButtons = (role: string): boolean => {
@@ -166,6 +152,15 @@ const Payroll = () => {
     }
   };
 
+  const handleFinalizePayroll = async (payrollId: number) => {
+    try {
+      await ApiService.finalizePayroll(payrollId);
+      if (user?.employeeId) await fetchPayroll(user.employeeId);
+    } catch (err) {
+      alert('Failed to finalize payroll: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
   if (error) {
     return (
       <div className="mx-auto flex min-h-[60vh] w-full max-w-7xl items-center justify-center p-6">
@@ -177,27 +172,25 @@ const Payroll = () => {
   const salaryInfo = getSalaryInfo(employeeSalaries, employeeDetails);
 
   // Use employee's salary structure if embedded, otherwise use default
-  const salaryStructure = getSalaryStructure(salaryInfo);
   const monthlyCTC = getMonthlyCTC(salaryInfo);
-  const { basic: computedBasic, pf: computedPf, pt: computedPt } = calculateSalaryComponents(monthlyCTC, salaryStructure);
-  const computedDeductions = computedPf + computedPt;
 
   const digitalSalaryValue = getDigitalSalaryValue(currentPayroll, loadingDetails, salaryInfo);
   const salarySummaryElement = buildSalarySummary(currentPayroll, salaryInfo, loading, loadingDetails);
 
-  const basicPayValue = getFormattedSalaryValue(currentPayroll, salaryInfo, computedBasic, 'basic');
+  const basicPayValue = getFormattedSalaryValue(currentPayroll, salaryInfo, 0, 'basic');
   const grossSalaryValue = getFormattedSalaryValue(currentPayroll, salaryInfo, monthlyCTC, 'grossSalary');
-  const deductionsValue = getFormattedSalaryValue(currentPayroll, salaryInfo, computedDeductions, 'deductions', '-₹');
+  const deductionsValue = getFormattedSalaryValue(currentPayroll, salaryInfo, 0, 'deductions', '-₹');
   const currency = (value?: number | null) => `₹${value !== undefined && value !== null ? value.toLocaleString() : '0'}`;
   const payrollColumns: DataTableColumn<PayrollType>[] = [
     { key: 'period', header: 'Period', render: (payroll) => <span className="font-bold text-[#12354a]">{payroll.month}/{payroll.year}</span> },
     { key: 'workingDays', header: 'Working days', render: (payroll) => payroll.workingDays },
     { key: 'presentDays', header: 'Present', render: (payroll) => payroll.presentDays },
     { key: 'lopDays', header: 'LOP days', render: (payroll) => payroll.lopDays },
+    { key: 'status', header: 'Status', render: (payroll) => <span className="rounded-full border px-2 py-1 text-xs font-semibold">{payroll.status}</span> },
     { key: 'grossSalary', header: 'Gross', render: (payroll) => <span className="font-semibold text-[#19704b]">{currency(payroll.grossSalary)}</span> },
     { key: 'deductions', header: 'Deductions', render: (payroll) => <span className="font-semibold text-[#a63e35]">-{currency(payroll.deductions)}</span> },
     { key: 'netSalary', header: 'Net salary', render: (payroll) => <span className="text-base font-bold text-[#073b5c]">{currency(payroll.netSalary)}</span> },
-    { key: 'actions', header: 'Actions', className: 'text-right', render: (payroll) => <div className="flex justify-end gap-1"><Button size="xs" variant="ghost" onClick={() => handleAddAdjustment(payroll)}>+ Adjust</Button><Button size="xs" variant="ghost" aria-label="Download payslip" title="Download payslip" onClick={() => handleDownloadPayslip(payroll.id)}><Download size={14} /></Button></div> },
+    { key: 'actions', header: 'Actions', className: 'text-right', render: (payroll) => <div className="flex justify-end gap-1"><Button size="xs" variant="ghost" onClick={() => handleAddAdjustment(payroll)} disabled={payroll.status !== 'DRAFT'}>+ Adjust</Button>{shouldShowManagementButtons(user?.role) && payroll.status === 'DRAFT' && <Button size="xs" variant="ghost" onClick={() => handleFinalizePayroll(payroll.id)}>Finalize</Button>}<Button size="xs" variant="ghost" aria-label="Download payslip" title={payroll.status === 'DRAFT' ? 'Finalize payroll before downloading' : 'Download payslip'} onClick={() => handleDownloadPayslip(payroll.id)} disabled={payroll.status === 'DRAFT'}><Download size={14} /></Button></div> },
   ];
 
   return (

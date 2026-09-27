@@ -29,6 +29,11 @@ import { REPORTS_ROLES } from './modules/reports/reports-roles';
 import { Construction } from 'lucide-react';
 
 export const EMPLOYEE_DIRECTORY_ROLES = ['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE'] as const;
+export const EMPLOYEE_360_ROLES = ['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER'] as const;
+export const EMPLOYEE_PROFILE_ROUTE_ROLES = [...EMPLOYEE_360_ROLES, 'EMPLOYEE'] as const;
+
+export const canOpenEmployee360 = (role?: string | null) => !!role && EMPLOYEE_360_ROLES.includes(role as typeof EMPLOYEE_360_ROLES[number]);
+export const isEmployeeDirectoryReadOnly = (role?: string | null) => role === 'EMPLOYEE';
 
 // Route-level UI gating only. The backend remains the only authority for API authorization.
 const ProtectedRoute = ({ children, allowedRoles }: { children?: React.ReactNode, allowedRoles?: readonly string[] }) => {
@@ -76,7 +81,7 @@ const AppRoutes = () => {
         } />
 
         <Route path="employees/:id" element={
-          <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE']}>
+          <ProtectedRoute allowedRoles={EMPLOYEE_PROFILE_ROUTE_ROLES}>
             <EmployeeProfile />
           </ProtectedRoute>
         } />

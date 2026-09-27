@@ -22,14 +22,12 @@
 }
 
 html {
-  background: var(--pearl-100);
+  background: #f5f8f8;
 }
 
 body {
   min-width: 320px;
-  background:
-    radial-gradient(circle at 92% -10%, rgba(195, 162, 90, 0.12), transparent 32rem),
-    linear-gradient(135deg, rgba(13, 82, 107, 0.035), transparent 45%);
+  background: linear-gradient(180deg, #f5f8f8 0%, #f7faf9 100%);
   color: var(--ink-900);
   font-family: 'Manrope', 'DM Sans', sans-serif;
   text-rendering: optimizeLegibility;
@@ -138,15 +136,13 @@ body {
 }
 
 .shell-app {
-  background: var(--pearl-100);
+  background: #f5f8f8;
   isolation: isolate;
 }
 
 .shell-main {
-  background:
-    radial-gradient(circle at 100% 0%, rgba(195, 162, 90, 0.07), transparent 24rem),
-    linear-gradient(180deg, rgba(234, 243, 247, 0.72), rgba(246, 250, 249, 0.98) 22rem);
-  animation: shell-content-enter 320ms var(--ease-premium) both;
+  background: linear-gradient(180deg, #f8faf9 0%, #f5f8f8 100%);
+  animation: shell-content-enter 220ms ease-out both;
   min-height: calc(100vh - 4rem);
 }
 

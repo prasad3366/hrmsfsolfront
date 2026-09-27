@@ -50,10 +50,10 @@ export const getAttendanceLocationLabel = (
   punchInLocation?: AttendanceLocation | null,
   punchOutLocation?: AttendanceLocation | null,
 ): string => {
-  const hasAnyRecordedLocation = punchInLocation !== null && punchInLocation !== undefined
-    || punchOutLocation !== null && punchOutLocation !== undefined;
+  const hasPunchInLocation = punchInLocation !== null && punchInLocation !== undefined;
+  const hasPunchOutLocation = punchOutLocation !== null && punchOutLocation !== undefined;
 
-  if (!hasAnyRecordedLocation) return '—';
+  if (!hasPunchInLocation || !hasPunchOutLocation) return 'Unknown';
   if (punchInLocation === 'OFFICE' && punchOutLocation === 'OFFICE') return 'In Office';
   if (punchInLocation === 'OFFICE' && punchOutLocation === 'OUTSIDE') return 'Checked Out Outside Office';
   if (punchInLocation === 'OUTSIDE' && punchOutLocation === 'OFFICE') return 'Checked In Outside Office';

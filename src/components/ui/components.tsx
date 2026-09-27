@@ -16,12 +16,12 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', ...props }, ref) => {
     const variants = {
-      primary: 'border border-[#0d526b] bg-[#0d526b] text-white shadow-[0_6px_16px_rgba(7,59,92,0.18)] hover:-translate-y-px hover:bg-[#073b5c] hover:shadow-[0_10px_24px_rgba(7,59,92,0.24)] active:scale-[0.98]',
-      secondary: 'border border-[#d5e1e3] bg-[#f6faf9] text-[#12354a] shadow-sm hover:-translate-y-px hover:border-[#b8ccd0] hover:bg-white active:scale-[0.98]',
-      outline: 'border border-[#cbd9dc] bg-white/75 text-[#23465b] shadow-[0_3px_10px_rgba(7,59,92,0.04)] hover:-translate-y-px hover:border-[#b08a3e] hover:bg-[#fffdf8] hover:shadow-[0_7px_16px_rgba(7,59,92,0.1)]',
+      primary: 'border border-[#0d526b] bg-[#0d526b] text-white shadow-sm hover:bg-[#073b5c] active:scale-[0.99]',
+      secondary: 'border border-[#d9e4e6] bg-[#f6faf9] text-[#12354a] hover:border-[#b6c9cc] hover:bg-white',
+      outline: 'border border-[#ccd9dc] bg-white text-[#23465b] hover:border-[#b08a3e] hover:bg-[#fffdf8]',
       ghost: 'text-[#486271] hover:bg-[#edf3f5] hover:text-[#073b5c]',
-      danger: 'border border-[#f3c9c3] bg-[#fff5f3] text-[#a63e35] hover:bg-[#ffe9e5]',
-      gold: 'border border-[#c3a25a] bg-[#b08a3e] text-white shadow-[0_6px_18px_rgba(176,138,62,0.24)] hover:-translate-y-px hover:bg-[#98752f] hover:shadow-[0_10px_24px_rgba(176,138,62,0.3)] active:scale-[0.98]',
+      danger: 'border border-[#f3c9c3] bg-[#fff7f5] text-[#a63e35] hover:bg-[#ffecea]',
+      gold: 'border border-[#c3a25a] bg-[#b08a3e] text-white shadow-sm hover:bg-[#98752f] active:scale-[0.99]',
     };
     const sizes = {
       xs: 'h-7 px-2 text-xs rounded-md',
@@ -57,8 +57,8 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export const Card = ({ className, children, hoverEffect = false, ...props }: CardProps) => (
   <div className={cn(
-    "relative rounded-xl border border-[#d5e1e3] bg-white/92 text-[#12354a] shadow-[0_10px_28px_rgba(7,59,92,0.07)] before:pointer-events-none before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-[#c3a25a]/35",
-    hoverEffect && "transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#c5d6d9] hover:shadow-[0_20px_44px_rgba(7,59,92,0.14)]",
+    "relative rounded-xl border border-[#dfe8ea] bg-[#fffdfb] text-[#12354a] shadow-[0_8px_20px_rgba(7,59,92,0.05)]",
+    hoverEffect && "transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[#c9d9dc] hover:shadow-[0_12px_28px_rgba(7,59,92,0.08)]",
     className
   )} {...props}>
     {children}
@@ -101,7 +101,7 @@ export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTML
       <input
         type={type}
         className={cn(
-          "flex h-10 w-full rounded-xl border border-[#cbd9dc] bg-white/80 px-3 py-2 text-sm text-[#12354a] shadow-[inset_0_1px_2px_rgba(7,59,92,0.03)] file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-[#8aa0aa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e]/30 focus-visible:border-[#b08a3e] disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200",
+          "flex h-10 w-full rounded-xl border border-[#cedfe2] bg-[#fffdfb] px-3 py-2 text-sm text-[#12354a] file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-[#8aa0aa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e]/25 focus-visible:border-[#b08a3e] disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200",
           className
         )}
         ref={ref}
@@ -114,7 +114,7 @@ Input.displayName = 'Input';
 
 export const Select = forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
   ({ className, children, ...props }, ref) => (
-    <select ref={ref} className={cn('flex h-10 w-full rounded-xl border border-[#cbd9dc] bg-white/90 px-3 py-2 text-sm text-[#12354a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e]/30 focus-visible:border-[#b08a3e] disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200', className)} {...props}>
+    <select ref={ref} className={cn('flex h-10 w-full rounded-xl border border-[#cedfe2] bg-[#fffdfb] px-3 py-2 text-sm text-[#12354a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e]/25 focus-visible:border-[#b08a3e] disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200', className)} {...props}>
       {children}
     </select>
   )
@@ -144,19 +144,19 @@ export const Avatar = ({ src, name, size = 'md', className }: { src?: string; na
 
 // --- Table (Simple) ---
 export const Table = ({ children, className, ...props }: React.TableHTMLAttributes<HTMLTableElement>) => (
-  <div className="w-full overflow-x-auto rounded-xl border border-[#dce6e8] bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+  <div className="w-full overflow-x-auto rounded-xl border border-[#dfe8ea] bg-[#fffdfb]">
     <table className={cn("w-full text-sm text-left", className)} {...props}>{children}</table>
   </div>
 );
 
 export const TableHeader = ({ children, className, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) => (
-  <thead className={cn("bg-[#f3f7f7] text-[#617984] font-medium border-b border-[#dce6e8]", className)} {...props}>
+  <thead className={cn("bg-[#f4f7f8] text-[#617984] font-medium border-b border-[#e3ebed]", className)} {...props}>
     {children}
   </thead>
 );
 
 export const TableRow = ({ children, className, ...props }: React.HTMLAttributes<HTMLTableRowElement>) => (
-  <tr className={cn("border-b border-[#edf3f5] last:border-0 hover:bg-[#f5f9f9] transition-colors duration-200 group", className)} {...props}>
+  <tr className={cn("border-b border-[#edf2f3] last:border-0 hover:bg-[#f6faf9] transition-colors duration-200 group", className)} {...props}>
     {children}
   </tr>
 );
@@ -174,10 +174,10 @@ export const TableCell = ({ children, className, ...props }: React.TdHTMLAttribu
 );
 
 export interface DataTableColumn<T> { key: string; header: React.ReactNode; render?: (row: T) => React.ReactNode; className?: string; }
-export const DataTable = <T,>({ columns, data, getRowKey, emptyState = 'No records found.', className, onRowClick }: { columns: DataTableColumn<T>[]; data: T[]; getRowKey?: (row: T, index: number) => React.Key; emptyState?: React.ReactNode; className?: string; onRowClick?: (row: T) => void }) => (
+export const DataTable = <T,>({ columns, data, getRowKey, emptyState = 'No records found.', className, rowClassName, onRowClick }: { columns: DataTableColumn<T>[]; data: T[]; getRowKey?: (row: T, index: number) => React.Key; emptyState?: React.ReactNode; className?: string; rowClassName?: string; onRowClick?: (row: T) => void }) => (
   <Table className={className}>
     <TableHeader><TableRow>{columns.map((column) => <TableHead key={column.key} className={column.className}>{column.header}</TableHead>)}</TableRow></TableHeader>
-    <tbody>{data.length === 0 ? <tr><td colSpan={columns.length} className="px-4 py-12 text-center text-sm text-[#78909a]">{emptyState}</td></tr> : data.map((row, index) => <TableRow key={getRowKey?.(row, index) ?? index} className={onRowClick ? 'cursor-pointer' : undefined} onClick={onRowClick ? () => onRowClick(row) : undefined}>{columns.map((column) => <TableCell key={column.key} className={column.className}>{column.render ? column.render(row) : String((row as Record<string, unknown>)[column.key] ?? '')}</TableCell>)}</TableRow>)}</tbody>
+    <tbody>{data.length === 0 ? <tr><td colSpan={columns.length} className="px-4 py-12 text-center text-sm text-[#78909a]">{emptyState}</td></tr> : data.map((row, index) => <TableRow key={getRowKey?.(row, index) ?? index} className={cn(rowClassName ?? (onRowClick ? 'cursor-pointer' : undefined))} onClick={onRowClick ? () => onRowClick(row) : undefined}>{columns.map((column) => <TableCell key={column.key} className={column.className}>{column.render ? column.render(row) : String((row as Record<string, unknown>)[column.key] ?? '')}</TableCell>)}</TableRow>)}</tbody>
   </Table>
 );
 
@@ -233,7 +233,7 @@ export const Dialog = ({ open, onOpenChange, children }: DialogProps) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/35">
       <button
         type="button"
         aria-label="Close dialog"
@@ -257,7 +257,7 @@ export const Dialog = ({ open, onOpenChange, children }: DialogProps) => {
 
 export const Modal = ({ open, onOpenChange, title, children, className }: DialogProps & { title?: React.ReactNode; className?: string }) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
-    <div className={cn('max-h-[calc(100vh-2rem)] w-[min(100%-2rem,40rem)] overflow-y-auto rounded-2xl border border-white/70 bg-[#fffefa] p-6 shadow-[0_24px_80px_rgba(2,35,55,0.24)]', className)}>
+    <div className={cn('max-h-[calc(100vh-2rem)] w-[min(100%-2rem,40rem)] overflow-y-auto rounded-2xl border border-[#e7eef0] bg-[#fffdfb] p-5 shadow-[0_18px_48px_rgba(2,35,55,0.14)]', className)}>
       {title && <div className="mb-5 flex items-center justify-between gap-4 border-b border-[#e4ecec] pb-4"><h2 className="text-lg font-bold text-[#073b5c]">{title}</h2><button type="button" onClick={() => onOpenChange(false)} aria-label="Close dialog" className="rounded-lg p-1.5 text-[#78909a] transition-colors hover:bg-[#edf3f5] hover:text-[#12354a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e]"><X size={18} /></button></div>}
       {children}
     </div>

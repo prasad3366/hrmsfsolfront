@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Bell, Menu, Search } from 'lucide-react';
+import { Bell, Menu } from 'lucide-react';
 import { Avatar } from '../ui/components';
 import { useNotifications } from '../../context/NotificationContext';
 import { NotificationPanel } from './NotificationPanel';
@@ -21,8 +21,8 @@ const Topbar = ({ onMenuClick }: TopbarProps) => {
   const formattedTitle = pageTitle.replaceAll('-', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
   return (
-    <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between border-b border-[#dce6e8]/80 bg-[#fffefa]/95 px-4 shadow-[0_4px_20px_rgba(7,59,92,0.06)] backdrop-blur-xl sm:px-6">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+    <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between border-b border-[#dfe9eb] bg-[#fffdfb] px-4 shadow-[0_4px_14px_rgba(7,59,92,0.04)] sm:px-6">
+      <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
           onClick={onMenuClick}
@@ -34,10 +34,6 @@ const Topbar = ({ onMenuClick }: TopbarProps) => {
         <div className="hidden min-w-0 sm:block">
           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#8aa0aa]">Workspace</p>
           <h1 className="truncate text-base font-bold text-[#073b5c]">{formattedTitle}</h1>
-        </div>
-        <div className="relative ml-2 hidden w-full max-w-xs md:block">
-          <Search aria-hidden="true" size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#78909a]" />
-          <input type="search" placeholder="Search anything..." aria-label="Search anything" className="h-10 w-full rounded-xl border border-[#dce6e8] bg-[#f6faf9] pl-10 pr-4 text-sm text-[#12354a] transition-all duration-200 placeholder:text-[#8aa0aa] focus:border-[#b08a3e] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#b08a3e]/20" />
         </div>
       </div>
 

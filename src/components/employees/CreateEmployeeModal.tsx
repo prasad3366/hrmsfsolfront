@@ -48,6 +48,77 @@ const normalizeDto = (data?: Partial<CreateEmployeeDto>): CreateEmployeeDto => (
   isExperienced: data?.isExperienced ?? false,
 });
 
+const CREATE_ROLES = ['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER', 'EMPLOYEE'] as const;
+const CREATE_EMPLOYMENT_TYPES = ['FULL_TIME', 'PART_TIME', 'INTERN'] as const;
+const CREATE_STATUSES = ['ACTIVE', 'INACTIVE'] as const;
+const CREATE_MARITAL_STATUSES = ['MARRIED', 'UNMARRIED'] as const;
+const CREATE_GENDERS = ['MALE', 'FEMALE', 'OTHER'] as const;
+
+const normalizeDateOnly = (value?: string): string | undefined => {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  const dayFirstMatch = /^(\d{2})-(\d{2})-(\d{4})$/.exec(trimmed);
+  if (dayFirstMatch) return `${dayFirstMatch[3]}-${dayFirstMatch[2]}-${dayFirstMatch[1]}`;
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  throw new Error(`Invalid date format: ${value}`);
+};
+
+const omitBlank = (value?: string): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const optionalNumber = (value: number | string | undefined): number | undefined => {
+  if (value === '' || value == null) return undefined;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`Invalid numeric value: ${value}`);
+  return parsed;
+};
+
+const assertEnum = <T extends string>(value: string | undefined, allowed: readonly T[], field: string): T | undefined => {
+  if (value === undefined) return undefined;
+  if (!allowed.includes(value as T)) throw new Error(`Invalid ${field}`);
+  return value as T;
+};
+
+export const mapCreateEmployeePayload = (data: CreateEmployeeDto): CreateEmployeeDto => {
+  const payload: CreateEmployeeDto = {
+    email: data.email.trim(),
+    firstName: data.firstName.trim(),
+    lastName: data.lastName.trim(),
+    empCode: data.empCode.trim(),
+    department: data.department.trim(),
+    designation: data.designation.trim(),
+    role: assertEnum(data.role, CREATE_ROLES, 'role')!,
+    employmentType: assertEnum(data.employmentType, CREATE_EMPLOYMENT_TYPES, 'employmentType'),
+    status: assertEnum(data.status, CREATE_STATUSES, 'status'),
+    dateOfJoining: normalizeDateOnly(data.dateOfJoining),
+    currentExperience: optionalNumber(data.currentExperience),
+    age: optionalNumber(data.age),
+    dateOfBirth: normalizeDateOnly(data.dateOfBirth),
+    dateOfExit: normalizeDateOnly(data.dateOfExit),
+    gender: assertEnum(data.gender, CREATE_GENDERS, 'gender'),
+    maritalStatus: assertEnum(data.maritalStatus, CREATE_MARITAL_STATUSES, 'maritalStatus'),
+    isExperienced: data.isExperienced,
+  };
+  const optionalTextFields: Array<keyof CreateEmployeeDto> = [
+    'sourceOfHire', 'reportingManager', 'currentAddress', 'permanentAddress', 'pincode', 'city',
+    'phone', 'personalMobile', 'panNumber', 'aadharNumber', 'pfNumber', 'uanNumber',
+    'bankAccountNumber', 'bankName', 'ifscCode',
+  ];
+  for (const field of optionalTextFields) {
+    const value = omitBlank(data[field] as string | undefined);
+    if (value !== undefined) (payload as any)[field] = value;
+  }
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined)) as CreateEmployeeDto;
+};
+
+export const getApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
 const validateRequiredFields = (data: CreateEmployeeDto): string | null => {
   if (!data.email || !data.firstName || !data.lastName || !data.empCode || !data.department || !data.designation) {
     return 'Please fill in all required fields';
@@ -171,7 +242,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
       if (!employeeId) throw new Error('Employee ID is required for update');
       return ApiService.updateEmployee(employeeId, normalizeUpdatePayload(formData));
     }
-    return ApiService.createEmployee(formData);
+    return ApiService.createEmployee(mapCreateEmployeePayload(formData));
   };
 
   const getSuccessMessage = (response: any) => {
@@ -180,7 +251,9 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
         (response.credentialsDeactivated ? ' | 🔒 User credentials have been deactivated.' : '');
     }
 
-    return `✓ Employee created successfully! Password: ${response.password}`;
+    return response.password
+      ? `✓ Employee created successfully! Password: ${response.password}`
+      : '✓ Employee created successfully';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -213,7 +286,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
       }, 2000);
     } catch (err) {
       const actionVerb = mode === 'edit' ? 'update' : 'create';
-      setErrorMessage(err instanceof Error ? err.message : `Failed to ${actionVerb} employee`);
+      setErrorMessage(getApiErrorMessage(err, `Failed to ${actionVerb} employee`));
     } finally {
       setIsSubmitting(false);
     }
@@ -466,7 +539,6 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     >
                       <option value="FULL_TIME">Full Time</option>
                       <option value="PART_TIME">Part Time</option>
-                      <option value="CONTRACT">Contract</option>
                       <option value="INTERN">Intern</option>
                     </select>
                   </div>
@@ -484,8 +556,6 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
                     >
                       <option value="ACTIVE">Active</option>
                       <option value="INACTIVE">Inactive</option>
-                      <option value="TERMINATED">Terminated</option>
-                      <option value="ON_LEAVE">On Leave</option>
                     </select>
                   </div>
                 </div>

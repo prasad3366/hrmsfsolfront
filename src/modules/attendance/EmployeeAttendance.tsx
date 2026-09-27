@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, Clock3 } from 'lucide-react';
 import ApiService, { AttendanceRecord, Employee360Leave, MonthlyAttendanceSummary } from '../../services/api';
 import attendanceService from '../../services/attendanceService';
+import { useAuth } from '../../context/AuthContext';
 import { Badge, Button, Card, CardHeader, CardTitle, CardContent, DataTable, EmptyState, ErrorState, PageHeader, SearchBox, Skeleton, StatCard, StatusBadge, type DataTableColumn } from '../../components/ui/components';
 import { attendanceDateKey, formatAttendanceDate } from '../../utils/attendanceDate';
 import { getAttendanceLocationLabel, getRecordAttendanceState } from '../../hooks/useAttendance';
@@ -14,6 +15,8 @@ export const getEmployeeAttendanceLocationLabel = (
 ) => getAttendanceLocationLabel(punchInLocationStatus, punchOutLocationStatus);
 
 const EmployeeAttendance = () => {
+  const { role } = useAuth();
+  const canAddMissedAttendance = ['HR', 'SUPER_ADMIN', 'CEO'].includes(String(role ?? '').toUpperCase());
   const [employees, setEmployees] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
@@ -35,6 +38,18 @@ const EmployeeAttendance = () => {
   const [leaveRecords, setLeaveRecords] = useState<Employee360Leave['recentHistory']>([]);
   const [isLeaveLoading, setIsLeaveLoading] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
+  const [isMissedAttendanceFormOpen, setIsMissedAttendanceFormOpen] = useState(false);
+  const [missedAttendanceForm, setMissedAttendanceForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    clockIn: '09:00',
+    clockOut: '17:00',
+    reason: '',
+  });
+  const [isSubmittingMissedAttendance, setIsSubmittingMissedAttendance] = useState(false);
+  const [missedAttendanceMessage, setMissedAttendanceMessage] = useState<string | null>(null);
+  const [missedAttendanceError, setMissedAttendanceError] = useState<string | null>(null);
+  const [reasonValidationError, setReasonValidationError] = useState<string | null>(null);
+  const [attendanceRefreshNonce, setAttendanceRefreshNonce] = useState(0);
 
   useEffect(() => {
     if (selectedEmployee) {
@@ -147,7 +162,7 @@ const EmployeeAttendance = () => {
     return () => {
       mounted = false;
     };
-  }, [selectedEmployeeId, selectedMonth, attendancePage]);
+  }, [selectedEmployeeId, selectedMonth, attendancePage, attendanceRefreshNonce]);
 
   useEffect(() => {
     if (selectedEmployeeId === undefined || selectedEmployeeId === null) {
@@ -241,6 +256,51 @@ const EmployeeAttendance = () => {
       .replace(/\b\w/g, (letter) => letter.toUpperCase());
   };
 
+  const getClockValueFromRecord = (value?: string | null) => {
+    if (!value) return '';
+    const normalized = value.replace('Z', '');
+    const timePart = normalized.includes('T') ? normalized.split('T')[1] : normalized;
+    return timePart ? timePart.slice(0, 5) : '';
+  };
+
+  const isApprovedLeaveDate = (dateValue: string) => {
+    if (!dateValue) return false;
+
+    return leaveRecords.some((leave) => {
+      const status = String(leave.status ?? '').toUpperCase();
+      if (status !== 'APPROVED') return false;
+
+      const startDate = leave.startDate ? leave.startDate.slice(0, 10) : '';
+      const endDate = leave.endDate ? leave.endDate.slice(0, 10) : '';
+      const selectedDate = dateValue.slice(0, 10);
+
+      return Boolean(startDate && endDate && selectedDate >= startDate && selectedDate <= endDate);
+    });
+  };
+
+  useEffect(() => {
+    if (!isMissedAttendanceFormOpen || !selectedEmployeeId || !missedAttendanceForm.date) return;
+
+    const matchingRecord = attendanceRecords.find((record) => attendanceDateKey(record.date) === missedAttendanceForm.date);
+    if (!matchingRecord) return;
+
+    setMissedAttendanceForm((current) => {
+      const nextClockIn = getClockValueFromRecord(matchingRecord.punchIn ?? current.clockIn);
+      const nextClockOut = getClockValueFromRecord(matchingRecord.punchOut ?? current.clockOut);
+
+      if (current.clockIn === nextClockIn && current.clockOut === nextClockOut && current.date === missedAttendanceForm.date) {
+        return current;
+      }
+
+      return {
+        ...current,
+        date: missedAttendanceForm.date,
+        clockIn: nextClockIn || current.clockIn,
+        clockOut: nextClockOut || current.clockOut,
+      };
+    });
+  }, [attendanceRecords, isMissedAttendanceFormOpen, missedAttendanceForm.date, selectedEmployeeId]);
+
   const filteredRecords = useMemo(() => attendanceRecords
     .filter((record) => {
       const recordMonth = attendanceDateKey(record.date).slice(0, 7);
@@ -253,6 +313,25 @@ const EmployeeAttendance = () => {
       attendanceDateKey(firstRecord.date).localeCompare(attendanceDateKey(secondRecord.date))
     )), [attendanceRecords, selectedMonth, attendanceFilter]);
 
+  const openMissedAttendanceForm = (record?: AttendanceRecord | null, mode: 'attendance' | 'checkout' = 'attendance') => {
+    if (!canAddMissedAttendance) return;
+
+    const selectedDate = record?.date ? attendanceDateKey(record.date) : missedAttendanceForm.date;
+    const nextClockIn = record?.punchIn ? getClockValueFromRecord(record.punchIn) : (mode === 'checkout' ? missedAttendanceForm.clockIn : '09:00');
+    const nextClockOut = record?.punchOut ? getClockValueFromRecord(record.punchOut) : (mode === 'checkout' ? '' : '17:00');
+
+    setMissedAttendanceError(null);
+    setMissedAttendanceMessage(null);
+    setReasonValidationError(null);
+    setMissedAttendanceForm({
+      date: selectedDate,
+      clockIn: nextClockIn || '09:00',
+      clockOut: nextClockOut || (mode === 'checkout' ? '' : '17:00'),
+      reason: '',
+    });
+    setIsMissedAttendanceFormOpen(true);
+  };
+
   const attendanceColumns: DataTableColumn<AttendanceRecord>[] = [
     { key: 'date', header: 'Date', render: (record) => <span className="font-semibold text-[#12354a]">{formatDate(record.date)}</span> },
     { key: 'status', header: 'Status', render: (record) => <StatusBadge status={record.status === 'PRESENT' ? 'success' : record.status === 'ABSENT' ? 'danger' : record.status === 'LEAVE' ? 'info' : record.status === 'IN_PROGRESS' ? 'warning' : 'neutral'}>{record.status}</StatusBadge> },
@@ -260,6 +339,53 @@ const EmployeeAttendance = () => {
     { key: 'punchOut', header: 'Check out', render: (record) => record.punchOut ? new Date(record.punchOut).toLocaleTimeString() : '-' },
     { key: 'totalHours', header: 'Total hours', render: (record) => record.totalHours ?? '-' },
     { key: 'location', header: 'Location', render: (record) => { const label = record.locationLabel || 'Unknown'; const tone = label === 'In Office' ? 'success' : label === 'Out of Office' ? 'danger' : label === 'Unknown' ? 'neutral' : 'warning'; return <StatusBadge status={tone}>{label}</StatusBadge>; } },
+    {
+      key: 'actions',
+      header: 'Actions',
+      className: 'min-w-[180px] whitespace-normal',
+      render: (record) => {
+        if (!canAddMissedAttendance) return null;
+
+        const recordStatus = getRecordAttendanceState(record);
+        if (recordStatus === 'ABSENT') {
+          return (
+            <Button
+              type="button"
+              variant="secondary"
+              size="xs"
+              className="border-[#dfe8ea] bg-[#f6faf9] text-[#12354a] hover:border-[#b08a3e] hover:bg-white"
+              onClick={(event) => {
+                event.stopPropagation();
+                openMissedAttendanceForm(record, 'attendance');
+              }}
+            >
+              <Clock3 size={12} />
+              Add missed attendance
+            </Button>
+          );
+        }
+
+        if (recordStatus === 'IN_PROGRESS') {
+          return (
+            <Button
+              type="button"
+              variant="secondary"
+              size="xs"
+              className="border-[#dfe8ea] bg-[#f6faf9] text-[#12354a] hover:border-[#b08a3e] hover:bg-white"
+              onClick={(event) => {
+                event.stopPropagation();
+                openMissedAttendanceForm(record, 'checkout');
+              }}
+            >
+              <Clock3 size={12} />
+              Add missed checkout
+            </Button>
+          );
+        }
+
+        return null;
+      },
+    },
   ];
 
   const leaveColumns: DataTableColumn<typeof leaveRecords[number]>[] = [
@@ -273,6 +399,67 @@ const EmployeeAttendance = () => {
 
   const toggleAttendanceFilter = (filter: Exclude<AttendanceFilter, 'ALL'>) => {
     setAttendanceFilter((currentFilter) => currentFilter === filter ? 'ALL' : filter);
+  };
+
+  const handleMissedAttendanceSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (isSubmittingMissedAttendance) {
+      return;
+    }
+
+    if (!canAddMissedAttendance) {
+      setMissedAttendanceError('You do not have permission to add missed attendance.');
+      return;
+    }
+
+    if (!selectedEmployeeId) {
+      setMissedAttendanceError('Choose an employee before adding missed attendance.');
+      return;
+    }
+
+    const numericEmployeeId = Number(selectedEmployeeId);
+    if (!Number.isInteger(numericEmployeeId) || numericEmployeeId < 1) {
+      setMissedAttendanceError('Selected employee is invalid.');
+      return;
+    }
+
+    const trimmedReason = missedAttendanceForm.reason.trim();
+    if (!trimmedReason) {
+      setReasonValidationError('Correction reason is required.');
+      setMissedAttendanceError(null);
+      return;
+    }
+
+    setReasonValidationError(null);
+
+    if (isApprovedLeaveDate(missedAttendanceForm.date)) {
+      setMissedAttendanceError('Approved leave dates cannot be submitted as missed attendance.');
+      return;
+    }
+
+    setIsSubmittingMissedAttendance(true);
+    setMissedAttendanceError(null);
+    setReasonValidationError(null);
+    setMissedAttendanceMessage(null);
+
+    try {
+      const response = await ApiService.addMissedAttendance(numericEmployeeId, {
+        date: missedAttendanceForm.date,
+        clockIn: `${missedAttendanceForm.date}T${missedAttendanceForm.clockIn}:00`,
+        clockOut: `${missedAttendanceForm.date}T${missedAttendanceForm.clockOut}:00`,
+        reason: trimmedReason,
+      });
+
+      setMissedAttendanceMessage(response.message || 'Missed attendance added successfully.');
+      setIsMissedAttendanceFormOpen(false);
+      setAttendancePage(1);
+      setAttendanceRefreshNonce((value) => value + 1);
+    } catch (error) {
+      setMissedAttendanceError(error instanceof Error ? error.message : 'Failed to add missed attendance.');
+    } finally {
+      setIsSubmittingMissedAttendance(false);
+    }
   };
 
   return (
@@ -397,28 +584,131 @@ const EmployeeAttendance = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.08] px-3 py-2 text-sm text-[#d5e6e8]">
-                <CalendarDays size={16} className="text-[#e3c477]" />
-                <label className="flex items-center gap-2">
-                  <span className="font-medium text-[#d5e6e8]">Month</span>
-                  <input
-                    type="month"
-                    value={selectedMonth}
-                      onChange={(event) => {
-                        setSelectedMonth(event.target.value);
-                        setAttendancePage(1);
-                        setAttendanceFilter('ALL');
-                      }}
-                    className="rounded-lg border border-white/20 bg-white/10 px-2.5 py-1.5 text-sm text-white outline-none focus:border-[#c3a25a] focus:ring-2 focus:ring-[#b08a3e]/30"
-                    aria-label="Select attendance month"
-                  />
-                </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.08] px-3 py-2 text-sm text-[#d5e6e8]">
+                  <CalendarDays size={16} className="text-[#e3c477]" />
+                  <label className="flex items-center gap-2">
+                    <span className="font-medium text-[#d5e6e8]">Month</span>
+                    <input
+                      type="month"
+                      value={selectedMonth}
+                        onChange={(event) => {
+                          setSelectedMonth(event.target.value);
+                          setAttendancePage(1);
+                          setAttendanceFilter('ALL');
+                        }}
+                      className="rounded-lg border border-white/20 bg-white/10 px-2.5 py-1.5 text-sm text-white outline-none focus:border-[#c3a25a] focus:ring-2 focus:ring-[#b08a3e]/30"
+                      aria-label="Select attendance month"
+                    />
+                  </label>
+                </div>
+
+                {canAddMissedAttendance && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="border border-white/20 bg-white/10 text-white hover:bg-white/15"
+                    onClick={() => setIsMissedAttendanceFormOpen((value) => !value)}
+                  >
+                    {isMissedAttendanceFormOpen ? 'Close' : 'Add missed attendance'}
+                  </Button>
+                )}
               </div>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-[#d5e6e8]">
               <span className="rounded-full border border-white/15 bg-white/[0.08] px-2.5 py-1 font-medium">{selectedEmployee.designation || 'Designation not available'}</span>
             </div>
+
+            {isMissedAttendanceFormOpen && (
+              <form noValidate onSubmit={handleMissedAttendanceSubmit} className="mt-5 rounded-xl border border-white/15 bg-white/[0.07] p-4 text-left text-white">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-base font-semibold text-white">Missing attendance entry</h3>
+                  <span className="text-xs uppercase tracking-[0.12em] text-[#d5e6e8]">HR action</span>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-4">
+                  <label className="text-sm text-[#d5e6e8]">
+                    <span className="mb-1 block">Date</span>
+                    <input
+                      type="date"
+                      value={missedAttendanceForm.date}
+                      onChange={(event) => setMissedAttendanceForm((current) => ({ ...current, date: event.target.value }))}
+                      className="w-full rounded-lg border border-white/20 bg-white/10 px-2.5 py-2 text-white outline-none focus:border-[#c3a25a] focus:ring-2 focus:ring-[#b08a3e]/30"
+                      required
+                    />
+                  </label>
+
+                  <label className="text-sm text-[#d5e6e8]">
+                    <span className="mb-1 block">Clock in</span>
+                    <input
+                      type="time"
+                      value={missedAttendanceForm.clockIn}
+                      onChange={(event) => setMissedAttendanceForm((current) => ({ ...current, clockIn: event.target.value }))}
+                      className="w-full rounded-lg border border-white/20 bg-white/10 px-2.5 py-2 text-white outline-none focus:border-[#c3a25a] focus:ring-2 focus:ring-[#b08a3e]/30"
+                      required
+                    />
+                  </label>
+
+                  <label className="text-sm text-[#d5e6e8]">
+                    <span className="mb-1 block">Clock out</span>
+                    <input
+                      type="time"
+                      value={missedAttendanceForm.clockOut}
+                      onChange={(event) => setMissedAttendanceForm((current) => ({ ...current, clockOut: event.target.value }))}
+                      className="w-full rounded-lg border border-white/20 bg-white/10 px-2.5 py-2 text-white outline-none focus:border-[#c3a25a] focus:ring-2 focus:ring-[#b08a3e]/30"
+                      required
+                    />
+                  </label>
+
+                  <label className="text-sm text-[#d5e6e8] md:col-span-1">
+                    <span className="mb-1 block">Reason</span>
+                    <input
+                      type="text"
+                      value={missedAttendanceForm.reason}
+                      onChange={(event) => {
+                        setMissedAttendanceForm((current) => ({ ...current, reason: event.target.value }));
+                        if (reasonValidationError) {
+                          setReasonValidationError(null);
+                        }
+                        if (missedAttendanceError) {
+                          setMissedAttendanceError(null);
+                        }
+                      }}
+                      placeholder="Enter a reason for the correction"
+                      aria-invalid={Boolean(reasonValidationError)}
+                      className={`w-full rounded-lg border px-2.5 py-2 text-white outline-none focus:ring-2 focus:ring-[#b08a3e]/30 ${reasonValidationError ? 'border-[#f2b7b0] bg-[#fff7f5]/10 focus:border-[#f2b7b0]' : 'border-white/20 bg-white/10 focus:border-[#c3a25a]'}`}
+                      required
+                    />
+                    {reasonValidationError && (
+                      <p className="mt-2 text-xs font-medium text-[#ffd1c9]">{reasonValidationError}</p>
+                    )}
+                  </label>
+                </div>
+
+                {missedAttendanceError && (
+                  <p className="mt-3 text-sm text-[#ffd1c9]">{missedAttendanceError}</p>
+                )}
+                {missedAttendanceMessage && (
+                  <p className="mt-3 text-sm text-[#dff7de]">{missedAttendanceMessage}</p>
+                )}
+
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <Button type="button" size="sm" variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10" onClick={() => setIsMissedAttendanceFormOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    className="bg-[#e3c477] text-[#073b5c] hover:bg-[#d6b163]"
+                    disabled={isSubmittingMissedAttendance}
+                  >
+                    {isSubmittingMissedAttendance ? 'Saving...' : 'Save attendance'}
+                  </Button>
+                </div>
+              </form>
+            )}
           </div>
 
           <Card hoverEffect className="overflow-hidden">

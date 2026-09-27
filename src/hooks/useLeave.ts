@@ -195,8 +195,8 @@ export const useLeave = () => {
     }
   }, []);
 
-  // Fetch leave balance
-  const fetchLeaveBalance = useCallback(async (yearStart: number) => {
+  // Fetch leave balance using the backend's authoritative balance contract.
+  const fetchLeaveBalance = useCallback(async (yearStart: number = new Date().getFullYear()) => {
     setIsLoading(true);
     setError(null);
     try {
@@ -210,8 +210,8 @@ export const useLeave = () => {
     }
   }, []);
 
-  // Fetch my leave balance
-  const fetchMyLeaveBalance = useCallback(async (yearStart: number) => {
+  // Fetch my leave balance using the current backend-authoritative pool response.
+  const fetchMyLeaveBalance = useCallback(async (yearStart: number = new Date().getFullYear()) => {
     setIsLoading(true);
     setError(null);
     try {

@@ -333,8 +333,8 @@ export interface CreateEmployeeDto {
   department: string;
   designation: string;
   role: 'SUPER_ADMIN' | 'CEO' | 'HR' | 'FINANCE_MANAGER' | 'IT_MANAGER' | 'SALES_MANAGER' | 'EMPLOYEE';
-  employmentType?: 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN';
-  status?: 'ACTIVE' | 'INACTIVE' | 'TERMINATED' | 'ON_LEAVE';
+  employmentType?: 'FULL_TIME' | 'PART_TIME' | 'INTERN';
+  status?: 'ACTIVE' | 'INACTIVE';
   sourceOfHire?: string;
   dateOfJoining?: string;
   currentExperience?: number;
@@ -346,7 +346,7 @@ export interface CreateEmployeeDto {
   permanentAddress?: string;
   pincode?: string;
   city?: string;
-  maritalStatus?: 'UNMARRIED' | 'SINGLE' | 'MARRIED' | 'DIVORCED' | 'WIDOWED';
+  maritalStatus?: 'UNMARRIED' | 'MARRIED';
   phone?: string;
   personalMobile?: string;
   panNumber?: string;
@@ -363,7 +363,7 @@ export interface CreateEmployeeDto {
 export interface CreateEmployeeResponse {
   message: string;
   username: string;
-  password: string;
+  password?: string;
   role: string;
 }
 
@@ -541,7 +541,9 @@ export interface LeaveType {
 export interface LeaveTypeOption {
   id: number;
   name: string;
-  yearlyQuota: number;
+  // Legacy annual quota metadata for non-combined leave types. The current
+  // Casual/Sick pool is resolved server-side and should not be re-derived here.
+  yearlyQuota?: number;
   carryForward: boolean;
   maxCarryLimit?: number | null;
   monthlyAccrual?: number | null;
@@ -601,16 +603,20 @@ export interface Payroll {
   workingDays: number;
   presentDays: number;
   lopDays: number;
+  paidLeaveDays?: number;
   basic: number;
   hra: number;
   conveyance?: number;
   specialAllowance?: number;
+  otherAllowance?: number;
   pf: number;
   pt: number;
   leaveDeduction?: number;
+  otherDeduction?: number;
   grossSalary: number;
   deductions: number;
   netSalary: number;
+  status: 'DRAFT' | 'FINALIZED' | 'PAID';
   others?: PayrollAdjustment[];
   createdAt?: string;
   updatedAt?: string;
@@ -1216,9 +1222,12 @@ class ApiService {
     }
   }
 
-  async getAttendance(): Promise<AttendanceRecord[]> {
+  async getAttendance(date?: string): Promise<AttendanceRecord[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/attendance/all`, {
+      const params = new URLSearchParams();
+      if (date) params.set('date', date);
+      const query = params.toString();
+      const response = await fetch(`${API_BASE_URL}/attendance/all${query ? `?${query}` : ''}`, {
         method: 'GET',
         headers: this.getAuthHeaders(),
       });
@@ -1403,6 +1412,35 @@ class ApiService {
       return result as MonthlyAttendanceSummary;
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch attendance summary');
+    }
+  }
+
+  async addMissedAttendance(
+    employeeId: number,
+    payload: { date: string; clockIn: string; clockOut: string; reason?: string },
+  ): Promise<{ record: AttendanceRecord; message: string }> {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/attendance/employee/${employeeId}/missed-attendance`,
+        {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.message || 'Failed to add missed attendance');
+      }
+
+      const result = await response.json();
+      return {
+        record: normalizeAttendanceRecord((result?.record ?? result) as Partial<AttendanceRecord>),
+        message: result?.message || 'Missed attendance added successfully.',
+      };
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to add missed attendance');
     }
   }
 
@@ -2480,11 +2518,13 @@ class ApiService {
         const err = await response.text().catch(() => '');
         throw new Error(err || 'Failed to download payslip');
       }
+      const contentDisposition = response.headers.get('content-disposition');
+      const fileName = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1] || `payslip-${payrollId}.pdf`;
       const blob = await response.blob();
       const url = globalThis.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `payslip-${payrollId}.pdf`;
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -2492,6 +2532,18 @@ class ApiService {
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to download payslip');
     }
+  }
+
+  async finalizePayroll(payrollId: number): Promise<Payroll> {
+    const response = await fetch(`${API_BASE_URL}/payroll/${payrollId}/finalize`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || 'Failed to finalize payroll');
+    }
+    return response.json();
   }
 
   /** Manual "Generate Payslip" action for HR/Admin/Manager - runs payroll

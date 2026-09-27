@@ -130,9 +130,19 @@ const buildProfileInitialData = (employee: EmployeeProfileData) => ({
   isExperienced: employee.isExperienced,
 });
 
+const EMPLOYEE_360_MANAGEMENT_ROLES = ['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER', 'IT_MANAGER', 'SALES_MANAGER'];
+
+export const canAccessEmployeeProfile = (role: string | undefined, requestedEmployeeId: string | undefined, ownEmployeeId?: number): boolean => {
+  if (EMPLOYEE_360_MANAGEMENT_ROLES.includes(role ?? '')) return true;
+  return role === 'EMPLOYEE'
+    && ownEmployeeId !== undefined
+    && Number(requestedEmployeeId) === ownEmployeeId;
+};
+
 const EmployeeProfile = () => {
     const { id } = useParams();
     const { user } = useAuth();
+    const canAccessEmployee360 = canAccessEmployeeProfile(user?.role, id, user?.employeeId);
 
     const [employee, setEmployee] = useState<EmployeeProfileData | null>(null);
     const [editEmployee, setEditEmployee] = useState<EmployeeProfileData | null>(null);
@@ -167,6 +177,13 @@ const EmployeeProfile = () => {
     const canManagePayroll = ['SUPER_ADMIN', 'CEO', 'HR', 'FINANCE_MANAGER'].includes(user?.role ?? '');
 
     useEffect(() => {
+        if (!canAccessEmployee360) {
+            setEmployee(null);
+            setError('Access denied. Employee 360 is unavailable for this role.');
+            setLoading(false);
+            return;
+        }
+
         let mounted = true;
         const empId = id;
         setLoading(true);
@@ -193,7 +210,7 @@ const EmployeeProfile = () => {
         return () => {
             mounted = false;
         };
-    }, [id, user]);
+    }, [canAccessEmployee360, id, user]);
 
     useEffect(() => {
       if (!employee?.id || activeSection !== 'attendance') return;
@@ -242,6 +259,19 @@ const EmployeeProfile = () => {
         mounted = false;
       };
     }, [activeSection, employee?.id]);
+
+    if (!canAccessEmployee360) {
+      return (
+        <div className="mx-auto max-w-4xl p-8">
+          <Card>
+            <CardContent className="p-8 text-center">
+              <h2 className="text-xl font-bold text-[#12354a]">Employee 360 unavailable</h2>
+              <p className="mt-3 text-sm text-[#617984]">This profile is not available for your account.</p>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
 
     const fetchSalaryData = useCallback(async (employeeId: number) => {
       setPayrollLoading(true);
