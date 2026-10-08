@@ -4,7 +4,7 @@ import ApiService, { AttendanceRecord, Employee360Leave, MonthlyAttendanceSummar
 import attendanceService from '../../services/attendanceService';
 import { useAuth } from '../../context/AuthContext';
 import { Badge, Button, Card, CardHeader, CardTitle, CardContent, DataTable, EmptyState, ErrorState, PageHeader, SearchBox, Skeleton, StatCard, StatusBadge, type DataTableColumn } from '../../components/ui/components';
-import { attendanceDateKey, formatAttendanceDate } from '../../utils/attendanceDate';
+import { attendanceDateKey, formatAttendanceDate, formatWorkedHours } from '../../utils/attendanceDate';
 import { getAttendanceLocationLabel, getRecordAttendanceState } from '../../hooks/useAttendance';
 
 type AttendanceFilter = 'ALL' | 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'LEAVE';
@@ -337,7 +337,7 @@ const EmployeeAttendance = () => {
     { key: 'status', header: 'Status', render: (record) => <StatusBadge status={record.status === 'PRESENT' ? 'success' : record.status === 'ABSENT' ? 'danger' : record.status === 'LEAVE' ? 'info' : record.status === 'IN_PROGRESS' ? 'warning' : 'neutral'}>{record.status}</StatusBadge> },
     { key: 'punchIn', header: 'Check in', render: (record) => record.punchIn ? new Date(record.punchIn).toLocaleTimeString() : '-' },
     { key: 'punchOut', header: 'Check out', render: (record) => record.punchOut ? new Date(record.punchOut).toLocaleTimeString() : '-' },
-    { key: 'totalHours', header: 'Total hours', render: (record) => record.totalHours ?? '-' },
+    { key: 'totalHours', header: 'Total hours', render: (record) => record.totalHours === null || record.totalHours === undefined ? '-' : formatWorkedHours(record.totalHours) },
     { key: 'location', header: 'Location', render: (record) => { const label = record.locationLabel || 'Unknown'; const tone = label === 'In Office' ? 'success' : label === 'Out of Office' ? 'danger' : label === 'Unknown' ? 'neutral' : 'warning'; return <StatusBadge status={tone}>{label}</StatusBadge>; } },
     {
       key: 'actions',
@@ -365,7 +365,8 @@ const EmployeeAttendance = () => {
           );
         }
 
-        if (recordStatus === 'IN_PROGRESS') {
+        // Check-out stays optional; HR can still record a missed check-out
+        if (record.punchIn && !record.punchOut) {
           return (
             <Button
               type="button"
@@ -400,6 +401,26 @@ const EmployeeAttendance = () => {
   const toggleAttendanceFilter = (filter: Exclude<AttendanceFilter, 'ALL'>) => {
     setAttendanceFilter((currentFilter) => currentFilter === filter ? 'ALL' : filter);
   };
+
+  /* Mirrors the backend classification: < 4h ABSENT, 4-7h HALF_DAY, >= 7h PRESENT */
+  const missedAttendanceDurationWarning = (() => {
+    const toMinutes = (value: string) => {
+      const [hours, minutes] = value.split(':').map(Number);
+      return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
+    };
+    const start = toMinutes(missedAttendanceForm.clockIn);
+    const end = toMinutes(missedAttendanceForm.clockOut);
+    if (start === null || end === null || end <= start) return null;
+
+    const hours = (end - start) / 60;
+    if (hours < 4) {
+      return 'Less than 4 hours: this day will be recorded as ABSENT and will not reduce LOP.';
+    }
+    if (hours < 7) {
+      return 'Between 4 and 7 hours: this day will be recorded as a HALF DAY (0.5 payable day).';
+    }
+    return null;
+  })();
 
   const handleMissedAttendanceSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -687,8 +708,16 @@ const EmployeeAttendance = () => {
                   </label>
                 </div>
 
+                {missedAttendanceDurationWarning && (
+                  <p role="status" className="mt-3 text-sm text-[#ffe3a3]">{missedAttendanceDurationWarning}</p>
+                )}
                 {missedAttendanceError && (
                   <p className="mt-3 text-sm text-[#ffd1c9]">{missedAttendanceError}</p>
+                )}
+                {missedAttendanceError && /is finalized/i.test(missedAttendanceError) && (
+                  <p className="mt-1 text-xs text-[#ffd1c9]">
+                    Reopen this payroll from the Payroll page, save the correction, then recalculate and finalize the payroll again.
+                  </p>
                 )}
                 {missedAttendanceMessage && (
                   <p className="mt-3 text-sm text-[#dff7de]">{missedAttendanceMessage}</p>

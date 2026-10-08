@@ -690,6 +690,7 @@ const EmployeeProfile = () => {
                       <div className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                         <div><span className="text-xs font-medium text-slate-500">Annual CTC</span><p className="font-semibold text-slate-900">{Number((assignedSalary as any)?.annualCTC ?? (assignedSalary as any)?.annualCtc ?? (assignedSalary as any)?.ctc ?? 0).toLocaleString()}</p></div>
                         <div><span className="text-xs font-medium text-slate-500">Monthly CTC</span><p className="font-semibold text-slate-900">{Number((assignedSalary as any)?.monthlyCTC ?? (assignedSalary as any)?.monthlyCtc ?? (assignedSalary as any)?.monthlySalary ?? 0).toLocaleString()}</p></div>
+                        <div><span className="text-xs font-medium text-slate-500">Monthly Gross</span><p className="font-semibold text-slate-900">{(assignedSalary as any)?.monthlyGross !== null && (assignedSalary as any)?.monthlyGross !== undefined ? Number((assignedSalary as any).monthlyGross).toLocaleString() : 'Same as Monthly CTC'}</p></div>
                         <div><span className="text-xs font-medium text-slate-500">Salary Structure</span><p className="text-slate-700">{assignedSalary.structure?.name || `Structure #${assignedSalary.structureId}`}</p></div>
                         <div><span className="text-xs font-medium text-slate-500">Effective From</span><p className="text-slate-700">{assignedSalary.effectiveFrom ? new Date(assignedSalary.effectiveFrom).toLocaleDateString() : '-'}</p></div>
                       </div>

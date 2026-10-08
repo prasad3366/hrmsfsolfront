@@ -1,7 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, Button, Input, Label } from '../../components/ui/components';
-import ApiService from '../../services/api';
+import ApiService, { SalaryStructure } from '../../services/api';
 import { useSalary } from '../../hooks/useSalary';
+
+const todayDateValue = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
+/* Newest structure with a fixed conveyance is the default; otherwise the newest one */
+const defaultStructureId = (structures: SalaryStructure[]) => {
+  const sorted = [...structures].sort((a, b) => b.id - a.id);
+  const preferred = sorted.find((structure) => structure.conveyanceAmount !== null && structure.conveyanceAmount !== undefined) ?? sorted[0];
+  return preferred ? String(preferred.id) : '';
+};
+
+/* Describes the configured rule only; amounts are calculated by the backend */
+const describeStructure = (structure: SalaryStructure) => {
+  const conveyance = structure.conveyanceAmount !== null && structure.conveyanceAmount !== undefined
+    ? `Conveyance ₹${Number(structure.conveyanceAmount).toLocaleString('en-IN')} fixed`
+    : `Conveyance ${structure.conveyancePercent}% of Gross`;
+  return `Basic ${structure.basicPercent}% of Gross · HRA ${structure.hraPercent}% of Basic · ${conveyance} · Special Allowance balances Gross`;
+};
 
 interface AssignSalaryModalProps {
   isOpen: boolean;
@@ -27,8 +47,29 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
   const [formData, setFormData] = useState({
     empCode: presetEmpCode || '',
     annualCTC: '',
+    monthlyGross: '',
+    effectiveFrom: todayDateValue(),
     structureId: '',
   });
+  const [structures, setStructures] = useState<SalaryStructure[]>([]);
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let mounted = true;
+    ApiService.getSalaryStructures()
+      .then((result) => {
+        if (!mounted) return;
+        const list = Array.isArray(result) ? result : [];
+        setStructures(list);
+        setFormData((prev) => (prev.structureId ? prev : { ...prev, structureId: defaultStructureId(list) }));
+      })
+      .catch(() => {
+        if (mounted) setStructures([]);
+      });
+
+    return () => { mounted = false; };
+  }, [isOpen]);
+  const selectedStructure = structures.find((structure) => String(structure.id) === formData.structureId);
   const [employees, setEmployees] = useState<any[]>([]);
   const [empLoading, setEmpLoading] = useState(false);
   const [empError, setEmpError] = useState<string | null>(null);
@@ -80,6 +121,7 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
     
     // Validate before submitting
     const annualCTC = Number.parseInt(formData.annualCTC, 10);
+    const monthlyGross = Number(formData.monthlyGross);
     const structureId = Number.parseInt(formData.structureId, 10);
 
     if (!formData.empCode) {
@@ -92,8 +134,18 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
       return;
     }
 
+    if (!formData.monthlyGross || !Number.isFinite(monthlyGross) || monthlyGross <= 0) {
+      setValidationError('Monthly Gross must be a valid positive number');
+      return;
+    }
+
+    if (!formData.effectiveFrom) {
+      setValidationError('Effective From date is required');
+      return;
+    }
+
     if (!formData.structureId || Number.isNaN(structureId) || structureId <= 0) {
-      setValidationError('Salary Structure ID must be a valid positive number');
+      setValidationError('Select a salary structure');
       return;
     }
 
@@ -101,6 +153,8 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
       await assignSalary({
         empCode: formData.empCode,
         annualCTC,
+        monthlyGross,
+        effectiveFrom: formData.effectiveFrom,
         structureId,
       });
       window.dispatchEvent(new Event('salary-assigned'));
@@ -113,7 +167,9 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
       setFormData({
         empCode: presetEmpCode || '',
         annualCTC: '',
-        structureId: '',
+        monthlyGross: '',
+        effectiveFrom: todayDateValue(),
+        structureId: defaultStructureId(structures),
       });
       
       // Call onSuccess callback
@@ -137,7 +193,7 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
         </h2>
         <p className="mb-4 text-xs text-[#617984]">
           {isRaiseMode
-            ? 'This creates a new salary effective from today. Their previous salary and payroll history are kept.'
+            ? 'This creates a new salary effective from the chosen date. Their previous salary and payroll history are kept.'
             : "Only employees without a salary yet are listed. To give an existing employee a raise, use their profile."}
         </p>
 
@@ -215,21 +271,59 @@ export const AssignSalaryModal: React.FC<AssignSalaryModalProps> = ({
           </div>
 
           <div>
-            <Label htmlFor="structureId" className="block text-sm font-medium text-slate-700 mb-1">
-              Salary Structure ID <span className="text-red-500">*</span>
+            <Label htmlFor="monthlyGross" className="block text-sm font-medium text-slate-700 mb-1">
+              Monthly Gross <span className="text-red-500">*</span>
             </Label>
             <Input
-              id="structureId"
-              name="structureId"
+              id="monthlyGross"
+              name="monthlyGross"
               type="number"
-              value={formData.structureId}
+              value={formData.monthlyGross}
               onChange={handleChange}
               required
-              placeholder="e.g., 1"
+              placeholder="e.g., 50000"
               min="1"
               disabled={loading || !!successMessage}
             />
-            <p className="text-xs text-slate-500 mt-1">ID of the salary structure to apply</p>
+            <p className="text-xs text-slate-500 mt-1">Salary components are calculated from Gross</p>
+          </div>
+
+          <div>
+            <Label htmlFor="effectiveFrom" className="block text-sm font-medium text-slate-700 mb-1">
+              Effective From <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="effectiveFrom"
+              name="effectiveFrom"
+              type="date"
+              value={formData.effectiveFrom}
+              onChange={handleChange}
+              required
+              disabled={loading || !!successMessage}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="structureId" className="block text-sm font-medium text-slate-700 mb-1">
+              Salary Structure <span className="text-red-500">*</span>
+            </Label>
+            <select
+              id="structureId"
+              name="structureId"
+              value={formData.structureId}
+              onChange={handleChange}
+              required
+              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading || !!successMessage}
+            >
+              <option value="">Select salary structure...</option>
+              {structures.map((structure) => (
+                <option key={structure.id} value={String(structure.id)}>{structure.name}</option>
+              ))}
+            </select>
+            {selectedStructure && (
+              <p className="text-xs text-slate-500 mt-1">{describeStructure(selectedStructure)}</p>
+            )}
           </div>
 
           <div className="flex gap-2 pt-4">

@@ -48,11 +48,30 @@ const buildUserFromJwt = (jwt: Record<string, any>, fallbackEmail?: string): Use
   };
 };
 
+/* "tadala ganesh" -> "Tadala Ganesh"; names already in mixed case are kept as entered */
+export const formatPersonName = (firstName?: string | null, lastName?: string | null): string =>
+  [firstName, lastName]
+    .map((part) => String(part ?? '').trim().replace(/\s+/g, ' '))
+    .filter(Boolean)
+    .join(' ')
+    .split(' ')
+    .map((word) => (word && word === word.toLowerCase() ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+    .join(' ');
+
 const fetchEmployeeId = async (user: User, setUserFn: (u: User) => void) => {
   if (user.employeeId) return;
   try {
     const data = await api.getEmployeeIdByUserId();
-    const updatedUser = { ...user, employeeId: data.employeeId };
+    // The JWT has no name; use the employee record's first/last name when available
+    const personName = formatPersonName(data.firstName, data.lastName);
+    const updatedUser = {
+      ...user,
+      employeeId: data.employeeId,
+      ...(personName ? {
+        name: personName,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(personName)}&background=random`,
+      } : {}),
+    };
     setUserFn(updatedUser);
     try {
       localStorage.setItem('foodeez_user', JSON.stringify(updatedUser));

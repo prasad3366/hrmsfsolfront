@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Download } from 'lucide-react';
-import { Button } from '../../components/ui/components';
+import { Button, ModalPortal } from '../../components/ui/components';
 
 interface MedicalCertificateModalProps {
   isOpen: boolean;
@@ -40,7 +40,7 @@ const MedicalCertificateModal: React.FC<MedicalCertificateModalProps> = ({
   const isImage = certificate.startsWith('data:image/');
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-200">
@@ -110,7 +110,7 @@ const MedicalCertificateModal: React.FC<MedicalCertificateModalProps> = ({
           </Button>
         </div>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 };
 

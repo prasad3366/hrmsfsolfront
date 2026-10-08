@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Eye, EyeOff, CheckCircle } from 'lucide-react';
-import { Button } from '../ui/components';
+import { Button, ModalPortal } from '../ui/components';
 import api from '../../services/api';
 
 interface ForgotPasswordModalProps {
@@ -96,7 +96,7 @@ const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-slate-200 flex-shrink-0">
           <h2 className="text-xl font-semibold text-slate-900">
@@ -234,7 +234,7 @@ const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 };
 

@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { getAttendanceLocationLabel, getTodayAttendanceState, normalizeAttendanceStatus } from './useAttendance';
+import { getAttendanceLocationLabel, getRecordAttendanceState, getTodayAttendanceState, normalizeAttendanceStatus } from './useAttendance';
 import { formatAttendanceDate } from '../utils/attendanceDate';
+
+describe('attendance day result', () => {
+  it('treats check-in without check-out as PRESENT', () => {
+    expect(getRecordAttendanceState({ punchIn: '2026-09-09T09:00:00.000Z', punchOut: null, status: 'IN_PROGRESS' })).toBe('PRESENT');
+    expect(getRecordAttendanceState({ punchIn: '2026-09-09T09:00:00.000Z', punchOut: null, status: 'PRESENT' })).toBe('PRESENT');
+  });
+
+  it('keeps the completed-day result for check-in + check-out', () => {
+    expect(getRecordAttendanceState({ punchIn: '2026-09-09T09:00:00.000Z', punchOut: '2026-09-09T18:00:00.000Z', status: 'PRESENT' })).toBe('PRESENT');
+    expect(getRecordAttendanceState({ punchIn: '2026-09-09T09:00:00.000Z', punchOut: '2026-09-09T14:00:00.000Z', status: 'HALF_DAY' })).toBe('HALF_DAY');
+  });
+
+  it('keeps leave and no-check-in results unchanged', () => {
+    expect(getRecordAttendanceState({ punchIn: null, punchOut: null, status: 'LEAVE' })).toBe('LEAVE');
+    expect(getRecordAttendanceState({ punchIn: null, punchOut: null, status: 'ABSENT' })).toBe('ABSENT');
+  });
+});
 
 describe('attendance state helpers', () => {
   it('treats an open attendance record as IN_PROGRESS even when clockOut is null', () => {

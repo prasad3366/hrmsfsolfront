@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CheckCircle2, Clock3, Pencil, Plus, Trash2, UserPlus, Users, X } from 'lucide-react';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState,
-  Input, PageHeader, Select, Skeleton, StatCard, StatusBadge,
+  Input, PageHeader, Select, Skeleton, StatCard, StatusBadge, ModalPortal
 } from '../../components/ui/components';
 import { useAuth } from '../../context/AuthContext';
 import api, { CreateTrainingProgramDto, TrainingEnrollment, TrainingProgram } from '../../services/api';
@@ -17,12 +17,12 @@ export const canEnrollDuringProgramCreation = (role: string | null | undefined) 
 export const buildTrainingProgramCreatePayload = (data: CreateTrainingProgramDto, employeeIds: number[]) => ({ ...data, ...(employeeIds.length ? { employeeIds: [...new Set(employeeIds.map(Number))] } : {}) });
 
 const Modal = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]">
+  <ModalPortal><div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]">
     <Card className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border-white/70 shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
-      <CardHeader className="flex flex-row items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9]/70 pb-4"><CardTitle className="text-[#073b5c]">{title}</CardTitle><button type="button" aria-label="Close dialog" onClick={onClose} className="rounded-lg p-1.5 text-[#78909a] transition-colors hover:bg-[#edf3f5] hover:text-[#12354a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e]"><X size={20} /></button></CardHeader>
+      <CardHeader className="sticky top-0 z-[2] flex flex-row items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9] pb-4"><CardTitle className="text-[#073b5c]">{title}</CardTitle><button type="button" aria-label="Close dialog" onClick={onClose} className="rounded-lg p-1.5 text-[#78909a] transition-colors hover:bg-[#edf3f5] hover:text-[#12354a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e]"><X size={20} /></button></CardHeader>
       <CardContent className="pt-5">{children}</CardContent>
     </Card>
-  </div>
+  </div></ModalPortal>
 );
 
 const employeeLabel = (employee: any) => `${employee.firstName ?? ''} ${employee.lastName ?? ''}`.trim() || employee.name || employee.email || `Employee #${employee.id}`;

@@ -1,12 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Button, DataTable, EmptyState, ErrorState, PageHeader, Skeleton, StatCard, type DataTableColumn } from '../../components/ui/components';
+import { Card, CardHeader, CardTitle, CardContent, Button, DataTable, EmptyState, ErrorState, PageHeader, Skeleton, StatCard, type DataTableColumn, ModalPortal } from '../../components/ui/components';
 import { Download, CreditCard, DollarSign, TrendingUp, Calendar, Plus } from 'lucide-react';
 import { usePayroll } from '../../hooks/usePayroll';
 import { useAuth } from '../../context/AuthContext';
 import { RunPayrollModal } from '../../components/payroll/RunPayrollModal';
 import { AssignSalaryModal } from '../../components/payroll/AssignSalaryModal';
 import { AddPayrollAdjustmentModal } from '../../components/payroll/AddPayrollAdjustmentModal';
-import ApiService, { Payroll as PayrollType, EmployeeSalary } from '../../services/api';
+import ApiService, { Payroll as PayrollType, EmployeeSalary, PayrollRecalculationPreview } from '../../services/api';
+
+const MONTH_ABBREVIATIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/* Formats the backend-provided period dates (YYYY-MM-DD); no period calculation here */
+export const formatPayrollPeriod = (payroll: Pick<PayrollType, 'month' | 'year' | 'period'>): string => {
+  const formatDate = (value: string) => {
+    const [year, month, day] = value.split('-').map(Number);
+    return year && month && day ? `${day} ${MONTH_ABBREVIATIONS[month - 1]} ${year}` : null;
+  };
+  const start = payroll.period?.startDate ? formatDate(payroll.period.startDate) : null;
+  const end = payroll.period?.endDate ? formatDate(payroll.period.endDate) : null;
+  return start && end ? `${start} – ${end}` : `${payroll.month}/${payroll.year}`;
+};
+
+const PREVIEW_FIELD_LABELS: Record<string, string> = {
+  salaryId: 'Salary record',
+  workingDays: 'Working days',
+  presentDays: 'Present days',
+  lopDays: 'LOP days',
+  paidLeaveDays: 'Paid leave days',
+  basic: 'Basic',
+  hra: 'HRA',
+  conveyance: 'Conveyance',
+  specialAllowance: 'Special allowance',
+  otherAllowance: 'Other allowance',
+  pf: 'PF',
+  pt: 'PT',
+  leaveDeduction: 'LOP deduction',
+  otherDeduction: 'Other deduction',
+  grossSalary: 'Gross salary',
+  deductions: 'Total deductions',
+  netSalary: 'Net salary',
+};
 
 // Helper functions to reduce complexity
 const DEFAULT_SALARY_STRUCTURE = {
@@ -51,7 +84,7 @@ const buildSalarySummary = (currentPayroll: PayrollType | null, salaryInfo: any,
       <>
         <div className="flex justify-between text-sm mb-1 text-slate-300">
           <span>Month</span>
-          <span>{currentPayroll.month}/{currentPayroll.year}</span>
+          <span>{formatPayrollPeriod(currentPayroll)}</span>
         </div>
         <div className="flex justify-between text-sm text-slate-300">
           <span>Present Days</span>
@@ -100,7 +133,18 @@ const shouldShowManagementButtons = (role: string): boolean => {
 
 const Payroll = () => {
   const { user } = useAuth();
-  const { payrolls, loading, error, fetchPayroll } = usePayroll();
+  const { payrolls, loading, error, fetchPayroll, recalculatePayroll, previewRecalculation, reopenPayroll } = usePayroll(user?.role);
+  const [previewState, setPreviewState] = useState<{
+    payroll: PayrollType;
+    data: PayrollRecalculationPreview | null;
+    error: string | null;
+  } | null>(null);
+  const [reopenState, setReopenState] = useState<{
+    payroll: PayrollType;
+    reason: string;
+    submitting: boolean;
+    error: string | null;
+  } | null>(null);
   const [isRunPayrollOpen, setIsRunPayrollOpen] = useState(false);
   const [isAssignSalaryOpen, setIsAssignSalaryOpen] = useState(false);
   const [isAddAdjustmentOpen, setIsAddAdjustmentOpen] = useState(false);
@@ -137,7 +181,10 @@ const Payroll = () => {
     }
   }, [user?.employeeId, fetchPayroll]);
 
-  const currentPayroll = payrolls.length > 0 ? payrolls[0] : null;
+  const isOrganizationPayrollView = ['SUPER_ADMIN', 'CEO', 'HR'].includes(String(user?.role ?? '').toUpperCase());
+  const currentPayroll = isOrganizationPayrollView
+    ? payrolls.find((payroll) => payroll.employeeId === user?.employeeId) ?? null
+    : payrolls[0] ?? null;
 
   const handleAddAdjustment = (payroll: PayrollType) => {
     setSelectedPayroll(payroll);
@@ -161,6 +208,53 @@ const Payroll = () => {
     }
   };
 
+  const handleRecalculatePayroll = async (payrollId: number) => {
+    try {
+      await recalculatePayroll(payrollId);
+      if (user?.employeeId) await fetchPayroll(user.employeeId);
+    } catch (err) {
+      alert('Failed to recalculate payroll: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handlePreviewRecalculation = async (payroll: PayrollType) => {
+    setPreviewState({ payroll, data: null, error: null });
+    try {
+      const data = await previewRecalculation(payroll.id);
+      setPreviewState({ payroll, data, error: null });
+    } catch (err) {
+      setPreviewState({ payroll, data: null, error: err instanceof Error ? err.message : String(err) });
+    }
+  };
+
+  const handleRecalculateFromPreview = async (payrollId: number) => {
+    setPreviewState(null);
+    await handleRecalculatePayroll(payrollId);
+  };
+
+  const handleReopenSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!reopenState) return;
+    const reason = reopenState.reason.trim();
+    if (!reason) {
+      setReopenState({ ...reopenState, error: 'A reason is required to reopen payroll.' });
+      return;
+    }
+
+    setReopenState({ ...reopenState, submitting: true, error: null });
+    try {
+      await reopenPayroll(reopenState.payroll.id, reason);
+      setReopenState(null);
+      if (user?.employeeId) await fetchPayroll(user.employeeId);
+    } catch (err) {
+      setReopenState({
+        ...reopenState,
+        submitting: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
   if (error) {
     return (
       <div className="mx-auto flex min-h-[60vh] w-full max-w-7xl items-center justify-center p-6">
@@ -181,16 +275,59 @@ const Payroll = () => {
   const grossSalaryValue = getFormattedSalaryValue(currentPayroll, salaryInfo, monthlyCTC, 'grossSalary');
   const deductionsValue = getFormattedSalaryValue(currentPayroll, salaryInfo, 0, 'deductions', '-₹');
   const currency = (value?: number | null) => `₹${value !== undefined && value !== null ? value.toLocaleString() : '0'}`;
+  const canRecalculatePayroll = ['SUPER_ADMIN', 'CEO', 'HR'].includes(String(user?.role ?? '').toUpperCase());
   const payrollColumns: DataTableColumn<PayrollType>[] = [
-    { key: 'period', header: 'Period', render: (payroll) => <span className="font-bold text-[#12354a]">{payroll.month}/{payroll.year}</span> },
+    ...(isOrganizationPayrollView ? [{
+      key: 'employee',
+      header: 'Employee',
+      render: (payroll: PayrollType) => (
+        <div className="min-w-[150px]">
+          <div className="font-semibold text-[#12354a]">
+            {[payroll.employee?.firstName, payroll.employee?.lastName].filter(Boolean).join(' ')
+              || `Employee #${payroll.employeeId}`}
+          </div>
+          <div className="text-xs text-slate-500">{payroll.employee?.empCode || `ID ${payroll.employeeId}`}</div>
+        </div>
+      ),
+    }] : []),
+    { key: 'period', header: 'Period', render: (payroll) => <span className="whitespace-nowrap font-bold text-[#12354a]">{formatPayrollPeriod(payroll)}</span> },
     { key: 'workingDays', header: 'Working days', render: (payroll) => payroll.workingDays },
     { key: 'presentDays', header: 'Present', render: (payroll) => payroll.presentDays },
     { key: 'lopDays', header: 'LOP days', render: (payroll) => payroll.lopDays },
-    { key: 'status', header: 'Status', render: (payroll) => <span className="rounded-full border px-2 py-1 text-xs font-semibold">{payroll.status}</span> },
+    { key: 'status', header: 'Status', render: (payroll) => (
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="rounded-full border px-2 py-1 text-xs font-semibold">{payroll.status}</span>
+        {payroll.needsRecalculation && (
+          <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800" title="Attendance, leave or holiday data changed after this payroll was calculated">
+            Needs recalculation
+          </span>
+        )}
+        {(payroll.revision ?? 0) > 0 && (
+          <span className="rounded-full border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600">
+            Rev {payroll.revision}
+          </span>
+        )}
+      </div>
+    ) },
     { key: 'grossSalary', header: 'Gross', render: (payroll) => <span className="font-semibold text-[#19704b]">{currency(payroll.grossSalary)}</span> },
     { key: 'deductions', header: 'Deductions', render: (payroll) => <span className="font-semibold text-[#a63e35]">-{currency(payroll.deductions)}</span> },
     { key: 'netSalary', header: 'Net salary', render: (payroll) => <span className="text-base font-bold text-[#073b5c]">{currency(payroll.netSalary)}</span> },
-    { key: 'actions', header: 'Actions', className: 'text-right', render: (payroll) => <div className="flex justify-end gap-1"><Button size="xs" variant="ghost" onClick={() => handleAddAdjustment(payroll)} disabled={payroll.status !== 'DRAFT'}>+ Adjust</Button>{shouldShowManagementButtons(user?.role) && payroll.status === 'DRAFT' && <Button size="xs" variant="ghost" onClick={() => handleFinalizePayroll(payroll.id)}>Finalize</Button>}<Button size="xs" variant="ghost" aria-label="Download payslip" title={payroll.status === 'DRAFT' ? 'Finalize payroll before downloading' : 'Download payslip'} onClick={() => handleDownloadPayslip(payroll.id)} disabled={payroll.status === 'DRAFT'}><Download size={14} /></Button></div> },
+    { key: 'actions', header: 'Actions', className: 'text-right', render: (payroll) => {
+      const isStale = Boolean(payroll.needsRecalculation);
+      const downloadTitle = payroll.status === 'DRAFT'
+        ? 'Finalize payroll before downloading'
+        : isStale ? 'Recalculate payroll before downloading' : 'Download payslip';
+      return (
+        <div className="flex justify-end gap-1">
+          {canRecalculatePayroll && payroll.status !== 'PAID' && <Button size="xs" variant="ghost" onClick={() => handlePreviewRecalculation(payroll)}>Preview</Button>}
+          {canRecalculatePayroll && payroll.status === 'DRAFT' && <Button size="xs" variant="ghost" onClick={() => handleRecalculatePayroll(payroll.id)} disabled={loading}>Recalculate</Button>}
+          {canRecalculatePayroll && payroll.status === 'FINALIZED' && <Button size="xs" variant="ghost" onClick={() => setReopenState({ payroll, reason: '', submitting: false, error: null })}>Reopen</Button>}
+          {shouldShowManagementButtons(user?.role) && <Button size="xs" variant="ghost" onClick={() => handleAddAdjustment(payroll)} disabled={payroll.status !== 'DRAFT'}>+ Adjust</Button>}
+          {shouldShowManagementButtons(user?.role) && payroll.status === 'DRAFT' && <Button size="xs" variant="ghost" onClick={() => handleFinalizePayroll(payroll.id)} disabled={isStale} title={isStale ? 'Recalculate payroll before finalizing' : undefined}>Finalize</Button>}
+          <Button size="xs" variant="ghost" aria-label="Download payslip" title={downloadTitle} onClick={() => handleDownloadPayslip(payroll.id)} disabled={payroll.status === 'DRAFT' || isStale}><Download size={14} /></Button>
+        </div>
+      );
+    } },
   ];
 
   return (
@@ -295,16 +432,18 @@ const Payroll = () => {
               </div>
             )}
 
-            <div className="mt-4 pt-4 border-t">
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2"
-                onClick={() => handleAddAdjustment(currentPayroll)}
-              >
-                <Plus size={14} /> Add Adjustment
-              </Button>
-            </div>
+            {shouldShowManagementButtons(user?.role) && (
+              <div className="mt-4 pt-4 border-t">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => handleAddAdjustment(currentPayroll)}
+                >
+                  <Plus size={14} /> Add Adjustment
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -320,6 +459,92 @@ const Payroll = () => {
             )}
         </CardContent>
       </Card>
+
+      {previewState && (
+        <ModalPortal><div role="dialog" aria-label="Recalculation preview" className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-[#12354a]">
+              Recalculation preview — {formatPayrollPeriod(previewState.payroll)}
+            </h2>
+            {!previewState.data && !previewState.error && <p className="mt-4 text-sm text-slate-500">Loading preview...</p>}
+            {previewState.error && <p className="mt-4 text-sm text-rose-700">{previewState.error}</p>}
+            {previewState.data && (
+              <div className="mt-4 space-y-4 text-sm">
+                <p className="text-slate-600">
+                  Payroll period {previewState.data.period.startDate} to {previewState.data.period.endDate}. Nothing has been changed yet.
+                </p>
+                {previewState.data.splitMixedLeaveIds.length > 0 && (
+                  <p className="rounded-lg border border-slate-300 bg-slate-50 p-3 text-slate-700">
+                    A leave with both paid and LOP days crosses this payroll period. Paid days are counted first in date order.
+                  </p>
+                )}
+                {previewState.data.differences.length === 0 ? (
+                  <p className="font-semibold text-[#19704b]">No changes: the stored payroll matches current attendance and leave.</p>
+                ) : (
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b text-xs uppercase text-slate-500">
+                        <th className="py-2">Field</th><th className="py-2 text-right">Stored</th><th className="py-2 text-right">Recalculated</th><th className="py-2 text-right">Change</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewState.data.differences.map((difference) => (
+                        <tr key={difference.field} className="border-b">
+                          <td className="py-2">{PREVIEW_FIELD_LABELS[difference.field] ?? difference.field}</td>
+                          <td className="py-2 text-right">{difference.stored?.toLocaleString() ?? '—'}</td>
+                          <td className="py-2 text-right font-semibold">{difference.recalculated?.toLocaleString() ?? '—'}</td>
+                          <td className="py-2 text-right">{difference.delta === null ? '—' : `${difference.delta > 0 ? '+' : ''}${difference.delta.toLocaleString()}`}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {!previewState.data.canRecalculate && previewState.data.differences.length > 0 && (
+                  <p className="text-slate-600">This payroll is {previewState.data.status}. Reopen it to apply these changes.</p>
+                )}
+              </div>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={() => setPreviewState(null)}>Close</Button>
+              {previewState.data?.canRecalculate && (
+                <Button size="sm" onClick={() => handleRecalculateFromPreview(previewState.payroll.id)} disabled={loading}>
+                  Apply recalculation
+                </Button>
+              )}
+            </div>
+          </div>
+        </div></ModalPortal>
+      )}
+
+      {reopenState && (
+        <ModalPortal><div role="dialog" aria-label="Reopen payroll" className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <form onSubmit={handleReopenSubmit} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-[#12354a]">
+              Reopen payroll {formatPayrollPeriod(reopenState.payroll)}
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              The payroll returns to DRAFT and must be recalculated and finalized again. The employee's payslip will be marked as revised.
+            </p>
+            <label className="mt-4 block text-sm font-medium text-slate-700">
+              Reason for correction
+              <textarea
+                value={reopenState.reason}
+                onChange={(event) => setReopenState({ ...reopenState, reason: event.target.value, error: null })}
+                className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"
+                rows={3}
+                required
+              />
+            </label>
+            {reopenState.error && <p className="mt-2 text-sm text-rose-700">{reopenState.error}</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => setReopenState(null)}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={reopenState.submitting || !reopenState.reason.trim()}>
+                {reopenState.submitting ? 'Reopening...' : 'Reopen payroll'}
+              </Button>
+            </div>
+          </form>
+        </div></ModalPortal>
+      )}
 
       {/* Modals */}
       <RunPayrollModal

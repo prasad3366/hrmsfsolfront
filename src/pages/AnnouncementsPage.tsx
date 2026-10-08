@@ -18,7 +18,7 @@ import {
 } from '../services/api';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from '../components/ui/components';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, ModalPortal } from '../components/ui/components';
 
 const MANAGEMENT_ROLES = ['SUPER_ADMIN', 'CEO', 'HR'];
 const MANAGER_ROLES = ['IT_MANAGER', 'SALES_MANAGER', 'FINANCE_MANAGER'];
@@ -113,13 +113,13 @@ const AnnouncementModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]" role="presentation">
-      <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-[#d5e1e3] bg-[#fffefa] shadow-[0_24px_80px_rgba(2,35,55,0.24)]" role="dialog" aria-modal="true" aria-labelledby="announcement-dialog-title">
-        <div className="flex items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9]/70 px-6 py-5">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]" role="presentation">
+      <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#d5e1e3] bg-[#fffefa] shadow-[0_24px_80px_rgba(2,35,55,0.24)]" role="dialog" aria-modal="true" aria-labelledby="announcement-dialog-title">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9]/70 px-6 py-5">
           <div><p className="text-xs font-semibold uppercase tracking-widest text-[#b08a3e]">Company broadcast</p><h2 id="announcement-dialog-title" className="mt-1 text-xl font-bold text-[#073b5c]">{announcement ? 'Edit announcement' : 'Post announcement'}</h2></div>
           <button type="button" aria-label="Close dialog" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={19} /></button>
         </div>
-        <form onSubmit={submit} className="space-y-5 p-6">
+        <form onSubmit={submit} className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-6">
           {error && <p role="alert" className="rounded-lg border border-[#f3c9c3] bg-[#fff1ef] px-3 py-2 text-sm text-[#a63e35]">{error}</p>}
           <label className="block text-sm font-medium text-slate-700">Title *<Input className="mt-2" value={form.title} onChange={(event) => update('title', event.target.value)} placeholder="Write a clear headline" /></label>
           <label className="block text-sm font-medium text-slate-700">Content *<textarea value={form.content} onChange={(event) => update('content', event.target.value)} rows={5} placeholder="Share the details with your colleagues" className="mt-2 w-full rounded-xl border border-[#cbd9dc] px-3 py-2 text-sm text-[#12354a] outline-none transition focus:border-[#b08a3e] focus:ring-2 focus:ring-[#b08a3e]/20" /></label>
@@ -144,10 +144,10 @@ const AnnouncementModal = ({
             <label className="text-sm font-medium text-slate-700">Expiration date<Input className="mt-2" type="date" value={form.expiresAt} onChange={(event) => update('expiresAt', event.target.value)} /></label>
           </div>
           <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={form.isPinned} onChange={(event) => update('isPinned', event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-[#b08a3e] focus:ring-[#b08a3e]" />Pin this announcement for visibility</label>
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-5"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving...' : announcement ? 'Save changes' : 'Post announcement'}</Button></div>
+          <div className="sticky bottom-0 -mx-6 -mb-6 flex justify-end gap-3 border-t border-slate-100 bg-[#fffefa] px-6 py-4"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving...' : announcement ? 'Save changes' : 'Post announcement'}</Button></div>
         </form>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 };
 

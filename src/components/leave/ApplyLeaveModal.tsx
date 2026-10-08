@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { X, AlertCircle, FileText } from 'lucide-react';
-import { Button, Input, Select } from '../../components/ui/components';
+import { Button, Input, Select, ModalPortal } from '../../components/ui/components';
 import { CreateLeaveDto, LeaveTypeOption } from '../../services/api';
 
 interface ApplyLeaveModalProps {
@@ -118,7 +118,7 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]">
       <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-white/70 bg-[#fffefa] shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
         {/* Header */}
         <div className="flex flex-shrink-0 items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9]/70 p-4 sm:p-6">
@@ -264,7 +264,7 @@ const ApplyLeaveModal: React.FC<ApplyLeaveModalProps> = ({ isOpen, onClose, onSu
           </div>
         </form>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 };
 
