@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
   Button,
-  Label,
+  Label, ModalPortal
 } from '../ui/components';
 import { X, Loader2, UserPlus, AlertCircle, CheckCircle } from 'lucide-react';
 
@@ -153,7 +153,7 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-lg border-0 shadow-2xl max-h-[80vh] overflow-hidden flex flex-col">
         <CardHeader className="flex flex-row items-center justify-between shrink-0">
           <CardTitle>Add Members to {teamName}</CardTitle>
@@ -274,6 +274,6 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
           </div>
         </form>
       </Card>
-    </div>
+    </div></ModalPortal>
   );
 };

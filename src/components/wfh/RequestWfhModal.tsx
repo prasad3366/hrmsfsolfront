@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { useWfh } from '../../hooks/useWfh';
 import { useNotifications } from '../../context/NotificationContext';
 import { RequestWfhDto } from '../../services/api';
+import { ModalPortal } from '../ui/components';
 
 interface RequestWfhModalProps {
   isOpen: boolean;
@@ -147,10 +148,10 @@ export const RequestWfhModal: React.FC<RequestWfhModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]">
-      <div className="mx-4 w-full max-w-md overflow-hidden rounded-2xl border border-white/70 bg-[#fffefa] shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]">
+      <div className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/70 bg-[#fffefa] shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
         {/* Header */}
-          <div className="flex items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9]/70 p-6">
+          <div className="flex shrink-0 items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9]/70 p-6">
           <h2 className="text-lg font-bold text-[#073b5c]">Request work from home</h2>
           <button
             onClick={onClose}
@@ -161,7 +162,7 @@ export const RequestWfhModal: React.FC<RequestWfhModalProps> = ({
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-6">
           {/* Success Message */}
           {requestSuccess && (
             <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
@@ -239,8 +240,8 @@ export const RequestWfhModal: React.FC<RequestWfhModalProps> = ({
             />
           </div>
 
-          {/* Buttons */}
-          <div className="flex gap-3 pt-4">
+          {/* Buttons: pinned to the bottom of the scrolling body */}
+          <div className="sticky bottom-0 -mx-6 -mb-6 flex gap-3 border-t border-[#dce6e8] bg-[#fffefa] px-6 py-4">
             <button
               type="button"
               onClick={onClose}
@@ -259,6 +260,6 @@ export const RequestWfhModal: React.FC<RequestWfhModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 };

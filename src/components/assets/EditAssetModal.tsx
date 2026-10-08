@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '../ui/components';
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, ModalPortal } from '../ui/components';
 import type { Asset } from '../../services/api';
 
 interface EditAssetModalProps {
@@ -38,7 +38,7 @@ export const EditAssetModal = ({ asset, isLoading, onClose, onSubmit }: EditAsse
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-md border-0 shadow-xl">
         <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
           <CardTitle>Edit Asset</CardTitle>
@@ -64,6 +64,6 @@ export const EditAssetModal = ({ asset, isLoading, onClose, onSubmit }: EditAsse
           </form>
         </CardContent>
       </Card>
-    </div>
+    </div></ModalPortal>
   );
 };

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { X, AlertCircle, Info } from 'lucide-react';
-import { Button } from '../../components/ui/components';
+import { Button, ModalPortal } from '../../components/ui/components';
 import { LeaveType } from '../../services/api';
 
 interface CarryForwardModalProps {
@@ -65,7 +65,7 @@ const CarryForwardModal: React.FC<CarryForwardModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-200">
@@ -181,7 +181,7 @@ const CarryForwardModal: React.FC<CarryForwardModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 };
 

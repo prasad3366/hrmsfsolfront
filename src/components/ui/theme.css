@@ -23,6 +23,8 @@
 
 html {
   background: #f5f8f8;
+  /* Reserve the scrollbar lane so locking scroll for a modal never shifts the layout */
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -142,13 +144,15 @@ body {
 
 .shell-main {
   background: linear-gradient(180deg, #f8faf9 0%, #f5f8f8 100%);
-  animation: shell-content-enter 220ms ease-out both;
+  /* Opacity-only and no fill mode: a retained transform/stacking context here would make
+     every fixed-position overlay inside a page position against this element, not the viewport. */
+  animation: shell-content-enter 220ms ease-out;
   min-height: calc(100vh - 4rem);
+  min-width: 0;
 }
 
 .shell-main > * {
-  position: relative;
-  z-index: 1;
+  min-width: 0;
 }
 
 .announcements-page .text-blue-600,
@@ -440,8 +444,8 @@ body {
 @keyframes ocean-particle-rise { from { transform: translate3d(0, 2rem, 0); } to { transform: translate3d(1.5rem, -12rem, 0); } }
 
 @keyframes shell-content-enter {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 ::selection {
@@ -471,4 +475,83 @@ textarea {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* ------------------------------------------------------------------
+   Global modal standard
+   Every overlay (shared Dialog/Modal and the custom module modals) is
+   rendered through <ModalPortal>, which locks page scrolling. These rules
+   keep the panel inside the viewport and move overflow inside the panel.
+   ------------------------------------------------------------------ */
+.app-modal-overlay {
+  --modal-gutter: clamp(0.5rem, 2.5vw, 1.5rem);
+  padding: var(--modal-gutter) !important;
+  overscroll-behavior: contain;
+}
+
+/* The panel (last child of the overlay, or the child of the shared dialog wrapper)
+   is always bounded by the viewport, so it can never extend below the screen. */
+.app-modal-overlay > :last-child:not(button):not(.app-modal-dialog),
+.app-modal-dialog > * {
+  max-height: calc(100vh - 2 * var(--modal-gutter));
+  max-height: calc(100dvh - 2 * var(--modal-gutter));
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+/* Fallback scrolling for panels without their own layout. Zero specificity, so a panel
+   that defines an internal scrolling body (header / body / footer) keeps overflow-hidden
+   and never gets a second, nested scrollbar. */
+:where(.app-modal-overlay > :last-child:not(button):not(.app-modal-dialog), .app-modal-dialog > *) {
+  overflow-y: auto;
+}
+
+.app-modal-dialog {
+  max-height: 100%;
+}
+
+/* ------------------------------------------------------------------
+   KPI cards: fluid grid + typography that never overlaps
+   ------------------------------------------------------------------ */
+.kpi-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+
+.kpi-card__label {
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  line-height: 1.35;
+}
+
+.kpi-card__value {
+  font-size: clamp(1.35rem, 1.05rem + 0.9vw, 1.85rem);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Dashboard chart grids collapse to one column on narrow content widths */
+.dashboard-grid-2 {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+}
+
+.dashboard-grid-3 {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+}
+
+.dashboard-table th,
+.dashboard-table td {
+  white-space: nowrap;
+}
+
+.dashboard-table td.dashboard-table__wrap {
+  white-space: normal;
+  min-width: 12rem;
 }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import { Button } from '../../components/ui/components';
+import { Button, ModalPortal } from '../../components/ui/components';
 
 interface ApproveRejectLeaveModalProps {
   isOpen: boolean;
@@ -52,8 +52,8 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-2 backdrop-blur-[2px] sm:p-4">
-      <div className="flex h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/70 bg-[#fffefa] shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-2 backdrop-blur-[2px] sm:p-4">
+      <div className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/70 bg-[#fffefa] shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
         {/* Header */}
         <div className="flex flex-shrink-0 items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9]/70 p-4 sm:p-6">
           <h2 className="text-xl font-bold text-[#073b5c] sm:text-2xl">
@@ -69,7 +69,7 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
         </div>
 
         {/* Body */}
-        <form onSubmit={actionType === 'approve' ? handleApprove : handleReject} className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1">
+        <form onSubmit={actionType === 'approve' ? handleApprove : handleReject} className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {leaveDetails && (
             <>
               <div className="space-y-4 rounded-xl border border-[#dce6e8] bg-[#f6faf9] p-4 sm:space-y-5 sm:p-6">
@@ -140,7 +140,7 @@ const ApproveRejectLeaveModal: React.FC<ApproveRejectLeaveModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 };
 

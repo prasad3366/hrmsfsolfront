@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, Button, Input } from '../../components/ui/components';
+import { Card, CardContent, CardHeader, CardTitle, Button, Input, ModalPortal } from '../../components/ui/components';
 import { X, Loader, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
 import ApiService, { CreateEmployeeDto } from '../../services/api';
 
@@ -295,11 +295,13 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-2xl border-0 shadow-2xl max-h-[90vh] overflow-y-auto">
-        <CardHeader className="flex flex-row items-center justify-between sticky top-0 bg-white border-b">
-          <CardTitle>{mode === 'edit' ? 'Edit Employee' : 'Create New Employee'}</CardTitle>
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <Card role="dialog" aria-modal="true" aria-labelledby="employee-modal-title" className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden border-0 shadow-2xl">
+        <CardHeader className="flex shrink-0 flex-row items-center justify-between border-b border-[#e4ecec] bg-[#fffdfb]">
+          <CardTitle><span id="employee-modal-title">{mode === 'edit' ? 'Edit Employee' : 'Create New Employee'}</span></CardTitle>
           <button
+            type="button"
+            aria-label="Close dialog"
             onClick={onClose}
             className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
             disabled={isSubmitting}
@@ -308,7 +310,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
           </button>
         </CardHeader>
 
-        <CardContent className="space-y-6 pt-6">
+        <CardContent className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain pt-6">
           {/* Credential Deactivation Warning */}
           {credentialsWillBeDeactivated && (
             <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg flex items-start gap-3">
@@ -371,7 +373,7 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form id="employee-modal-form" onSubmit={handleSubmit} className="space-y-5">
             {/* Personal Information */}
             <div className="border-b pb-5">
               <h3 className="text-sm font-semibold text-slate-900 mb-4">Personal Information</h3>
@@ -965,33 +967,6 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
               </div>
             </div>
 
-            {/* Form Actions */}
-            <div className="flex gap-3 pt-4">
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader size={18} className="animate-spin mr-2" />
-                    {submittingText}
-                  </>
-                ) : (
-                  submitText
-                )}
-              </Button>
-              <Button
-                type="button"
-                onClick={onClose}
-                disabled={isSubmitting}
-                variant="outline"
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-            </div>
-
             {/* Info Box */}
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-xs text-blue-700">
@@ -1002,7 +977,34 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
             </div>
           </form>
         </CardContent>
+        {/* Form actions: a fixed footer outside the scrolling body, so they are always reachable */}
+        <div className="flex shrink-0 gap-3 border-t border-[#e4ecec] bg-[#fffdfb] px-5 py-4">
+          <Button
+            type="submit"
+            form="employee-modal-form"
+            disabled={isSubmitting}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader size={18} className="animate-spin mr-2" />
+                {submittingText}
+              </>
+            ) : (
+              submitText
+            )}
+          </Button>
+          <Button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            variant="outline"
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+        </div>
       </Card>
-    </div>
+    </div></ModalPortal>
   );
 };

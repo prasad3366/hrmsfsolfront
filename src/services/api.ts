@@ -260,10 +260,11 @@ const normalizeAttendanceRecord = (record: Partial<AttendanceRecord> & {
     record.punchOutLocationStatus ?? record.checkOutLocation ?? record.punchOutLocation ?? null,
   );
   const sourceStatus = String(record.status ?? '').toUpperCase();
+  // A check-in counts as present even when there is no check-out
   const status: AttendanceRecord['status'] = sourceStatus === 'LEAVE'
     ? 'LEAVE'
     : punchIn && !punchOut
-      ? 'IN_PROGRESS'
+      ? 'PRESENT'
       : punchIn && punchOut
         ? (sourceStatus === 'PRESENT' || sourceStatus === 'HALF_DAY' || sourceStatus === 'ABSENT'
           ? sourceStatus
@@ -597,6 +598,12 @@ export interface PayrollAdjustment {
 export interface Payroll {
   id: number;
   employeeId: number;
+  employee?: {
+    id: number;
+    empCode: string;
+    firstName: string;
+    lastName: string;
+  };
   salaryId: number;
   month: number;
   year: number;
@@ -617,9 +624,38 @@ export interface Payroll {
   deductions: number;
   netSalary: number;
   status: 'DRAFT' | 'FINALIZED' | 'PAID';
+  /** Attendance/leave/holiday data changed after calculation; recalculate before finalizing */
+  needsRecalculation?: boolean;
+  /** Number of times this payroll was reopened for correction */
+  revision?: number;
+  /** Authoritative payroll period (29th previous month to 28th), YYYY-MM-DD */
+  period?: { startDate: string; endDate: string };
   others?: PayrollAdjustment[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface PayrollRecalculationDifference {
+  field: string;
+  stored: number | null;
+  recalculated: number | null;
+  delta: number | null;
+}
+
+export interface PayrollRecalculationPreview {
+  payrollId: number;
+  employeeId: number;
+  month: number;
+  year: number;
+  status: Payroll['status'];
+  needsRecalculation: boolean;
+  revision: number;
+  period: { startDate: string; endDate: string };
+  stored: Record<string, number | null>;
+  recalculated: Record<string, number | null>;
+  differences: PayrollRecalculationDifference[];
+  splitMixedLeaveIds: number[];
+  canRecalculate: boolean;
 }
 
 // =========== SALARY TYPES ===========
@@ -628,6 +664,10 @@ export interface AssignSalaryDto {
   employeeId?: number;
   empCode?: string;
   annualCTC: number;
+  /** Component basis for Basic/HRA/Conveyance/Special Allowance */
+  monthlyGross?: number;
+  /** YYYY-MM-DD; a new salary row applies from this date */
+  effectiveFrom?: string;
   structureId: number;
 }
 
@@ -638,6 +678,8 @@ export interface EmployeeSalary {
   structure?: { id?: number; name?: string } | null;
   annualCTC: number;
   monthlyCTC: number;
+  /** Null for legacy rows, where payroll uses monthlyCTC */
+  monthlyGross?: number | null;
   effectiveFrom: string;
   createdAt?: string;
   updatedAt?: string;
@@ -649,6 +691,8 @@ export interface SalaryStructure {
   basicPercent: number;
   hraPercent: number;
   conveyancePercent: number;
+  /** Fixed monthly conveyance; null for legacy percentage-based structures */
+  conveyanceAmount?: number | null;
   pfPercent: number;
   ptAmount: number;
   healthInsurance: number;
@@ -1930,7 +1974,27 @@ class ApiService {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create employee');
+        const responseBody = await response.text().catch(() => '');
+        let backendMessage = '';
+
+        try {
+          const errorData = JSON.parse(responseBody) as {
+            message?: unknown;
+            error?: unknown;
+          };
+          const message = errorData?.message ?? errorData?.error;
+          if (Array.isArray(message)) {
+            backendMessage = message.map(String).join(', ');
+          } else if (typeof message === 'string') {
+            backendMessage = message;
+          }
+        } catch {
+          backendMessage = responseBody.trim();
+        }
+
+        throw new Error(
+          `${backendMessage || 'Failed to create employee'} (HTTP ${response.status})`,
+        );
       }
 
       return await response.json();
@@ -2546,6 +2610,45 @@ class ApiService {
     return response.json();
   }
 
+  async recalculatePayroll(payrollId: number): Promise<Payroll> {
+    const response = await fetch(`${API_BASE_URL}/payroll/${payrollId}/recalculate`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || 'Failed to recalculate payroll');
+    }
+    return response.json();
+  }
+
+  /** Read-only: what recalculation would change for this payroll */
+  async previewPayrollRecalculation(payrollId: number): Promise<PayrollRecalculationPreview> {
+    const response = await fetch(`${API_BASE_URL}/payroll/${payrollId}/recalculate-preview`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || 'Failed to preview payroll recalculation');
+    }
+    return response.json();
+  }
+
+  /** Reopens a finalized payroll for correction (reason is mandatory) */
+  async reopenPayroll(payrollId: number, reason: string): Promise<Payroll> {
+    const response = await fetch(`${API_BASE_URL}/payroll/${payrollId}/reopen`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ reason }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || 'Failed to reopen payroll');
+    }
+    return response.json();
+  }
+
   /** Manual "Generate Payslip" action for HR/Admin/Manager - runs payroll
    * for the given employee/period if it hasn't been run yet, then downloads
    * the payslip PDF directly. */
@@ -2694,7 +2797,7 @@ class ApiService {
     }
   }
 
-  private async tryEmployeeIdUrl(url: string): Promise<number | null> {
+  private async tryEmployeeIdUrl(url: string): Promise<{ employeeId: number; firstName?: string; lastName?: string } | null> {
     try {
       const response = await fetch(url, {
         method: 'GET',
@@ -2704,25 +2807,26 @@ class ApiService {
       if (!response.ok) return null;
 
       const data = await response.json();
-      if ('employeeId' in data) return data.employeeId;
-      if ('id' in data) return data.id;
-      
-      return null;
+      const employeeId = 'employeeId' in data ? data.employeeId : 'id' in data ? data.id : null;
+      if (!employeeId) return null;
+
+      // The same employee record also carries the person's name
+      return { employeeId, firstName: data.firstName, lastName: data.lastName };
     } catch (error) {
       console.debug('Failed employee ID URL fetch', error);
       return null;
     }
   }
 
-  async getEmployeeIdByUserId(): Promise<{ employeeId: number }> {
+  async getEmployeeIdByUserId(): Promise<{ employeeId: number; firstName?: string; lastName?: string }> {
     const urls = [
       `${API_BASE_URL}/employees/me`,
       `${API_BASE_URL}/employees/info/id`,
     ];
 
     for (const url of urls) {
-      const employeeId = await this.tryEmployeeIdUrl(url);
-      if (employeeId) return { employeeId };
+      const employee = await this.tryEmployeeIdUrl(url);
+      if (employee) return employee;
     }
 
     throw new Error('Failed to get employee ID');
@@ -2903,32 +3007,39 @@ class ApiService {
    * this needs no ADMIN/HR/MANAGER role - the server resolves the employee
    * from the auth token. */
   async getMyPayroll(): Promise<Payroll[]> {
+    // A failure must surface as an error, never as an empty payroll history
+    const loadError = 'Unable to load payroll history. Please try again.';
+    let response: Response;
     try {
-      const response = await fetch(`${API_BASE_URL}/payroll/my`, {
+      response = await fetch(`${API_BASE_URL}/payroll/my`, {
         method: 'GET',
         headers: this.getAuthHeaders(),
       });
-
-      if (!response.ok) {
-        console.warn(`Payroll/my endpoint returned ${response.status}`);
-        return [];
-      }
-
-      const data = await response.json();
-      return Array.isArray(data) ? data : [];
     } catch (error) {
       console.warn('Error fetching own payroll:', error);
-      return [];
+      throw new Error(loadError);
     }
+
+    if (!response.ok) {
+      console.warn(`Payroll/my endpoint returned ${response.status}`);
+      throw new Error(loadError);
+    }
+
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
   }
 
-  async getPayroll(employeeId: number): Promise<Payroll[]> {
-    if (!employeeId || employeeId <= 0) {
+  async getPayroll(employeeId?: number): Promise<Payroll[]> {
+    if (employeeId !== undefined && (!Number.isInteger(employeeId) || employeeId <= 0)) {
       return [];
     }
-    
+
+    const endpoint = employeeId === undefined
+      ? `${API_BASE_URL}/payroll`
+      : `${API_BASE_URL}/payroll?employeeId=${employeeId}`;
+
     try {
-      const response = await fetch(`${API_BASE_URL}/payroll?employeeId=${employeeId}`, {
+      const response = await fetch(endpoint, {
         method: 'GET',
         headers: this.getAuthHeaders(),
       });
@@ -2936,7 +3047,7 @@ class ApiService {
       if (!response.ok) {
         // Log the error but return empty array for 404 or server errors
         if (response.status === 404 || response.status === 500 || response.status === 400) {
-          console.warn(`Payroll endpoint returned ${response.status} for employee ${employeeId}`);
+          console.warn(`Payroll endpoint returned ${response.status}`);
           return [];
         }
         throw new Error(`HTTP ${response.status}: Failed to fetch payroll`);
@@ -2945,7 +3056,7 @@ class ApiService {
       const data = await response.json();
       return Array.isArray(data) ? data : [];
     } catch (error) {
-      console.warn(`Error fetching payroll for employee ${employeeId}:`, error);
+      console.warn('Error fetching payroll:', error);
       return [];
     }
   }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import { Button, Input } from '../../components/ui/components';
+import { Button, Input, ModalPortal } from '../../components/ui/components';
 
 interface CreateHolidayModalProps {
   isOpen: boolean;
@@ -49,7 +49,7 @@ const CreateHolidayModal: React.FC<CreateHolidayModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between p-6 border-b border-slate-200 bg-gradient-to-r from-blue-600 to-blue-700">
@@ -177,7 +177,7 @@ const CreateHolidayModal: React.FC<CreateHolidayModalProps> = ({
           </Button>
         </div>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 };
 

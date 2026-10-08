@@ -39,7 +39,8 @@ export const getRecordAttendanceState = (record?: Partial<AttendanceRecord> | nu
   const punchOut = record.punchOut ?? null;
 
   if (recordStatus === 'LEAVE') return 'LEAVE';
-  if (punchIn && !punchOut) return 'IN_PROGRESS';
+  // A check-in counts as present even when there is no check-out
+  if (punchIn && !punchOut) return 'PRESENT';
   if (punchIn && punchOut) return recordStatus === 'PRESENT' || recordStatus === 'HALF_DAY' || recordStatus === 'ABSENT' ? recordStatus : 'COMPLETED';
   return 'ABSENT';
 };

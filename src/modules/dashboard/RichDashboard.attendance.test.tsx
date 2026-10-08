@@ -1,7 +1,31 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { DashboardAttendanceAction } from './RichDashboard';
+import { DashboardAttendanceAction, DashboardAttendanceSection } from './RichDashboard';
+
+describe('DashboardAttendanceSection worked hours', () => {
+  const props = {
+    state: 'COMPLETED' as const,
+    isLoading: false,
+    isGeoLoading: false,
+    error: null,
+    actionError: null,
+    onPunchIn: vi.fn(),
+    onPunchOut: vi.fn(),
+  };
+
+  beforeEach(() => cleanup());
+
+  it('shows worked hours as hours and minutes', () => {
+    render(<DashboardAttendanceSection {...props} totalHours={9.86} />);
+    expect(screen.getByText('Worked hours: 9h 52m')).toBeTruthy();
+  });
+
+  it('keeps "Not recorded" when there are no worked hours', () => {
+    render(<DashboardAttendanceSection {...props} totalHours={null} />);
+    expect(screen.getByText('Worked hours: Not recorded')).toBeTruthy();
+  });
+});
 
 describe('DashboardAttendanceAction', () => {
   const baseProps = {

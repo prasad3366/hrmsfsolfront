@@ -1,4 +1,5 @@
 import React, { forwardRef, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { clsx, type ClassValue } from 'clsx';
 import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Inbox, Loader2, Search, X } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
@@ -191,7 +192,7 @@ export const Pagination = ({ page, pageCount, onPageChange }: { page: number; pa
 export const PageHeader = ({ title, description, actions }: { title: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode }) => <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#b08a3e]">FooDeeZ workspace</p><h1 className="text-2xl font-bold tracking-tight text-[#073b5c] sm:text-3xl">{title}</h1>{description && <p className="mt-2 max-w-2xl text-sm leading-6 text-[#617984]">{description}</p>}</div>{actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}</header>;
 export const SectionHeader = ({ title, description, action }: { title: React.ReactNode; description?: React.ReactNode; action?: React.ReactNode }) => <div className="mb-4 flex items-start justify-between gap-4"><div><h2 className="text-lg font-bold text-[#12354a]">{title}</h2>{description && <p className="mt-1 text-sm text-[#78909a]">{description}</p>}</div>{action}</div>;
 export const OceanCard = Card;
-export const StatCard = ({ label, value, detail, icon, className }: { label: React.ReactNode; value: React.ReactNode; detail?: React.ReactNode; icon?: React.ReactNode; className?: string }) => <Card hoverEffect className={cn('relative overflow-hidden p-5', className)}><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#78909a]">{label}</p><p className="mt-3 text-2xl font-bold text-[#073b5c]">{value}</p>{detail && <p className="mt-1 text-xs text-[#617984]">{detail}</p>}</div>{icon && <span className="rounded-xl bg-[#eaf3f7] p-2.5 text-[#1e627d]">{icon}</span>}</div></Card>;
+export const StatCard = ({ label, value, detail, icon, className }: { label: React.ReactNode; value: React.ReactNode; detail?: React.ReactNode; icon?: React.ReactNode; className?: string }) => <Card hoverEffect className={cn('kpi-card relative h-full min-w-0 overflow-hidden p-5', className)}><div className="flex min-w-0 items-start gap-3">{icon && <span className="shrink-0 rounded-xl bg-[#eaf3f7] p-2.5 text-[#1e627d]">{icon}</span>}<div className="min-w-0 flex-1"><p className="kpi-card__label text-xs font-semibold uppercase tracking-[0.08em] text-[#78909a]">{label}</p><p className="kpi-card__value mt-2 font-bold text-[#073b5c]">{value}</p>{detail && <p className="mt-1 break-words text-xs leading-5 text-[#617984]">{detail}</p>}</div></div></Card>;
 export const KpiCard = StatCard;
 
 export const Tabs = ({ tabs, value, onChange }: { tabs: { value: string; label: React.ReactNode; disabled?: boolean }[]; value: string; onChange: (value: string) => void }) => <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-[#dce6e8]">{tabs.map((tab) => <button key={tab.value} type="button" role="tab" aria-selected={value === tab.value} disabled={tab.disabled} onClick={() => onChange(tab.value)} className={cn('whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e] disabled:opacity-50', value === tab.value ? 'border-[#b08a3e] text-[#073b5c]' : 'border-transparent text-[#78909a] hover:border-[#bfd2d5] hover:text-[#12354a]')}>{tab.label}</button>)}</div>;
@@ -204,6 +205,40 @@ export const ProgressBar = ({ value, label, showValue = false }: { value: number
 
 export const Timeline = ({ items }: { items: { title: React.ReactNode; description?: React.ReactNode; date?: React.ReactNode; status?: 'done' | 'active' | 'pending' }[] }) => <ol className="space-y-5">{items.map((item, index) => <li key={index} className="relative flex gap-3"><span className={cn('mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border', item.status === 'done' ? 'border-[#b8e2d0] bg-[#eaf7f1] text-[#19704b]' : item.status === 'active' ? 'border-[#ead5a0] bg-[#fff7e7] text-[#8b641b]' : 'border-[#d5e1e3] bg-[#edf3f5] text-[#78909a]')}>{item.status === 'done' ? <CheckCircle2 size={15} /> : item.status === 'active' ? <Clock3 size={15} /> : <span className="h-2 w-2 rounded-full bg-current" />}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap justify-between gap-2"><p className="text-sm font-semibold text-[#12354a]">{item.title}</p>{item.date && <time className="text-xs text-[#78909a]">{item.date}</time>}</div>{item.description && <p className="mt-1 text-sm text-[#78909a]">{item.description}</p>}</div></li>)}</ol>;
 
+// --- Modal infrastructure ---
+// Every overlay locks page scrolling while it is open. A counter keeps the lock
+// in place when dialogs are stacked (e.g. a confirmation opened from a form).
+let scrollLockCount = 0;
+let previousRootOverflow = '';
+
+export const useBodyScrollLock = (active = true) => {
+  useEffect(() => {
+    if (!active || typeof document === 'undefined') return undefined;
+    const root = document.documentElement;
+    if (scrollLockCount === 0) {
+      previousRootOverflow = root.style.overflow;
+      root.style.overflow = 'hidden';
+      root.classList.add('modal-scroll-locked');
+    }
+    scrollLockCount += 1;
+    return () => {
+      scrollLockCount = Math.max(0, scrollLockCount - 1);
+      if (scrollLockCount === 0) {
+        root.style.overflow = previousRootOverflow;
+        root.classList.remove('modal-scroll-locked');
+      }
+    };
+  }, [active]);
+};
+
+/* Renders an overlay at <body> level so it is always positioned against the
+   viewport (never trapped by a transformed or stacked ancestor) and locks page scroll. */
+export const ModalPortal = ({ children }: { children: React.ReactNode }) => {
+  useBodyScrollLock(true);
+  if (typeof document === 'undefined') return <>{children}</>;
+  return createPortal(children, document.body);
+};
+
 // --- Dialog ---
 interface DialogProps {
   open: boolean;
@@ -211,55 +246,62 @@ interface DialogProps {
   children: React.ReactNode;
 }
 
-export const Dialog = ({ open, onOpenChange, children }: DialogProps) => {
+const DialogLayer = ({ onOpenChange, children }: Omit<DialogProps, 'open'>) => {
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onOpenChange(false);
     };
     document.addEventListener('keydown', handleKeyDown);
     dialogRef.current?.focus();
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onOpenChange]);
-
-  if (!open) return null;
+  }, [onOpenChange]);
 
   const handleBackdropClick = () => onOpenChange(false);
-  
+
   const handleBackdropKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (e.key === 'Escape') onOpenChange(false);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/35">
-      <button
-        type="button"
-        aria-label="Close dialog"
-        onClick={handleBackdropClick}
-        onKeyDown={handleBackdropKeyDown}
-        className="absolute inset-0"
-      />
-      <div
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        tabIndex={-1}
-        ref={dialogRef}
-        className="relative"
-      >
-        {children}
+    <ModalPortal>
+      <div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 backdrop-blur-[2px]">
+        <button
+          type="button"
+          aria-label="Close dialog"
+          tabIndex={-1}
+          onClick={handleBackdropClick}
+          onKeyDown={handleBackdropKeyDown}
+          className="absolute inset-0 cursor-default"
+        />
+        <div
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          tabIndex={-1}
+          ref={dialogRef}
+          className="app-modal-dialog relative flex max-h-full min-h-0 w-full justify-center outline-none"
+        >
+          {children}
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 };
 
-export const Modal = ({ open, onOpenChange, title, children, className }: DialogProps & { title?: React.ReactNode; className?: string }) => (
+export const Dialog = ({ open, onOpenChange, children }: DialogProps) => {
+  if (!open) return null;
+  return <DialogLayer onOpenChange={onOpenChange}>{children}</DialogLayer>;
+};
+
+/* Standard modal: header and footer stay visible while the body scrolls inside the panel. */
+export const Modal = ({ open, onOpenChange, title, children, className, footer }: DialogProps & { title?: React.ReactNode; className?: string; footer?: React.ReactNode }) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
-    <div className={cn('max-h-[calc(100vh-2rem)] w-[min(100%-2rem,40rem)] overflow-y-auto rounded-2xl border border-[#e7eef0] bg-[#fffdfb] p-5 shadow-[0_18px_48px_rgba(2,35,55,0.14)]', className)}>
-      {title && <div className="mb-5 flex items-center justify-between gap-4 border-b border-[#e4ecec] pb-4"><h2 className="text-lg font-bold text-[#073b5c]">{title}</h2><button type="button" onClick={() => onOpenChange(false)} aria-label="Close dialog" className="rounded-lg p-1.5 text-[#78909a] transition-colors hover:bg-[#edf3f5] hover:text-[#12354a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e]"><X size={18} /></button></div>}
-      {children}
+    <div className={cn('flex max-h-full w-[min(100%,40rem)] flex-col overflow-hidden rounded-2xl border border-[#e7eef0] bg-[#fffdfb] shadow-[0_24px_64px_rgba(2,35,55,0.2)]', className)}>
+      {title && <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#e4ecec] px-5 py-4"><h2 className="min-w-0 text-lg font-bold text-[#073b5c]">{title}</h2><button type="button" onClick={() => onOpenChange(false)} aria-label="Close dialog" className="shrink-0 rounded-lg p-1.5 text-[#78909a] transition-colors hover:bg-[#edf3f5] hover:text-[#12354a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b08a3e]"><X size={18} /></button></div>}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
+      {footer && <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-[#e4ecec] bg-[#f6faf9] px-5 py-4 sm:flex-row sm:justify-end">{footer}</div>}
     </div>
   </Dialog>
 );
@@ -274,9 +316,8 @@ export const Drawer = ({ open, onOpenChange, title, children, side = 'right' }: 
 );
 
 export const ConfirmationDialog = ({ open, onOpenChange, title = 'Are you sure?', description, confirmLabel = 'Confirm', onConfirm, destructive = false }: { open: boolean; onOpenChange: (open: boolean) => void; title?: React.ReactNode; description?: React.ReactNode; confirmLabel?: string; onConfirm: () => void; destructive?: boolean }) => (
-  <Modal open={open} onOpenChange={onOpenChange} title={title} className="max-w-md">
+  <Modal open={open} onOpenChange={onOpenChange} title={title} className="max-w-md" footer={<><Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><Button variant={destructive ? 'danger' : 'gold'} onClick={() => { onConfirm(); onOpenChange(false); }}>{confirmLabel}</Button></>}>
     <p className="text-sm leading-6 text-[#617984]">{description}</p>
-    <div className="mt-6 flex justify-end gap-2"><Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><Button variant={destructive ? 'danger' : 'gold'} onClick={() => { onConfirm(); onOpenChange(false); }}>{confirmLabel}</Button></div>
   </Modal>
 );
 

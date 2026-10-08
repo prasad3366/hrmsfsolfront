@@ -3,6 +3,7 @@ import { CheckCircle, XCircle, Clock } from 'lucide-react';
 import { WfhRequest } from '../../services/api';
 import { useWfh } from '../../hooks/useWfh';
 import { useNotifications } from '../../context/NotificationContext';
+import { ModalPortal } from '../ui/components';
 
 interface WfhApprovalListProps {
   requests: WfhRequest[];
@@ -257,7 +258,7 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
 
       {/* Confirm Dialog */}
       {confirmDialog.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <ModalPortal><div className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               {confirmDialog.action === 'approve'
@@ -294,7 +295,7 @@ export const WfhApprovalList: React.FC<WfhApprovalListProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div></ModalPortal>
       )}
     </>
   );

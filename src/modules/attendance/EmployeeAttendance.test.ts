@@ -120,6 +120,36 @@ describe('Employee Attendance location display', () => {
   });
 });
 
+describe('Employee Attendance working hours display', () => {
+  afterEach(() => cleanup());
+
+  beforeEach(() => {
+    mockGetAttendanceEmployees.mockReset();
+    mockGetEmployeeAttendance.mockReset();
+    mockGetEmployeeAttendanceSummary.mockReset();
+    mockGetEmployee360Leave.mockReset();
+    mockRole.value = 'HR';
+  });
+
+  it('shows worked hours as hours and minutes instead of decimal hours', async () => {
+    // Fixture record has totalHours 8.53 -> 8h 32m
+    await renderAttendanceWithEmployee();
+
+    expect(await screen.findByText('8h 32m')).toBeTruthy();
+    expect(screen.queryByText('8.53')).toBeNull();
+  });
+
+  it('keeps "-" when no working hours are recorded', async () => {
+    await renderAttendanceWithEmployee({ recentHistory: [] }, {
+      data: [{ ...attendanceResponse.data[0], id: 'no-hours', totalHours: null }],
+      meta: { totalPages: 1 },
+    });
+
+    await waitFor(() => expect(screen.queryByText('8h 32m')).toBeNull());
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+  });
+});
+
 describe('Employee Attendance Add Missed Attendance', () => {
   afterEach(() => {
     cleanup();
@@ -220,6 +250,28 @@ describe('Employee Attendance Add Missed Attendance', () => {
       expect((screen.getByLabelText(/Date/i) as HTMLInputElement).value).toBe('2025-05-17');
       expect(screen.getByPlaceholderText(/Enter a reason for the correction/i)).toBeTruthy();
     });
+  });
+
+  it('shows a check-in without check-out as PRESENT and still offers Add missed checkout', async () => {
+    await renderAttendanceWithEmployee({ recentHistory: [] }, {
+      data: [{
+        id: 'attendance-check-in-only',
+        employeeId: '42',
+        date: '2025-05-18',
+        status: 'PRESENT',
+        punchIn: '2025-05-18T09:15:00',
+        punchOut: null,
+        totalHours: null,
+        locationLabel: 'Unknown',
+      }],
+      meta: { totalPages: 1 },
+    });
+
+    await waitFor(() => {
+      expect(findRowActionButton(/Add missed checkout/i)).toBeTruthy();
+    });
+    expect(() => findRowActionButton(/Add missed attendance/i)).toThrow('No table action button matched');
+    expect(screen.queryByText('IN_PROGRESS')).toBeNull();
   });
 
   it('opens the missed-checkout form from an incomplete row action', async () => {
@@ -398,5 +450,48 @@ describe('Employee Attendance Add Missed Attendance', () => {
       expect(screen.getByText(/Approved leave dates cannot be submitted as missed attendance/i)).toBeTruthy();
     });
     expect(mockAddMissedAttendance).not.toHaveBeenCalled();
+  });
+
+  it('shows the backend finalized-period message with reopen guidance', async () => {
+    mockAddMissedAttendance.mockRejectedValue(
+      new Error('Payroll for 9/2026 is finalized. Reopen the payroll before making this change.'),
+    );
+    await renderAttendanceWithEmployee();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Add missed attendance/i }));
+
+    fireEvent.change(screen.getByLabelText(/Date/i), { target: { value: '2025-05-15' } });
+    fireEvent.change(screen.getByLabelText(/Clock in/i), { target: { value: '09:00' } });
+    fireEvent.change(screen.getByLabelText(/Clock out/i), { target: { value: '18:00' } });
+    await user.type(screen.getByPlaceholderText(/Enter a reason for the correction/i), 'Forgot to punch out');
+    await user.click(screen.getByRole('button', { name: /Save attendance/i }));
+
+    expect(await screen.findByText('Payroll for 9/2026 is finalized. Reopen the payroll before making this change.')).toBeTruthy();
+    expect(screen.getByText(/Reopen this payroll from the Payroll page/i)).toBeTruthy();
+  });
+
+  it.each([
+    ['09:00', '12:00', /Less than 4 hours: this day will be recorded as ABSENT/],
+    ['09:00', '14:00', /Between 4 and 7 hours: this day will be recorded as a HALF DAY/],
+  ])('warns about the recorded status for %s-%s', async (clockIn, clockOut, warning) => {
+    await renderAttendanceWithEmployee();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Add missed attendance/i }));
+
+    fireEvent.change(screen.getByLabelText(/Clock in/i), { target: { value: clockIn } });
+    fireEvent.change(screen.getByLabelText(/Clock out/i), { target: { value: clockOut } });
+
+    expect(await screen.findByText(warning)).toBeTruthy();
+  });
+
+  it('shows no duration warning for a full day', async () => {
+    await renderAttendanceWithEmployee();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Add missed attendance/i }));
+
+    fireEvent.change(screen.getByLabelText(/Clock in/i), { target: { value: '09:00' } });
+    fireEvent.change(screen.getByLabelText(/Clock out/i), { target: { value: '18:00' } });
+
+    expect(screen.queryByText(/will be recorded as/)).toBeNull();
   });
 });

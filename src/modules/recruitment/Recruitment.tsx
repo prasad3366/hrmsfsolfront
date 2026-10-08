@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Calendar, Eye, Mail, Phone, Plus, Trash2, UserPlus, X } from 'lucide-react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from '../../components/ui/components';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, ModalPortal } from '../../components/ui/components';
 import { useAuth } from '../../context/AuthContext';
 import api, { CreateRecruitmentCandidateDto, CreateRecruitmentJobDto, RecruitmentCandidate, RecruitmentCandidateStatus, RecruitmentInterview, RecruitmentJobPosting, UpdateRecruitmentJobDto } from '../../services/api';
 
@@ -10,7 +10,7 @@ const STAGE_COLORS: Record<RecruitmentCandidateStatus, string> = { APPLIED: 'bg-
 const label = (value: string) => value.charAt(0) + value.slice(1).toLowerCase();
 const errorText = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
 
-const Modal = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]"><Card className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border-white/70 shadow-[0_24px_80px_rgba(2,35,55,0.24)]"><CardHeader className="flex flex-row items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9]/70 pb-4"><CardTitle className="text-[#073b5c]">{title}</CardTitle><button type="button" onClick={onClose} aria-label="Close dialog" className="rounded-lg p-1.5 text-[#78909a] hover:bg-[#edf3f5] hover:text-[#12354a]"><X size={20} /></button></CardHeader><CardContent className="pt-5">{children}</CardContent></Card></div>;
+const Modal = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => <ModalPortal><div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]"><Card className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border-white/70 shadow-[0_24px_80px_rgba(2,35,55,0.24)]"><CardHeader className="sticky top-0 z-[2] flex flex-row items-center justify-between border-b border-[#dce6e8] bg-[#f6faf9] pb-4"><CardTitle className="text-[#073b5c]">{title}</CardTitle><button type="button" onClick={onClose} aria-label="Close dialog" className="rounded-lg p-1.5 text-[#78909a] hover:bg-[#edf3f5] hover:text-[#12354a]"><X size={20} /></button></CardHeader><CardContent className="pt-5">{children}</CardContent></Card></div></ModalPortal>;
 
 const JobModal = ({ job, onClose, onSubmit, busy }: { job?: RecruitmentJobPosting; onClose: () => void; onSubmit: (data: CreateRecruitmentJobDto | UpdateRecruitmentJobDto) => Promise<void>; busy: boolean }) => {
   const [form, setForm] = useState<CreateRecruitmentJobDto>({ title: job?.title ?? '', department: job?.department ?? '', requirements: job?.requirements ?? '', description: job?.description ?? '', openings: job?.openings ?? 1 });

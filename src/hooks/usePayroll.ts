@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
 import ApiService, { Payroll, RunPayrollDto } from '../services/api';
 
-export const usePayroll = () => {
+export const usePayroll = (role?: string) => {
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [currentPayroll, setCurrentPayroll] = useState<Payroll | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const canViewOrganizationPayroll = ['SUPER_ADMIN', 'CEO', 'HR'].includes(String(role ?? '').toUpperCase());
 
   const runPayroll = useCallback(async (data: RunPayrollDto) => {
     setLoading(true);
@@ -23,14 +24,32 @@ export const usePayroll = () => {
     }
   }, []);
 
-  // Always fetches the current user's own payroll (via /payroll/my) -
-  // every call site passes the logged-in user's own employeeId anyway,
-  // and /payroll/my works for any authenticated role.
+  const recalculatePayroll = useCallback(async (payrollId: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await ApiService.recalculatePayroll(payrollId);
+      setCurrentPayroll(result);
+      setPayrolls((previous) => previous.map((payroll) => (
+        payroll.id === payrollId ? result : payroll
+      )));
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to recalculate payroll';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const fetchPayroll = useCallback(async (_employeeId: number) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await ApiService.getMyPayroll();
+      const result = canViewOrganizationPayroll
+        ? await ApiService.getPayroll()
+        : await ApiService.getMyPayroll();
       setPayrolls(result);
       return result;
     } catch (err) {
@@ -40,7 +59,7 @@ export const usePayroll = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canViewOrganizationPayroll]);
 
   const addPayrollAdjustment = useCallback(
     async (
@@ -96,6 +115,21 @@ export const usePayroll = () => {
     }
   }, []);
 
+  /* Correction actions report failures to the caller instead of the
+     page-level error, so the payroll list stays visible */
+  const previewRecalculation = useCallback(
+    (payrollId: number) => ApiService.previewPayrollRecalculation(payrollId),
+    [],
+  );
+
+  const reopenPayroll = useCallback(async (payrollId: number, reason: string) => {
+    const result = await ApiService.reopenPayroll(payrollId, reason);
+    setPayrolls((previous) => previous.map((payroll) => (
+      payroll.id === payrollId ? { ...payroll, ...result } : payroll
+    )));
+    return result;
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -106,6 +140,9 @@ export const usePayroll = () => {
     loading,
     error,
     runPayroll,
+    recalculatePayroll,
+    previewRecalculation,
+    reopenPayroll,
     addPayrollAdjustment,
     fetchPayroll,
     generatePayslip,

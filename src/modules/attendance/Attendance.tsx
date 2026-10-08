@@ -6,7 +6,7 @@ import {
 } from '../../components/ui/components';
 import { getAttendanceLocationLabel, getRecordAttendanceState, getTodayAttendanceState, useAttendance } from '../../hooks/useAttendance';
 import { ChevronLeft, ChevronRight, Clock, MapPin } from 'lucide-react';
-import { attendanceDateKey, formatAttendanceDate } from '../../utils/attendanceDate';
+import { attendanceDateKey, formatAttendanceDate, formatWorkedHours } from '../../utils/attendanceDate';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { useNotifications } from '../../context/NotificationContext';
 
@@ -74,7 +74,7 @@ const Attendance = () => {
     : todayState === 'NOT_CHECKED_IN'
       ? 'Not checked in'
       : todayState === 'IN_PROGRESS'
-        ? 'Checked in'
+        ? 'Present'
         : todayState === 'COMPLETED'
           ? 'Completed'
           : todayState === 'LEAVE'
@@ -197,7 +197,7 @@ const Attendance = () => {
     { key: 'status', header: 'Status', render: (record) => <StatusBadge status={record.status === 'PRESENT' || record.status === 'COMPLETED' ? 'success' : record.status === 'IN_PROGRESS' ? 'warning' : record.status === 'LEAVE' ? 'info' : record.status === 'ABSENT' ? 'danger' : 'neutral'}>{record.status}</StatusBadge> },
     { key: 'punchIn', header: 'Check in', render: (record) => record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--' },
     { key: 'punchOut', header: 'Check out', render: (record) => record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--' },
-    { key: 'totalHours', header: 'Total hours', render: (record) => record.totalHours ? `${record.totalHours.toFixed(2)} hrs` : '0.00 hrs' },
+    { key: 'totalHours', header: 'Total hours', render: (record) => formatWorkedHours(record.totalHours) },
     { key: 'locationStatus', header: 'Location', render: (record) => { const label = record.punchInLocation || record.punchOutLocation ? getAttendanceLocationLabel(record.punchInLocation, record.punchOutLocation) : record.locationStatus === 'OFFICE' ? 'In Office' : record.locationStatus === 'OUTSIDE' ? 'Out of Office' : 'Unknown'; const tone = label === 'In Office' ? 'success' : label === 'Out of Office' ? 'danger' : label === 'Unknown' ? 'neutral' : 'warning'; return <StatusBadge status={tone}>{label}</StatusBadge>; } },
   ];
 
@@ -225,7 +225,7 @@ const Attendance = () => {
           <CardContent className="space-y-4 p-4 sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <StatusBadge
-                status={todayError ? 'danger' : todayState === 'IN_PROGRESS' ? 'warning' : todayState === 'COMPLETED' ? 'success' : todayState === 'LEAVE' ? 'info' : 'neutral'}
+                status={todayError ? 'danger' : todayState === 'IN_PROGRESS' || todayState === 'COMPLETED' ? 'success' : todayState === 'LEAVE' ? 'info' : 'neutral'}
                 className="rounded-full border border-[#C7D0D4]/40 bg-[#0B3C53] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#F4F7F8] shadow-none"
               >
                 {statusLabel}
@@ -249,7 +249,7 @@ const Attendance = () => {
 
               <div className="flex min-h-[96px] flex-col justify-between rounded-[14px] border border-[#C7D0D4] bg-[#F3F6F7] p-3.5 shadow-[0_1px_0_rgba(18,59,74,0.03)]">
                 <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-[#8A9AA1]">Total hours</p>
-                <p className="text-[1.05rem] font-bold leading-none text-[#062F40]">{todayRecord?.totalHours ? `${Number(todayRecord.totalHours).toFixed(2)}` : '0.00'}</p>
+                <p className="text-[1.05rem] font-bold leading-none text-[#062F40]">{formatWorkedHours(todayRecord?.totalHours)}</p>
               </div>
 
               <div className="flex min-h-[96px] flex-col justify-between rounded-[14px] border border-[#C7D0D4] bg-[#F3F6F7] p-3.5 shadow-[0_1px_0_rgba(18,59,74,0.03)]">
@@ -299,7 +299,7 @@ const Attendance = () => {
           </CardContent>
         </Card>
 
-        <div className="grid w-full min-w-0 gap-3 sm:grid-cols-3 lg:col-span-2"><StatCard label="Current status" value={todayState} /><StatCard label="Check-in" value={todayRecord?.punchInTime ? new Date(todayRecord.punchInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'} /><StatCard label="Total hours" value={todayRecord?.totalHours ?? '0.00'} detail="Backend reported value" /></div>
+        <div className="grid w-full min-w-0 gap-3 sm:grid-cols-3 lg:col-span-2"><StatCard label="Current status" value={todayState} /><StatCard label="Check-in" value={todayRecord?.punchInTime ? new Date(todayRecord.punchInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'} /><StatCard label="Total hours" value={formatWorkedHours(todayRecord?.totalHours)} detail="Backend reported value" /></div>
       </div>
 
       <Card className="overflow-hidden">

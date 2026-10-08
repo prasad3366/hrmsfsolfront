@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
   Button,
-  Label,
+  Label, ModalPortal
 } from '../ui/components';
 import { X, Loader2, Users, AlertCircle, CheckCircle } from 'lucide-react';
 
@@ -165,7 +165,7 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-lg border-0 shadow-2xl max-h-[80vh] overflow-hidden">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Create New Team</CardTitle>
@@ -302,6 +302,6 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
           </form>
         </CardContent>
       </Card>
-    </div>
+    </div></ModalPortal>
   );
 };

@@ -138,13 +138,14 @@ const TeamManagement: React.FC = () => {
   };
 
   const renderManagerView = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Teams</h1>
-          <p className="text-gray-600">Manage your assigned teams</p>
+    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#b08a3e]">People</p>
+          <h1 className="text-2xl font-bold tracking-tight text-[#073b5c] sm:text-3xl">My Teams</h1>
+          <p className="mt-1 text-sm text-[#617984]">Manage your assigned teams</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           <Button
             onClick={() => {
               console.log('🔄 Manual refresh triggered');
@@ -182,21 +183,21 @@ const TeamManagement: React.FC = () => {
           </CardContent>
         </Card>
       ) : teams.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {teams.map((teamData) => (
-            <Card key={teamData.id}>
+            <Card key={teamData.id} className="min-w-0">
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Users className="w-5 h-5 mr-2" />
-                  {teamData.name}
+                <CardTitle className="flex min-w-0 items-center text-[#073b5c]">
+                  <Users className="mr-2 h-5 w-5 shrink-0 text-[#1e627d]" />
+                  <span className="truncate">{teamData.name}</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="flex items-center space-x-2">
-                    <Crown className="w-4 h-4 text-yellow-500" />
-                    <span className="font-medium">Manager:</span>
-                    <span>{formatManagerName(teamData)}</span>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+                    <Crown className="h-4 w-4 shrink-0 text-[#b08a3e]" />
+                    <span className="font-semibold text-[#12354a]">Manager:</span>
+                    <span className="min-w-0 break-words text-[#486271]">{formatManagerName(teamData)}</span>
                   </div>
 
                   <div>
@@ -204,10 +205,10 @@ const TeamManagement: React.FC = () => {
                     {teamData.members && teamData.members.length > 0 ? (
                       <div className="space-y-2">
                         {teamData.members.map((member: any) => (
-                          <div key={member.id ?? `${member.empCode || member.name}-${Math.random()}`} className="flex items-center space-x-2 p-2 bg-gray-50 rounded">
-                            <User className="w-4 h-4 text-gray-400" />
-                            <div className="flex-1">
-                              <p className="text-sm font-medium">{formatMemberName(member)}</p>
+                          <div key={member.id ?? `${member.empCode || member.name}-${Math.random()}`} className="flex min-w-0 items-center gap-2 rounded-lg bg-[#f6faf9] p-2">
+                            <User className="h-4 w-4 shrink-0 text-[#78909a]" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-[#12354a]">{formatMemberName(member)}</p>
                               <p className="text-xs text-gray-500">ID: {member.id || member.empCode || 'N/A'}</p>
                             </div>
                           </div>
@@ -237,13 +238,14 @@ const TeamManagement: React.FC = () => {
   );
 
   const renderAdminView = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Team Management</h1>
-          <p className="text-gray-600">Create and manage teams</p>
+    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#b08a3e]">People</p>
+          <h1 className="text-2xl font-bold tracking-tight text-[#073b5c] sm:text-3xl">Team Management</h1>
+          <p className="mt-1 text-sm text-[#617984]">Create and manage teams</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           <Button
             onClick={() => fetchAllTeams()}
             variant="outline"
@@ -254,7 +256,7 @@ const TeamManagement: React.FC = () => {
           </Button>
           <Button
             onClick={() => setIsCreateModalOpen(true)}
-            className="bg-[#2A4B9B] hover:bg-[#1e3a7b] text-white"
+            variant="gold"
           >
             <Plus className="w-4 h-4 mr-2" />
             Create Team
@@ -272,11 +274,12 @@ const TeamManagement: React.FC = () => {
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>All Teams</CardTitle>
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-[#e4ecec]">
+          <CardTitle className="text-[#073b5c]">All Teams</CardTitle>
+          {!loadingTeams && allTeams.length > 0 && <Badge variant="blue">{allTeams.length} teams</Badge>}
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0">
           {loadingTeams ? (
             <div className="flex items-center justify-center py-8">
               <RefreshCw className="w-6 h-6 animate-spin mr-2" />
@@ -289,30 +292,31 @@ const TeamManagement: React.FC = () => {
               <p className="text-gray-500">Create your first team to get started.</p>
             </div>
           ) : (
-            <Table>
+            <Table className="min-w-[46rem]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Team Name</TableHead>
                   <TableHead>Manager</TableHead>
                   <TableHead>Members</TableHead>
                   <TableHead>Created</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="whitespace-nowrap">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <tbody>
                 {allTeams.map((team) => (
                   <TableRow key={team.id}>
-                    <TableCell className="font-medium">{team.name}</TableCell>
-                    <TableCell>{formatManagerName(team)}</TableCell>
-                    <TableCell>
+                    <TableCell className="max-w-[16rem] break-words font-semibold text-[#12354a]">{team.name}</TableCell>
+                    <TableCell className="max-w-[14rem] break-words">{formatManagerName(team)}</TableCell>
+                    <TableCell className="whitespace-nowrap">
                       <Badge variant="default">
                         {getMembersCount(team)} members
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {getCreatedDate(team)}
                     </TableCell>
-                    <TableCell className="space-x-2">
+                    <TableCell className="whitespace-nowrap">
+                      <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
@@ -327,6 +331,7 @@ const TeamManagement: React.FC = () => {
                       >
                         Delete Team
                       </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

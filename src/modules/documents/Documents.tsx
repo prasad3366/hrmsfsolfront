@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api, { EmployeeDirectoryResponse } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
-import { Card, CardHeader, CardTitle, CardContent, Button, DataTable, EmptyState, PageHeader, Select, Skeleton, StatusBadge, type DataTableColumn } from '../../components/ui/components';
+import { Card, CardHeader, CardTitle, CardContent, Button, DataTable, EmptyState, PageHeader, Select, Skeleton, StatusBadge, type DataTableColumn, ModalPortal } from '../../components/ui/components';
 
 export const MANAGEMENT_DOCUMENT_ROLES = ['SUPER_ADMIN', 'CEO', 'HR'] as const;
 
@@ -444,7 +444,7 @@ const Documents = () => {
       </Card>
 
       {rejectionDocumentId != null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]">
+        <ModalPortal><div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#022337]/45 p-4 backdrop-blur-[2px]">
           <div className="w-full max-w-md rounded-2xl border border-white/70 bg-[#fffefa] p-5 shadow-[0_24px_80px_rgba(2,35,55,0.24)]">
             <h2 className="text-lg font-bold text-[#073b5c]">Reject document</h2>
             <p className="mt-1 text-sm text-[#617984]">
@@ -479,7 +479,7 @@ const Documents = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div></ModalPortal>
       )}
     </div>
   );

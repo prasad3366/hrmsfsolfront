@@ -24,6 +24,15 @@ describe('getEmployeeIdByUserId', () => {
     vi.restoreAllMocks();
   });
 
+  it('returns the person name from the same /employees/me response (no extra request)', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ id: 42, firstName: 'Tadala', lastName: 'Ganesh', user: { email: 'tadalaganesh175@example.com' } }), { status: 200 }),
+    );
+
+    await expect(api.getEmployeeIdByUserId()).resolves.toEqual({ employeeId: 42, firstName: 'Tadala', lastName: 'Ganesh' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('returns the employee ID from the /employees/me endpoint', async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ id: 42 }), { status: 200 }),
@@ -223,6 +232,108 @@ describe('Employee 360 API methods', () => {
   });
 });
 
+describe('Employee creation API', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) => (
+      key === 'accessToken' ? 'test-access-token' : null
+    ));
+  });
+
+  it('posts designation while leaving optional phone fields out when absent', async () => {
+    const employee = {
+      email: 'new@example.com',
+      firstName: 'New',
+      lastName: 'Employee',
+      empCode: 'EMP-42',
+      department: 'Engineering',
+      designation: 'Developer',
+      role: 'EMPLOYEE' as const,
+    };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ message: 'created' }), { status: 201 }));
+
+    await expect(api.createEmployee(employee)).resolves.toEqual({ message: 'created' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/api/employees',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(employee) }),
+    );
+    const sentPayload = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(sentPayload.designation).toBe('Developer');
+    expect(sentPayload).not.toHaveProperty('phone');
+    expect(sentPayload).not.toHaveProperty('personalMobile');
+  });
+
+  it('preserves backend validation messages and status', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      statusCode: 400,
+      message: ['designation must not be blank'],
+      error: 'Bad Request',
+    }), { status: 400 }));
+
+    await expect(api.createEmployee({} as any)).rejects.toThrow(
+      'designation must not be blank (HTTP 400)',
+    );
+  });
+
+  it('preserves a plain-text backend error and status', async () => {
+    fetchMock.mockResolvedValue(new Response('Employee creation unavailable', { status: 503 }));
+
+    await expect(api.createEmployee({} as any)).rejects.toThrow(
+      'Employee creation unavailable (HTTP 503)',
+    );
+  });
+});
+
+describe('Payroll recalculation API', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) => (
+      key === 'accessToken' ? 'test-access-token' : null
+    ));
+  });
+
+  it('posts the selected payroll id to the recalculation endpoint', async () => {
+    const payroll = { id: 3, status: 'DRAFT', presentDays: 21, lopDays: 0 };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(payroll), { status: 200 }));
+
+    await expect(api.recalculatePayroll(3)).resolves.toEqual(payroll);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/api/payroll/3/recalculate',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('requests organization-wide payroll without an employee filter', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify([
+      { id: 1, employeeId: 7, status: 'DRAFT' },
+      { id: 2, employeeId: 8, status: 'FINALIZED' },
+      { id: 3, employeeId: 9, status: 'PAID' },
+    ]), { status: 200 }));
+
+    await expect(api.getPayroll()).resolves.toEqual([
+      { id: 1, employeeId: 7, status: 'DRAFT' },
+      { id: 2, employeeId: 8, status: 'FINALIZED' },
+      { id: 3, employeeId: 9, status: 'PAID' },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/api/payroll',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('preserves employee-filtered payroll requests', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify([{ id: 4, employeeId: 42 }]), { status: 200 }));
+
+    await expect(api.getPayroll(42)).resolves.toEqual([{ id: 4, employeeId: 42 }]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/api/payroll?employeeId=42',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+});
+
 describe('Attendance history API', () => {
   beforeEach(() => {
     fetchMock.mockReset();
@@ -260,7 +371,8 @@ describe('Attendance history API', () => {
       data: [expect.objectContaining({
         punchIn: '2026-09-09T09:00:00.000Z',
         punchOut: null,
-        status: 'IN_PROGRESS',
+        // A check-in without check-out counts as present
+        status: 'PRESENT',
       })],
     });
   });
@@ -539,7 +651,7 @@ describe('employee attendance query', () => {
     }), { status: 200 }));
 
     await expect(api.getEmployeeAttendance(42, 9, 2026, undefined, 2, 10)).resolves.toEqual({
-      data: [expect.objectContaining({ id: 7, punchIn: '2026-09-09T09:00:00.000Z', punchOut: null, status: 'IN_PROGRESS' })],
+      data: [expect.objectContaining({ id: 7, punchIn: '2026-09-09T09:00:00.000Z', punchOut: null, status: 'PRESENT' })],
       meta: { page: 2, pageSize: 10, total: 21, totalPages: 3, month: 9, year: 2026 },
     });
   });
@@ -770,5 +882,34 @@ describe('WFH API contract', () => {
     await expect(api.approveWfh(1)).resolves.toMatchObject({ status: 'APPROVED' });
     await expect(api.rejectWfh(1)).resolves.toMatchObject({ status: 'REJECTED' });
     expect(fetchMock.mock.calls.every(([url]) => !url.match(/employeeId|teamId|managerId/))).toBe(true);
+  });
+});
+
+describe('own payroll history API', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
+
+  it('returns the payroll history on success', async () => {
+    const rows = [{ id: 5, month: 9, year: 2026, status: 'FINALIZED', period: { startDate: '2026-08-29', endDate: '2026-09-28' } }];
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(rows), { status: 200 }));
+
+    await expect(api.getMyPayroll()).resolves.toEqual(rows);
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:3000/api/payroll/my', expect.objectContaining({ method: 'GET' }));
+  });
+
+  it('returns an empty history only when the API really returns none', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }));
+    await expect(api.getMyPayroll()).resolves.toEqual([]);
+  });
+
+  it.each([500, 403, 404])('throws instead of returning an empty history on HTTP %i', async (status) => {
+    fetchMock.mockResolvedValue(new Response('{}', { status }));
+    await expect(api.getMyPayroll()).rejects.toThrow('Unable to load payroll history. Please try again.');
+  });
+
+  it('throws on a network failure', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(api.getMyPayroll()).rejects.toThrow('Unable to load payroll history. Please try again.');
   });
 });

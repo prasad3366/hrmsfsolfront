@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { Button, Card, CardContent, CardHeader, CardTitle } from '../../components/ui/components';
+import { Button, Card, CardContent, CardHeader, CardTitle, ModalPortal } from '../../components/ui/components';
 import ApiService from '../../services/api';
 
 interface AssignAssetModalProps {
@@ -55,7 +55,7 @@ export const AssignAssetModal = ({ isOpen, assetId, mode = 'assign', isLoading, 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <ModalPortal><div className="app-modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-md border-0 shadow-xl">
         <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
           <CardTitle>{mode === 'reassign' ? 'Reassign Asset' : 'Assign Asset'}</CardTitle>
@@ -109,6 +109,6 @@ export const AssignAssetModal = ({ isOpen, assetId, mode = 'assign', isLoading, 
           </form>
         </CardContent>
       </Card>
-    </div>
+    </div></ModalPortal>
   );
 };
