@@ -316,6 +316,27 @@ describe('Payroll correction workflow', () => {
     await waitFor(() => expect(testState.recalculatePayroll).toHaveBeenCalledWith(4));
   });
 
+  it('shows a blocking historical adjustment and does not offer to apply the recalculation', async () => {
+    testState.getPayroll.mockResolvedValue([stalePayroll]);
+    testState.previewPayrollRecalculation.mockResolvedValue({
+      payrollId: 4, employeeId: 8, month: 9, year: 2026, status: 'DRAFT', needsRecalculation: true, revision: 0,
+      period: { startDate: '2026-08-29', endDate: '2026-09-28' }, stored: {}, recalculated: {},
+      differences: [{ field: 'presentDays', stored: 0, recalculated: 5, delta: 5 }],
+      splitMixedLeaveIds: [], canRecalculate: true,
+      historicalAdjustments: {
+        legacyRecord: true, recordedAllowance: 0, recordedDeduction: 0, carriedOtherAllowance: 0, carriedOtherDeduction: 0,
+        issues: [{ code: 'UNEXPLAINED_LEGACY_GROSS', blocking: true, message: 'Stored gross includes 500 that no allowance record explains.', amount: 500 }],
+        blocksRecalculation: true,
+      },
+    });
+    render(<Payroll />);
+
+    fireEvent.click(within(await rowFor('Grace Hopper')).getByRole('button', { name: 'Preview' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Recalculation preview' });
+    expect(await within(dialog).findByText(/no allowance record explains/)).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: 'Apply recalculation' })).toBeNull();
+  });
+
   it('does not ask for a check-out in the preview', async () => {
     testState.getPayroll.mockResolvedValue([otherEmployeePayroll]);
     testState.previewPayrollRecalculation.mockResolvedValue({

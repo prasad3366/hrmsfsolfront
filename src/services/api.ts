@@ -655,6 +655,16 @@ export interface PayrollRecalculationPreview {
   recalculated: Record<string, number | null>;
   differences: PayrollRecalculationDifference[];
   splitMixedLeaveIds: number[];
+  /** Adjustments carried into the recalculation, and anything that blocks it */
+  historicalAdjustments?: {
+    legacyRecord: boolean;
+    recordedAllowance: number;
+    recordedDeduction: number;
+    carriedOtherAllowance: number;
+    carriedOtherDeduction: number;
+    issues: { code: string; blocking: boolean; message: string; amount: number }[];
+    blocksRecalculation: boolean;
+  };
   canRecalculate: boolean;
 }
 

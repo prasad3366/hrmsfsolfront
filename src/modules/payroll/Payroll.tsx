@@ -410,7 +410,7 @@ const Payroll = () => {
               </div>
               <div className="flex justify-between p-3 bg-slate-50 rounded">
                 <span className="text-slate-600">Working Days</span>
-                <span className="font-semibold">{currentPayroll.workingDays} / {currentPayroll.presentDays} Present</span>
+                <span className="font-semibold">{currentPayroll.presentDays} Present / {currentPayroll.workingDays}</span>
               </div>
             </div>
 
@@ -499,6 +499,16 @@ const Payroll = () => {
                     </tbody>
                   </table>
                 )}
+                {previewState.data.historicalAdjustments?.issues.map((issue) => (
+                  <p
+                    key={issue.code}
+                    className={issue.blocking
+                      ? 'rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-700'
+                      : 'rounded-lg border border-slate-300 bg-slate-50 p-3 text-slate-700'}
+                  >
+                    {issue.message}
+                  </p>
+                ))}
                 {!previewState.data.canRecalculate && previewState.data.differences.length > 0 && (
                   <p className="text-slate-600">This payroll is {previewState.data.status}. Reopen it to apply these changes.</p>
                 )}
@@ -506,7 +516,7 @@ const Payroll = () => {
             )}
             <div className="mt-6 flex justify-end gap-2">
               <Button size="sm" variant="outline" onClick={() => setPreviewState(null)}>Close</Button>
-              {previewState.data?.canRecalculate && (
+              {previewState.data?.canRecalculate && !previewState.data.historicalAdjustments?.blocksRecalculation && (
                 <Button size="sm" onClick={() => handleRecalculateFromPreview(previewState.payroll.id)} disabled={loading}>
                   Apply recalculation
                 </Button>
